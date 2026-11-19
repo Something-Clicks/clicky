@@ -40,7 +40,13 @@ export default async function ActivityPage() {
                     <time dateTime={event.created_at}>{formatWhen(event.created_at)}</time>
                   </div>
                 </div>
-                <span className="pill green">Done</span>
+                {event.action === "analysis.failed" ? (
+                  <span className="pill coral">Failed</span>
+                ) : event.action === "analysis.started" ? (
+                  <span className="pill">Started</span>
+                ) : (
+                  <span className="pill green">Done</span>
+                )}
               </div>
             );
           })}
