@@ -40,7 +40,7 @@ describe("sendEmail", () => {
 describe("notify", () => {
   it("emails each recipient and logs each attempt", async () => {
     delete process.env.RESEND_API_KEY;
-    const rpc = vi.fn(async (name: string) =>
+    const rpc = vi.fn(async (name: string, _args?: Record<string, unknown>) =>
       name === "notification_recipients"
         ? { data: [{ user_id: "u1", email: "a@b.c", full_name: null }, { user_id: "u2", email: "d@e.f", full_name: null }], error: null }
         : { data: null, error: null },

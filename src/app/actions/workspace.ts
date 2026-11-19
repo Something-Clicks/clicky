@@ -127,7 +127,17 @@ export async function updateNotifications(_prev: FormState, form: FormData): Pro
   const user = await requireUser();
   const supabase = await createClient();
   const prefs = { draft_ready: form.get("draft_ready") === "on", analysis_complete: form.get("analysis_complete") === "on" };
-  const { error } = await supabase.from("notification_preferences").upsert({ user_id: user.id, ...prefs });
+  // Update first; create the row only if this person has none yet. (Only the two
+  // preference columns are updatable, so a plain upsert is not allowed.)
+  const { data: updated, error: updateError } = await supabase
+    .from("notification_preferences")
+    .update(prefs)
+    .eq("user_id", user.id)
+    .select("user_id");
+  let error = updateError;
+  if (!updateError && !updated?.length) {
+    ({ error } = await supabase.from("notification_preferences").insert({ user_id: user.id, ...prefs }));
+  }
   if (error) {
     log.error("notifications.update_failed", { userId: user.id, error: error.message });
     return { error: GENERIC };
