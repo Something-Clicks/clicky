@@ -15,7 +15,7 @@ export function getStripe(): Stripe {
     // Live payments need an explicit, separate approval.
     throw new Error("Live Stripe keys are not enabled.");
   }
-  stripe ??= new Stripe(key, { maxNetworkRetries: 2, timeout: 20_000 });
+  stripe ??= new Stripe(key, { maxNetworkRetries: 2, timeout: 20_000, httpClient: Stripe.createFetchHttpClient() });
   return stripe;
 }
 

@@ -44,32 +44,40 @@ export async function startCheckout(_prev: FormState, form: FormData): Promise<F
   let url: string | null = null;
   try {
     const stripe = getStripe();
-    const session = await stripe.checkout.sessions.create(
-      {
-        mode: plan.interval === "one_time" ? "payment" : "subscription",
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              currency: plan.currency,
-              unit_amount: plan.amountCents,
-              product_data: { name: `Something Clicks · ${plan.name}`, description: plan.summary },
-              ...(plan.interval === "month" ? { recurring: { interval: "month" as const } } : {}),
-            },
+    const params = (customerId: string | null) => ({
+      mode: (plan.interval === "one_time" ? "payment" : "subscription") as "payment" | "subscription",
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: plan.currency,
+            unit_amount: plan.amountCents,
+            product_data: { name: `Something Clicks · ${plan.name}`, description: plan.summary },
+            ...(plan.interval === "month" ? { recurring: { interval: "month" as const } } : {}),
           },
-        ],
-        client_reference_id: orgId,
-        metadata,
-        ...(plan.interval === "month"
-          ? { subscription_data: { metadata } }
-          : { payment_intent_data: { metadata }, ...(customer ? {} : { customer_creation: "always" as const }) }),
-        ...(customer ? { customer } : { customer_email: ws.email }),
-        success_url: `${base}/app/billing?checkout=success`,
-        cancel_url: `${base}/app/billing?checkout=canceled`,
-      },
+        },
+      ],
+      client_reference_id: orgId,
+      metadata,
+      ...(plan.interval === "month"
+        ? { subscription_data: { metadata } }
+        : { payment_intent_data: { metadata }, ...(customerId ? {} : { customer_creation: "always" as const }) }),
+      ...(customerId ? { customer: customerId } : { customer_email: ws.email }),
+      success_url: `${base}/app/billing?checkout=success`,
+      cancel_url: `${base}/app/billing?checkout=canceled`,
+    });
+    const minute = Math.floor(Date.now() / 60_000);
+    let session;
+    try {
       // A double click within a minute reuses the same session.
-      { idempotencyKey: `checkout:${orgId}:${planId}:${Math.floor(Date.now() / 60_000)}` },
-    );
+      session = await stripe.checkout.sessions.create(params(customer), { idempotencyKey: `checkout:${orgId}:${planId}:${minute}` });
+    } catch (error) {
+      // The saved Stripe customer was deleted in Stripe: start fresh with the owner's email.
+      const e = error as { code?: string; param?: string };
+      if (!customer || e.code !== "resource_missing" || e.param !== "customer") throw error;
+      log.warn("billing.customer_missing", { organizationId: orgId });
+      session = await stripe.checkout.sessions.create(params(null), { idempotencyKey: `checkout:${orgId}:${planId}:${minute}:fresh` });
+    }
     url = session.url;
     log.info("billing.checkout_started", { organizationId: orgId, plan: planId, session: session.id });
   } catch (error) {
