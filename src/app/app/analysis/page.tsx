@@ -5,7 +5,7 @@ import { EvidenceLine } from "@/components/intelligence";
 import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
 import { formatWhen } from "@/lib/activity";
 import { requireOrganization } from "@/lib/auth";
-import { getEvidence, getLastCompleteAnalysis, getLatestAnalysis } from "@/lib/queries";
+import { getEvidence, getLastCompleteAnalysis, getLatestAnalysis, isStale } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Analysis" };
 export const maxDuration = 120;
@@ -61,12 +61,17 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
           {failed.failure_reason ?? "The last analysis could not finish."}
         </p>
       ) : null}
+      {!running && isStale(complete?.completed_at) ? (
+        <p className="notice" role="status">This analysis is more than 30 days old, so some findings may be out of date.</p>
+      ) : null}
       {complete?.summary ? <div className="card" style={{ marginBottom: 16 }}><p style={{ margin: 0 }}>{complete.summary}</p></div> : null}
       <div className="grid two">
         <div className="card">
           <h3>Website</h3>
           {coverage.website ? (
-            <span className="pill green">Reviewed · {coverage.website.pages_reviewed} page{coverage.website.pages_reviewed === 1 ? "" : "s"}</span>
+            <span className={isStale(complete?.completed_at) ? "pill yellow" : "pill green"}>
+              {isStale(complete?.completed_at) ? "Out of date" : "Reviewed"} · {coverage.website.pages_reviewed} page{coverage.website.pages_reviewed === 1 ? "" : "s"}
+            </span>
           ) : hasWebsite ? (
             <span className="pill yellow">Website added · not analyzed yet</span>
           ) : (

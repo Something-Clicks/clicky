@@ -100,6 +100,12 @@ export async function updateBusiness(_prev: FormState, form: FormData): Promise<
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
 
   const supabase = await createClient();
+  const recurring = form.get("recurring") === "on";
+  const { error: orgError } = await supabase
+    .from("organizations")
+    .update({ recurring_analysis: recurring })
+    .eq("id", workspace.organization.id);
+  if (orgError) log.error("organization.recurring_update_failed", { organizationId: workspace.organization.id, error: orgError.message });
   const { data, error } = await supabase
     .from("business_profiles")
     .update({ business_name: parsed.data.businessName, website: parsed.data.website })
@@ -115,4 +121,16 @@ export async function updateBusiness(_prev: FormState, form: FormData): Promise<
   }
   revalidatePath("/app", "layout");
   return { ok: true, message: "Saved.", values };
+}
+
+export async function updateNotifications(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const prefs = { draft_ready: form.get("draft_ready") === "on", analysis_complete: form.get("analysis_complete") === "on" };
+  const { error } = await supabase.from("notification_preferences").upsert({ user_id: user.id, ...prefs });
+  if (error) {
+    log.error("notifications.update_failed", { userId: user.id, error: error.message });
+    return { error: GENERIC };
+  }
+  return { ok: true, message: "Saved." };
 }

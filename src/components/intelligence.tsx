@@ -18,6 +18,12 @@ export const KIND_LABEL: Record<string, string> = {
   missing: "Missing data",
 };
 
+export function VerificationPill({ verification }: { verification: string | null }) {
+  if (verification === "fixed") return <span className="pill green">Verified fixed</span>;
+  if (verification === "still_found") return <span className="pill coral">Still found</span>;
+  return null;
+}
+
 export function StatusPill({ status }: { status: string }) {
   const s = STATUS_LABEL[status] ?? { label: status, cls: "pill" };
   return <span className={s.cls}>{s.label}</span>;
@@ -32,7 +38,10 @@ export function ActionCardItem({ card, cta = "See why it matters", primary = fal
         <div className="tag">
           {impactLabel(card.impact_priority)} · {card.confidence.toUpperCase()} CONFIDENCE
         </div>
-        {card.status !== "new" ? <StatusPill status={card.status} /> : null}
+        <div className="row" style={{ gap: 6 }}>
+          {card.status !== "new" ? <StatusPill status={card.status} /> : null}
+          <VerificationPill verification={card.verification} />
+        </div>
       </div>
       <h3>{card.title}</h3>
       <p>{card.explanation}</p>

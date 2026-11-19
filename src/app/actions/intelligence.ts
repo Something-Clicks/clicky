@@ -38,7 +38,7 @@ export async function startAnalysis(_prev: FormState, _form?: FormData): Promise
   };
   log.info("analysis.started", { organizationId: ws.organization.id, analysisId });
   // The visitor gets an answer right away; the analysis keeps running on the server.
-  after(() => runAnalysis(supabase, analysisId, website, biz));
+  after(() => runAnalysis(supabase, analysisId, website, biz, { notifyOrg: ws.organization!.id }));
   revalidatePath("/app", "layout");
   return { ok: true, message: "Analysis started. This usually takes about a minute." };
 }

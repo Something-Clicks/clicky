@@ -8,6 +8,7 @@ import type { Database, Json } from "@/lib/supabase/types";
 import { wordFindings } from "./ai";
 import { runChecks, type BusinessContext } from "./checks";
 import { runPageSpeed } from "./pagespeed";
+import { notify } from "./notify";
 import { createSafeFetcher, FetchBlockedError, type FetchedPage } from "./safe-fetch";
 import { scanSite } from "./site-scan";
 
@@ -34,6 +35,8 @@ function friendlyReason(error: unknown, website: string): string {
 export interface AnalysisDeps {
   fetchPage?: (url: string) => Promise<FetchedPage>;
   pageSpeed?: typeof runPageSpeed;
+  /** When set, emails the business's opted-in people once the analysis is saved. */
+  notifyOrg?: string;
 }
 
 export async function runAnalysis(
@@ -71,6 +74,7 @@ export async function runAnalysis(
       p_wording: worded.wording,
     });
     if (error) throw new Error(`complete_analysis failed: ${error.message}`);
+    if (deps.notifyOrg) await notify(db, deps.notifyOrg, biz.businessName, "analysis_complete");
     log.info("analysis.completed", { analysisId, ms: Date.now() - started, cards: findings.length, evidence: evidence.length, wording: worded.wording, pagespeed: psi.ok });
   } catch (error) {
     log.error("analysis.failed", { analysisId, ms: Date.now() - started, error });

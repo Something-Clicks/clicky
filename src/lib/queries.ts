@@ -43,7 +43,7 @@ export const getCards = cache(async (orgId: string) => {
   const { data, error } = await supabase
     .from("action_cards")
     .select(
-      "id, check_key, title, explanation, why_it_matters, recommended_action, expected_benefit, impact_priority, confidence, ai_capable, execution_type, approval_required, status, wording, result_summary, created_at, completed_at, action_card_evidence ( analysis_evidence ( observation, url, kind ) )",
+      "id, check_key, title, explanation, why_it_matters, recommended_action, expected_benefit, impact_priority, confidence, ai_capable, execution_type, approval_required, status, wording, result_summary, created_at, completed_at, verification, verified_at, action_card_evidence ( analysis_evidence ( observation, url, kind ) )",
     )
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false })
@@ -105,3 +105,31 @@ export function relativeDay(iso: string | null | undefined): string {
 }
 
 export const impactLabel = (level: string) => `${level.toUpperCase()} IMPACT`;
+
+export const STALE_DAYS = 30;
+export const isStale = (iso: string | null | undefined) =>
+  Boolean(iso) && Date.now() - new Date(iso!).getTime() > STALE_DAYS * 86_400_000;
+
+/** PageSpeed score before (on the card's own evidence) and the latest measured score since. */
+export async function getSpeedComparison(orgId: string, cardId: string) {
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("action_card_evidence")
+    .select("analysis_evidence ( measurement, observed_at, source )")
+    .eq("action_card_id", cardId);
+  const b = before?.map((x) => x.analysis_evidence).find((e) => e?.source === "pagespeed");
+  const beforeScore = (b?.measurement as { score?: number } | null)?.score;
+  if (typeof beforeScore !== "number" || !b) return null;
+  const { data: after } = await supabase
+    .from("analysis_evidence")
+    .select("measurement, observed_at")
+    .eq("organization_id", orgId)
+    .eq("source", "pagespeed")
+    .eq("kind", "measured")
+    .gt("observed_at", b.observed_at)
+    .order("observed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const afterScore = (after?.measurement as { score?: number } | null)?.score;
+  return { before: beforeScore, after: typeof afterScore === "number" ? afterScore : null, afterAt: after?.observed_at ?? null };
+}

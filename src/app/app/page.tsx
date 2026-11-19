@@ -5,7 +5,7 @@ import { ActionCardItem } from "@/components/intelligence";
 import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
 import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
-import { getCards, getLastCompleteAnalysis, getLatestAnalysis, getPendingApprovalCount, openCards, relativeDay } from "@/lib/queries";
+import { getCards, getLastCompleteAnalysis, getLatestAnalysis, getPendingApprovalCount, isStale, openCards, relativeDay } from "@/lib/queries";
 
 import { Greeting } from "./greeting";
 
@@ -43,9 +43,17 @@ export default async function DashboardPage() {
         </div>
         <div className="card">
           <div className="metric">{running ? "Running" : relativeDay(lastComplete?.completed_at)}</div>
-          <div className="metric-label">Last analysis</div>
+          <div className="metric-label">
+            Last analysis{!running && isStale(lastComplete?.completed_at) ? <> · <span className="pill yellow">Out of date</span></> : null}
+          </div>
         </div>
       </div>
+      {!running && isStale(lastComplete?.completed_at) ? (
+        <div className="notice row between" style={{ marginTop: 16 }}>
+          <span>Your last analysis is more than 30 days old. Run a new one to see what&apos;s changed.</span>
+          <RunAnalysisButton label="Run a new analysis" />
+        </div>
+      ) : null}
       <h3 style={{ margin: "26px 0 12px" }}>Your next best move</h3>
       {next ? (
         <ActionCardItem card={next} cta="Review action" primary />

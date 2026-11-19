@@ -15,6 +15,8 @@ const LABELS: Record<string, string> = {
   "approval.approved": "Draft approved",
   "approval.rejected": "Draft rejected",
   "approval.changes_requested": "Changes requested on a draft",
+  "outcome.fixed": "A completed action was verified fixed",
+  "outcome.still_found": "A completed action's issue was found again",
 };
 
 const FIELD_LABELS: Record<string, string> = {

@@ -2,15 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PasswordForm } from "@/components/password-form";
-import { SoonButton } from "@/components/soon";
 import { requireOrganization } from "@/lib/auth";
+import { isEmailConfigured } from "@/lib/server/notify";
+import { createClient } from "@/lib/supabase/server";
 
-import { BusinessForm, ProfileForm } from "./forms";
+import { BusinessForm, NotificationsForm, ProfileForm } from "./forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const ws = await requireOrganization();
+  const supabase = await createClient();
+  const [{ data: prefs }, { data: org }] = await Promise.all([
+    supabase.from("notification_preferences").select("draft_ready, analysis_complete").eq("user_id", ws.userId).maybeSingle(),
+    supabase.from("organizations").select("recurring_analysis").eq("id", ws.organization.id).single(),
+  ]);
   return (
     <>
       <div className="eyebrow">Your account</div>
@@ -22,6 +28,7 @@ export default async function SettingsPage() {
           canEdit={ws.organization.role === "owner"}
           businessName={ws.business?.businessName ?? ""}
           website={ws.business?.website ?? ""}
+          recurring={org?.recurring_analysis ?? true}
         />
         <div className="card">
           <h3>Members</h3>
@@ -30,13 +37,12 @@ export default async function SettingsPage() {
             Manage members
           </Link>
         </div>
-        <div className="card">
-          <h3>Notifications</h3>
-          <p className="muted">Choose when to receive updates about actions and approvals.</p>
-          <SoonButton variant="light" reason="Notifications arrive with activity updates">
-            Notification preferences
-          </SoonButton>
-        </div>
+        <NotificationsForm
+          draftReady={prefs?.draft_ready ?? true}
+          analysisComplete={prefs?.analysis_complete ?? true}
+          isOwner={ws.organization.role === "owner"}
+          emailReady={isEmailConfigured()}
+        />
         <PasswordForm title="Security" />
       </div>
     </>

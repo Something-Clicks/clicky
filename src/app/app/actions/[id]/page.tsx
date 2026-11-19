@@ -4,11 +4,12 @@ import { notFound } from "next/navigation";
 import { setCardStatus } from "@/app/actions/intelligence";
 import { ApprovalActions } from "@/components/approval-actions";
 import { DRAFT_LABEL, DraftPreview, DraftUseButtons, draftAsText, draftFields } from "@/components/draft";
-import { EvidenceLine, StatusPill } from "@/components/intelligence";
+import { EvidenceLine, StatusPill, VerificationPill } from "@/components/intelligence";
 import { PrepareDraftForm } from "@/components/prepare-draft";
 import { AutoRefresh } from "@/components/run-analysis";
 import { requireOrganization } from "@/lib/auth";
-import { getCard, impactLabel } from "@/lib/queries";
+import { getCard, getSpeedComparison, impactLabel } from "@/lib/queries";
+import { formatWhen } from "@/lib/activity";
 import { isAiConfigured } from "@/lib/server/ai";
 import { SUPPORTED_DRAFTS } from "@/lib/server/drafts";
 import { createClient } from "@/lib/supabase/server";
@@ -47,6 +48,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const running = run?.status === "running";
+  const speed = card.check_key === "pagespeed.performance" ? await getSpeedComparison(ws.organization.id, card.id) : null;
   const fields = draftFields(approval?.agent_runs?.output);
   const lastFailed = run?.status === "failed" ? run.error : null;
 
@@ -76,6 +78,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         <div className="card">
           <div className="row">
             <StatusPill status={card.status} />
+            <VerificationPill verification={card.verification} />
             {card.approval_required ? <span className="pill yellow">Needs your approval</span> : <span className="pill">No approval needed</span>}
           </div>
           {!draftable ? (
@@ -135,6 +138,23 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
             </>
           )}
           {card.result_summary ? <div className="evidence">{card.result_summary}</div> : null}
+          {card.verification && card.verified_at ? (
+            <div className="evidence">
+              <b>Result</b> ·{" "}
+              {card.verification === "fixed"
+                ? `The analysis on ${formatWhen(card.verified_at)} no longer found this issue.`
+                : `The analysis on ${formatWhen(card.verified_at)} still found this issue.`}
+            </div>
+          ) : (card.status === "done" || card.status === "approved") ? (
+            <div className="evidence">
+              <b>Result</b> · Run a new analysis to check whether this is fixed.
+            </div>
+          ) : null}
+          {speed?.after != null ? (
+            <div className="evidence">
+              <b>Measured</b> · Mobile performance score {speed.before} → {speed.after} (Google PageSpeed Insights, same test both times)
+            </div>
+          ) : null}
           <div className="row" style={{ marginTop: 16 }}>
             {closed ? (
               <StatusButton id={card.id} status="new" label="Reopen" variant="outline" />

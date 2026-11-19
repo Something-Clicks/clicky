@@ -62,7 +62,7 @@ export type Database = {
         ]
       >;
       organizations: Table<
-        { created_at: string; created_by: string | null; id: string; name: string; updated_at: string },
+        { created_at: string; created_by: string | null; id: string; name: string; updated_at: string; recurring_analysis: boolean },
         "name"
       >;
       data_connections: Table<
@@ -139,6 +139,9 @@ export type Database = {
           created_at: string;
           updated_at: string;
           completed_at: string | null;
+          verification: string | null;
+          verified_at: string | null;
+          verification_analysis_id: string | null;
         },
         "organization_id" | "analysis_id" | "check_key" | "title"
       >;
@@ -220,6 +223,14 @@ export type Database = {
           },
         ]
       >;
+      notification_preferences: Table<
+        { user_id: string; draft_ready: boolean; analysis_complete: boolean; updated_at: string },
+        "user_id"
+      >;
+      notifications: Table<
+        { id: string; organization_id: string; user_id: string; kind: string; channel: string; status: string; detail: string | null; created_at: string },
+        "organization_id" | "user_id" | "kind" | "status"
+      >;
       platform_admins: Table<{ granted_at: string; note: string | null; user_id: string }, "user_id">;
       profiles: Table<{ created_at: string; full_name: string | null; id: string; updated_at: string }, "id">;
     };
@@ -236,6 +247,18 @@ export type Database = {
       fail_agent_run: { Args: { p_run: string; p_reason: string }; Returns: undefined };
       decide_approval: { Args: { p_approval: string; p_decision: string; p_note: string | null }; Returns: undefined };
       admin_agent_runs: { Args: never; Returns: Json };
+      worker_due_organizations: {
+        Args: { p_limit: number };
+        Returns: { organization_id: string; website: string; business_name: string; service_area: string | null; primary_goal: string | null }[];
+      };
+      notification_recipients: {
+        Args: { p_org: string; p_kind: string };
+        Returns: { user_id: string; email: string; full_name: string | null }[];
+      };
+      log_notification: {
+        Args: { p_org: string; p_user: string; p_kind: string; p_status: string; p_detail: string | null };
+        Returns: undefined;
+      };
       start_analysis: { Args: { p_org: string }; Returns: string };
       complete_analysis: {
         Args: { p_analysis: string; p_evidence: Json; p_cards: Json; p_coverage: Json; p_summary: string; p_wording: string };
