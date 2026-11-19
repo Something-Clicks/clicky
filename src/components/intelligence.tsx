@@ -62,7 +62,7 @@ export function EvidenceLine({ e }: { e: { kind: string; source: string; url: st
   return (
     <div className="evidence">
       <b>{KIND_LABEL[e.kind] ?? e.kind}</b> · {e.source === "pagespeed" ? "PageSpeed Insights" : "Your website"}
-      {e.url ? (
+      {e.url && /^https?:\/\//i.test(e.url) ? (
         <>
           {" "}
           ·{" "}
