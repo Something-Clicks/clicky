@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 
 import { log } from "@/lib/log";
-import { applyStripeEvent, getStripe, IgnoredEvent, type BillingStore } from "@/lib/server/stripe";
+import { applyStripeEvent, IgnoredEvent, type BillingStore } from "@/lib/server/stripe";
 import type { Database } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
   const body = await req.text();
   let event: Stripe.Event;
   try {
-    event = getStripe().webhooks.constructEvent(body, req.headers.get("stripe-signature") ?? "", secret);
+    // Signature verification needs only the webhook secret, not the API key.
+    event = Stripe.webhooks.constructEvent(body, req.headers.get("stripe-signature") ?? "", secret);
   } catch (error) {
     log.warn("stripe.webhook_bad_signature", { error: (error as Error).message });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
