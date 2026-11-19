@@ -1,9 +1,10 @@
 import "server-only";
 
-import { lookup as dnsLookup } from "node:dns";
+import { lookup as dnsLookup, type LookupAddress } from "node:dns";
+import http from "node:http";
+import https from "node:https";
 import net from "node:net";
-
-import { Agent, fetch as undiciFetch } from "undici";
+import zlib from "node:zlib";
 
 /**
  * Fetches a customer's public web page without letting the request reach
@@ -135,92 +136,126 @@ export function createSafeFetcher(options: SafeFetchOptions = {}) {
     resolve = systemResolve,
   } = options;
 
-  // The connection resolves through this lookup, so the address that is checked
-  // is the address that is used.
-  const agent = new Agent({
-    connect: {
-      lookup(hostname, opts, callback) {
-        resolve(hostname).then(
-          (list) => {
-            if (list.length === 0 || !list.every((a) => isAllowedAddress(a.address))) {
-              return callback(new FetchBlockedError("That website points to a private address."), "", 0);
-            }
-            const wantAll = (opts as { all?: boolean }).all;
-            if (wantAll) return (callback as unknown as (e: null, a: typeof list) => void)(null, list);
-            callback(null, list[0]!.address, list[0]!.family);
-          },
-          (err: Error) => callback(err as NodeJS.ErrnoException, "", 0),
-        );
+  // The socket resolves through this lookup, so the address that is checked is the
+  // address that is connected to (no DNS re-binding window). Built on node:http so
+  // nothing global (proxies, dispatchers) is changed for the rest of the app.
+  const lookup = (
+    hostname: string,
+    opts: { all?: boolean },
+    callback: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
+  ) => {
+    resolve(hostname).then(
+      (list) => {
+        if (list.length === 0 || !list.every((a) => isAllowedAddress(a.address))) {
+          return callback(new FetchBlockedError("That website points to a private address.") as NodeJS.ErrnoException, "", 0);
+        }
+        if (opts?.all) return callback(null, list);
+        callback(null, list[0]!.address, list[0]!.family);
       },
-    },
-    headersTimeout: timeoutMs,
-    bodyTimeout: timeoutMs,
-  });
+      (err: Error) => callback(err as NodeJS.ErrnoException, "", 0),
+    );
+  };
+
+  function request(url: URL, deadline: number): Promise<{ status: number; headers: http.IncomingHttpHeaders; res: http.IncomingMessage }> {
+    return new Promise((resolvePromise, reject) => {
+      const lib = url.protocol === "https:" ? https : http;
+      const remaining = Math.max(1, deadline - Date.now());
+      const req = lib.request(
+        url,
+        {
+          method: "GET",
+          lookup: lookup as never,
+          timeout: remaining,
+          headers: {
+            "user-agent": "SomethingClicksBot/1.0 (+website analysis requested by the site owner)",
+            accept: "text/html,application/xhtml+xml",
+            "accept-encoding": "gzip, deflate, br",
+          },
+        },
+        (res) => resolvePromise({ status: res.statusCode ?? 0, headers: res.headers, res }),
+      );
+      const timer = setTimeout(() => req.destroy(new Error("timeout")), remaining);
+      req.on("close", () => clearTimeout(timer));
+      req.on("timeout", () => req.destroy(new Error("timeout")));
+      req.on("error", (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      req.end();
+    });
+  }
+
+  function readBody(res: http.IncomingMessage, deadline: number): Promise<{ body: string; truncated: boolean }> {
+    return new Promise((resolvePromise, reject) => {
+      const encoding = String(res.headers["content-encoding"] ?? "").toLowerCase();
+      let stream: NodeJS.ReadableStream = res;
+      if (encoding === "gzip" || encoding === "x-gzip") stream = res.pipe(zlib.createGunzip());
+      else if (encoding === "deflate") stream = res.pipe(zlib.createInflate());
+      else if (encoding === "br") stream = res.pipe(zlib.createBrotliDecompress());
+      const chunks: Buffer[] = [];
+      let size = 0;
+      let done = false;
+      const finish = (truncated: boolean) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        res.destroy();
+        resolvePromise({ body: new TextDecoder("utf-8", { fatal: false }).decode(Buffer.concat(chunks)), truncated });
+      };
+      const timer = setTimeout(() => finish(true), Math.max(1, deadline - Date.now()));
+      stream.on("data", (chunk: Buffer) => {
+        if (done) return;
+        size += chunk.length;
+        if (size > maxBytes) {
+          chunks.push(chunk.subarray(0, chunk.length - (size - maxBytes)));
+          finish(true);
+        } else chunks.push(chunk);
+      });
+      stream.on("end", () => finish(false));
+      stream.on("error", (error) => {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          reject(error);
+        }
+      });
+    });
+  }
 
   return async function safeFetch(raw: string): Promise<FetchedPage> {
     const redirects: string[] = [];
     let current = validateUrl(raw, allowedPorts);
-    const deadline = AbortSignal.timeout(timeoutMs);
+    const deadline = Date.now() + timeoutMs;
 
     for (let hop = 0; hop <= maxRedirects; hop++) {
-      let res;
+      let response;
       try {
-        res = await undiciFetch(current, {
-          dispatcher: agent,
-          redirect: "manual",
-          signal: deadline,
-          headers: {
-            "user-agent": "SomethingClicksBot/1.0 (+website analysis requested by the site owner)",
-            accept: "text/html,application/xhtml+xml",
-          },
-        });
+        response = await request(current, deadline);
       } catch (error) {
-        const cause = (error as { cause?: unknown }).cause;
-        if (cause instanceof FetchBlockedError) throw cause;
         if (error instanceof FetchBlockedError) throw error;
         throw new Error(`Could not reach ${current.hostname}.`, { cause: error });
       }
+      const { status, headers, res } = response;
 
-      if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
-        await res.body?.cancel();
+      if (status >= 300 && status < 400 && headers.location) {
+        res.destroy();
         if (hop === maxRedirects) throw new FetchBlockedError("Too many redirects.");
-        const next = new URL(res.headers.get("location")!, current);
-        current = validateUrl(next.toString(), allowedPorts);
+        current = validateUrl(new URL(headers.location, current).toString(), allowedPorts);
         redirects.push(current.toString());
         continue;
       }
 
-      const contentType = res.headers.get("content-type") ?? "";
+      const contentType = String(headers["content-type"] ?? "");
       if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-        await res.body?.cancel();
+        res.destroy();
         throw new FetchBlockedError("That address did not return a web page.");
       }
-      const declared = Number(res.headers.get("content-length") ?? "0");
-      if (declared > maxBytes * 4) {
-        await res.body?.cancel();
+      if (Number(headers["content-length"] ?? "0") > maxBytes * 4) {
+        res.destroy();
         throw new FetchBlockedError("That page is too large to analyze.");
       }
-
-      const reader = res.body?.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      let truncated = false;
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          size += value.byteLength;
-          if (size > maxBytes) {
-            chunks.push(value.subarray(0, value.byteLength - (size - maxBytes)));
-            truncated = true;
-            await reader.cancel();
-            break;
-          }
-          chunks.push(value);
-        }
-      }
-      const body = new TextDecoder("utf-8", { fatal: false }).decode(Buffer.concat(chunks));
-      return { url: current.toString(), status: res.status, contentType, body, truncated, redirects };
+      const { body, truncated } = await readBody(res, deadline);
+      return { url: current.toString(), status, contentType, body, truncated, redirects };
     }
     throw new FetchBlockedError("Too many redirects.");
   };

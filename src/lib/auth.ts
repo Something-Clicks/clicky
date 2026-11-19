@@ -24,7 +24,12 @@ export interface Workspace {
 /** The signed-in user, verified with Supabase Auth (not just the cookie). */
 export const getUser = cache(async () => {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
+  let { data, error } = await supabase.auth.getUser();
+  // One retry for a transient network failure before treating Auth as unavailable.
+  if (error?.name === "AuthRetryableFetchError") {
+    await new Promise((r) => setTimeout(r, 300));
+    ({ data, error } = await supabase.auth.getUser());
+  }
   if (error) {
     // No session is normal (signed out). Anything else means Auth could not be
     // checked: fail loudly rather than pretending the user is signed out.

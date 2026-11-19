@@ -96,6 +96,11 @@ describe("runAnalysis", () => {
     expect(args.p_cards.length).toBeGreaterThan(3);
     expect(args.p_coverage.pagespeed).toEqual({ status: "missing", reason: psiMissing.reason });
     expect(args.p_summary).toMatch(/We reviewed \d pages? and found/);
+    // For manual end-to-end checks: DUMP_ANALYSIS_PAYLOAD=/path writes what would be saved.
+    if (process.env.DUMP_ANALYSIS_PAYLOAD) {
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(process.env.DUMP_ANALYSIS_PAYLOAD, JSON.stringify(args));
+    }
   });
 
   it("records a plain-language failure when the site cannot be fetched safely", async () => {
