@@ -539,6 +539,14 @@ a.btn.outline {
   text-transform: uppercase;
   color: var(--muted);
 }
+details.card > summary {
+  cursor: pointer;
+  list-style-position: outside;
+  margin-left: 18px;
+}
+details.card > summary::marker {
+  color: var(--blue);
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

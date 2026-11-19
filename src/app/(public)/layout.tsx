@@ -19,7 +19,11 @@ export default async function PublicLayout({ children }: { children: React.React
         "/how-it-works": "How it works",
         "/pricing": "Pricing",
         "/diagnostic-audit": "Diagnostic audit",
+        "/about": "About",
+        "/faq": "FAQ",
         "/login": "Log in",
+        "/forgot-password": "Reset password",
+        "/reset-password": "Choose a new password",
         "/signup": "Sign up",
       }}
       groups={[
@@ -30,6 +34,8 @@ export default async function PublicLayout({ children }: { children: React.React
             { href: "/how-it-works", label: "How it works" },
             { href: "/pricing", label: "Pricing" },
             { href: "/diagnostic-audit", label: "Diagnostic audit" },
+            { href: "/about", label: "About" },
+            { href: "/faq", label: "FAQ" },
           ],
         },
         {

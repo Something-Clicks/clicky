@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { PasswordForm } from "@/components/password-form";
 import { SoonButton } from "@/components/soon";
 import { requireOrganization } from "@/lib/auth";
 
@@ -36,6 +37,7 @@ export default async function SettingsPage() {
             Notification preferences
           </SoonButton>
         </div>
+        <PasswordForm title="Security" />
       </div>
     </>
   );

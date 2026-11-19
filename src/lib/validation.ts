@@ -55,6 +55,8 @@ const website = z.string().transform((value, ctx) => {
   }
 });
 
+const newPassword = z.string().min(8, "Use at least 8 characters.").max(72, "Use 72 characters or fewer.");
+
 export const signInSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address.")),
   password: z.string().min(1, "Enter your password.").max(72),
@@ -63,10 +65,7 @@ export const signInSchema = z.object({
 export const signUpSchema = z.object({
   fullName: trimmed(120, "name"),
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address.")),
-  password: z
-    .string()
-    .min(8, "Use at least 8 characters.")
-    .max(72, "Use 72 characters or fewer."),
+  password: newPassword,
 });
 
 export const businessSchema = z.object({
@@ -77,6 +76,14 @@ export const businessSchema = z.object({
 });
 
 export const settingsBusinessSchema = businessSchema.pick({ businessName: true, website: true });
+
+export const passwordSchema = z
+  .object({ password: newPassword, confirm: z.string() })
+  .refine((v) => v.password === v.confirm, { message: "The passwords don't match.", path: ["confirm"] });
+
+export const emailSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address.")),
+});
 
 export const profileSchema = z.object({ fullName: trimmed(120, "name") });
 

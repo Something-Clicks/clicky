@@ -6,7 +6,15 @@ import { redirect } from "next/navigation";
 import { log } from "@/lib/log";
 import { safeNextPath } from "@/lib/redirect";
 import { createClient } from "@/lib/supabase/server";
-import { fieldErrors, formFields, signInSchema, signUpSchema, type FormState } from "@/lib/validation";
+import {
+  emailSchema,
+  fieldErrors,
+  formFields,
+  passwordSchema,
+  signInSchema,
+  signUpSchema,
+  type FormState,
+} from "@/lib/validation";
 
 async function siteOrigin(): Promise<string> {
   const configured = process.env.NEXT_PUBLIC_SITE_URL;
@@ -53,12 +61,15 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
   });
   if (error) {
     log.warn("auth.sign_up_failed", { code: error.code ?? error.name });
-    const message =
-      error.code === "weak_password"
-        ? "Choose a stronger password."
-        : error.code === "over_email_send_rate_limit"
-          ? "Too many attempts. Please wait a minute and try again."
-          : "We couldn't create your account. Please try again.";
+    const messages: Record<string, string> = {
+      weak_password: "Choose a stronger password.",
+      email_address_invalid: "Enter a real email address you can open.",
+      email_address_not_authorized: "We can't send email to that address yet. Try another address.",
+      over_email_send_rate_limit: "Too many attempts. Please wait a minute and try again.",
+      user_already_exists: "That email already has an account. Sign in instead.",
+      signup_disabled: "New accounts are paused right now. Please try again later.",
+    };
+    const message = messages[error.code ?? ""] ?? "We couldn't create your account. Please try again.";
     return { error: message, values: keep };
   }
   log.info("auth.signed_up", { userId: data.user?.id });
@@ -74,4 +85,51 @@ export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+/**
+ * Sends a password reset link. The response is the same whether or not the
+ * address has an account, so this cannot be used to discover who has signed up.
+ */
+export async function requestPasswordReset(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formFields(form, ["email"]);
+  const parsed = emailSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${await siteOrigin()}/auth/callback?next=/reset-password`,
+  });
+  if (error) {
+    log.warn("auth.reset_request_failed", { code: error.code ?? error.name });
+    if (error.code === "over_email_send_rate_limit") {
+      return { error: "Too many attempts. Please wait a minute and try again.", values };
+    }
+  }
+  return { ok: true, message: "If that email has an account, a reset link is on its way.", values };
+}
+
+/** Sets a new password for the signed-in user (after a reset link, or from Settings). */
+export async function updatePassword(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formFields(form, ["password", "confirm"]);
+  const parsed = passwordSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
+
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Your reset link has expired. Request a new one." };
+
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error) {
+    log.warn("auth.password_update_failed", { userId: userData.user.id, code: error.code ?? error.name });
+    const message =
+      error.code === "same_password"
+        ? "Choose a password you haven't used here before."
+        : error.code === "weak_password"
+          ? "Choose a stronger password."
+          : "We couldn't change your password. Please try again.";
+    return { error: message };
+  }
+  log.info("auth.password_updated", { userId: userData.user.id });
+  return { ok: true, message: "Your password has been changed." };
 }

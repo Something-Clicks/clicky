@@ -22,6 +22,11 @@ export function LoginForm({ next, linkError }: { next: string; linkError: boolea
       <Field label="Password" name="password" type="password" placeholder="Password" autoComplete="current-password" state={state} required />
       <SubmitButton pending="Signing in…">Sign in</SubmitButton>
       <p className="small muted">
+        <Link className="link" href="/forgot-password">
+          Forgot your password?
+        </Link>
+      </p>
+      <p className="small muted">
         New here?{" "}
         <Link className="link" href="/signup">
           Create an account.
