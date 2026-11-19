@@ -31,7 +31,7 @@ export interface TestDb {
   /** Superuser connection (setup only; bypasses RLS). */
   admin: pg.Client;
   createUser(fullName?: string): Promise<string>;
-  /** Runs `fn` in a transaction as the given user (or anon), then commits. */
+  /** Runs `fn` in a transaction as the given user, anon (null), or the service role ("service"), then commits. */
   as<T>(userId: string | null, fn: (c: pg.Client) => Promise<T>): Promise<T>;
   teardown(): Promise<void>;
 }
@@ -65,7 +65,10 @@ export async function setupTestDb(): Promise<TestDb> {
     async as(userId, fn) {
       await user.query("begin");
       try {
-        if (userId) {
+        if (userId === "service") {
+          await user.query("set local role service_role");
+          await user.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ role: "service_role" })]);
+        } else if (userId) {
           await user.query("set local role authenticated");
           await user.query("select set_config('request.jwt.claims', $1, true)", [
             JSON.stringify({ sub: userId, role: "authenticated" }),
