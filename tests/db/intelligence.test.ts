@@ -47,6 +47,8 @@ beforeAll(async () => {
   bob = await db.createUser("Bob");
   orgA = await createOrg(alice, "Alpha");
   orgB = await createOrg(bob, "Bravo", "https://b.example");
+  await db.grantPlan(orgA);
+  await db.grantPlan(orgB);
 }, 60_000);
 afterAll(async () => db?.teardown());
 
@@ -102,6 +104,7 @@ describe("analysis lifecycle", () => {
   it("refuses to start without a website", async () => {
     const carol = await db.createUser("Carol");
     const orgC = await createOrg(carol, "NoSite", null);
+    await db.grantPlan(orgC);
     await expect(start(carol, orgC)).rejects.toThrow(/Add a website first/);
   });
 

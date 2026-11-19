@@ -38,6 +38,9 @@ importers:
       server-only:
         specifier: 0.0.1
         version: 0.0.1
+      stripe:
+        specifier: ^23.1.0
+        version: 23.1.0(@types/node@22.20.5)
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -2061,6 +2064,15 @@ packages:
   strip-bom@3.0.0:
     resolution: {integrity: sha512-vavAMRXOgBVNF6nyEEmL3DBK19iRpDcoIwW+swQ+CbGiu7lju6t+JklA1MHweoWtadgt4ISVUsXLyDq34ddcwA==}
     engines: {node: '>=4'}
+
+  stripe@23.1.0:
+    resolution: {integrity: sha512-fVUfMSfTPoukfoV//MUKAx2+YxyKmYaYtnAL9VkfnHfaPNQylFdWZMD+zgUFerI8rjbaiER8Vzj2XEUQ2AhAsQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@types/node': '>=20'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   styled-jsx@5.1.6:
     resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
@@ -4468,6 +4480,10 @@ snapshots:
       es-object-atoms: 1.1.2
 
   strip-bom@3.0.0: {}
+
+  stripe@23.1.0(@types/node@22.20.5):
+    optionalDependencies:
+      '@types/node': 22.20.5
 
   styled-jsx@5.1.6(@babel/core@7.29.13)(react@19.3.1):
     dependencies:

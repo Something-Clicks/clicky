@@ -39,6 +39,8 @@ beforeAll(async () => {
   [{ id: org }] = await q<{ id: string }>(owner, "select public.create_organization('Sunrise','https://a.example','','') as id");
   [{ id: otherOrg }] = await q<{ id: string }>(outsider, "select public.create_organization('Other','https://b.example','','') as id");
   await db.admin.query("insert into public.organization_members values ($1,$2,'member',now())", [org, member]);
+  await db.grantPlan(org);
+  await db.grantPlan(otherOrg);
   ({ ai: aiCard, manual: manualCard } = await seedCards(owner, org));
 }, 60_000);
 afterAll(async () => db?.teardown());

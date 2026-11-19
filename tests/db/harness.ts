@@ -31,6 +31,8 @@ export interface TestDb {
   /** Superuser connection (setup only; bypasses RLS). */
   admin: pg.Client;
   createUser(fullName?: string): Promise<string>;
+  /** Gives an organization an active subscription (as a verified webhook would). */
+  grantPlan(orgId: string, plan?: string): Promise<void>;
   /** Runs `fn` in a transaction as the given user, anon (null), or the service role ("service"), then commits. */
   as<T>(userId: string | null, fn: (c: pg.Client) => Promise<T>): Promise<T>;
   teardown(): Promise<void>;
@@ -61,6 +63,12 @@ export async function setupTestDb(): Promise<TestDb> {
         [`${randomUUID()}@example.test`, JSON.stringify(fullName ? { full_name: fullName } : {})],
       );
       return rows[0]!.id;
+    },
+    async grantPlan(orgId, plan = "growth_ai") {
+      await admin.query(
+        "insert into public.subscriptions (organization_id, stripe_subscription_id, plan_id, status) values ($1, $2, $3, 'active')",
+        [orgId, `sub_${randomUUID().replace(/-/g, "")}`, plan],
+      );
     },
     async as(userId, fn) {
       await user.query("begin");
