@@ -7,7 +7,7 @@ import { signUp } from "@/app/actions/auth";
 import { Field, FormMessage, SubmitButton } from "@/components/form";
 import type { FormState } from "@/lib/validation";
 
-export function SignupForm() {
+export function SignupForm({ email = "" }: { email?: string }) {
   const [state, action] = useActionState(signUp, {} as FormState);
   if (state.ok) {
     return (
@@ -21,7 +21,7 @@ export function SignupForm() {
     <form className="card" style={{ maxWidth: 480 }} action={action} noValidate>
       <FormMessage state={state} />
       <Field label="Name" name="fullName" placeholder="Your name" autoComplete="name" state={state} required />
-      <Field label="Email" name="email" type="email" placeholder="you@example.com" autoComplete="email" state={state} required />
+      <Field label="Email" name="email" type="email" placeholder="you@example.com" autoComplete="email" defaultValue={email} state={state} required />
       <Field
         label="Password"
         name="password"

@@ -15,6 +15,7 @@ import type { FormState } from "@/lib/validation";
 const UUID = /^[0-9a-f-]{36}$/i;
 
 const START_ERRORS: Record<string, string> = {
+  needs_plan: "Your plan doesn't include this kind of draft. See Billing to upgrade.",
   not_ai_capable: "This action needs a change only you or your web designer can make.",
   card_closed: "This action is already closed.",
   already_running: "A draft is already being prepared.",

@@ -5,7 +5,7 @@ import { EvidenceLine } from "@/components/intelligence";
 import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
 import { formatWhen } from "@/lib/activity";
 import { requireOrganization } from "@/lib/auth";
-import { getEvidence, getLastCompleteAnalysis, getLatestAnalysis, isStale } from "@/lib/queries";
+import { getEntitlements, getEvidence, getLastCompleteAnalysis, getLatestAnalysis, isStale } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Analysis" };
 export const maxDuration = 120;
@@ -18,7 +18,11 @@ type Coverage = {
 export default async function AnalysisPage({ searchParams }: { searchParams: Promise<{ onboarding?: string }> }) {
   const ws = await requireOrganization();
   const { onboarding } = await searchParams;
-  const [latest, complete] = await Promise.all([getLatestAnalysis(ws.organization.id), getLastCompleteAnalysis(ws.organization.id)]);
+  const [latest, complete, ent] = await Promise.all([
+    getLatestAnalysis(ws.organization.id),
+    getLastCompleteAnalysis(ws.organization.id),
+    getEntitlements(ws.organization.id),
+  ]);
   const running = latest?.status === "running";
   const failed = latest?.status === "failed" ? latest : null;
   const coverage = (complete?.source_coverage ?? {}) as Coverage;
@@ -43,7 +47,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
       </p>
       <div className="row" style={{ marginBottom: 20 }}>
         {hasWebsite ? (
-          <RunAnalysisButton label={complete ? "Run a new analysis" : "Run your first analysis"} disabled={running} />
+          <RunAnalysisButton label={complete ? "Run a new analysis" : "Run your first analysis"} disabled={running} entitled={ent.analyses} />
         ) : (
           <Link className="btn" href="/app/onboarding">
             Add your website

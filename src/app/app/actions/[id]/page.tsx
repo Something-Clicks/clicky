@@ -8,7 +8,8 @@ import { EvidenceLine, StatusPill, VerificationPill } from "@/components/intelli
 import { PrepareDraftForm } from "@/components/prepare-draft";
 import { AutoRefresh } from "@/components/run-analysis";
 import { requireOrganization } from "@/lib/auth";
-import { getCard, getSpeedComparison, impactLabel } from "@/lib/queries";
+import { getCard, getEntitlements, getSpeedComparison, impactLabel } from "@/lib/queries";
+import Link from "next/link";
 import { formatWhen } from "@/lib/activity";
 import { isAiConfigured } from "@/lib/server/ai";
 import { SUPPORTED_DRAFTS } from "@/lib/server/drafts";
@@ -48,6 +49,8 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const running = run?.status === "running";
+  const ent = await getEntitlements(ws.organization.id);
+  const planAllowsDraft = ent.drafts === "all" || (ent.drafts === "meta" && card.execution_type === "meta");
   const speed = card.check_key === "pagespeed.performance" ? await getSpeedComparison(ws.organization.id, card.id) : null;
   const fields = draftFields(approval?.agent_runs?.output);
   const lastFailed = run?.status === "failed" ? run.error : null;
@@ -117,6 +120,17 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
             </>
           ) : closed ? (
             <h3 style={{ marginTop: 12 }}>{card.status === "done" ? "Done" : "Dismissed"}</h3>
+          ) : !planAllowsDraft ? (
+            <>
+              <h3 style={{ marginTop: 12 }}>AI can help prepare this</h3>
+              <p className="muted">
+                {ent.drafts === "none" ? "AI drafts come with a monthly plan." : "This kind of draft comes with the Growth AI plan."} You can
+                still follow the recommended action yourself.
+              </p>
+              <Link className="btn light" href="/app/billing">
+                See plans
+              </Link>
+            </>
           ) : !isAiConfigured() ? (
             <>
               <h3 style={{ marginTop: 12 }}>AI can help prepare this</h3>

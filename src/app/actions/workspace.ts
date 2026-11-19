@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getWorkspace, requireUser } from "@/lib/auth";
+import { clearStartFlow, getStartFlow } from "@/lib/start-flow";
 import { log } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -67,6 +68,10 @@ export async function saveBusinessSetup(_prev: FormState, form: FormData): Promi
     return { error: GENERIC, values };
   }
   log.info("organization.created", { userId: user.id, organizationId: data });
+  if (await getStartFlow()) {
+    await clearStartFlow();
+    redirect("/app/billing?plan=diagnostic_audit");
+  }
   redirect(parsed.data.website ? "/app/connections?onboarding=1" : "/app");
 }
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { getWorkspace } from "@/lib/auth";
+import { getStartFlow } from "@/lib/start-flow";
 
 import { BusinessSetupForm } from "./setup-form";
 
@@ -9,6 +10,7 @@ export const metadata: Metadata = { title: "Onboarding" };
 export default async function OnboardingPage() {
   const workspace = await getWorkspace();
   const b = workspace.business;
+  const start = workspace.organization ? null : await getStartFlow();
   return (
     <>
       <div className="eyebrow">Welcome</div>
@@ -18,10 +20,10 @@ export default async function OnboardingPage() {
         existing={Boolean(workspace.organization)}
         canEdit={!workspace.organization || workspace.organization.role === "owner"}
         defaults={{
-          businessName: b?.businessName ?? "",
-          website: b?.website ?? "",
+          businessName: b?.businessName ?? start?.businessName ?? "",
+          website: b?.website ?? start?.website ?? "",
           serviceArea: b?.serviceArea ?? "",
-          primaryGoal: b?.primaryGoal ?? "get_found",
+          primaryGoal: b?.primaryGoal ?? (start?.primaryGoal || "get_found"),
         }}
       />
     </>

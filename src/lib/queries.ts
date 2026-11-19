@@ -133,3 +133,17 @@ export async function getSpeedComparison(orgId: string, cardId: string) {
   const afterScore = (after?.measurement as { score?: number } | null)?.score;
   return { before: beforeScore, after: typeof afterScore === "number" ? afterScore : null, afterAt: after?.observed_at ?? null };
 }
+
+export interface Entitlements {
+  plan: "diagnostic_audit" | "starter_ai" | "growth_ai" | "scale_automation" | null;
+  analyses: boolean;
+  weekly: boolean;
+  drafts: "none" | "meta" | "all";
+}
+
+export const getEntitlements = cache(async (orgId: string): Promise<Entitlements> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("current_entitlements", { p_org: orgId });
+  if (error) log.error("query.entitlements_failed", { orgId, error: error.message });
+  return (data as Entitlements | null) ?? { plan: null, analyses: false, weekly: false, drafts: "none" };
+});

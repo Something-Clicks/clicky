@@ -5,7 +5,7 @@ import { ActionCardItem } from "@/components/intelligence";
 import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
 import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
-import { getCards, getLastCompleteAnalysis, getLatestAnalysis, getPendingApprovalCount, isStale, openCards, relativeDay } from "@/lib/queries";
+import { getEntitlements, getCards, getLastCompleteAnalysis, getLatestAnalysis, getPendingApprovalCount, isStale, openCards, relativeDay } from "@/lib/queries";
 
 import { Greeting } from "./greeting";
 
@@ -14,11 +14,12 @@ export const maxDuration = 120;
 
 export default async function DashboardPage() {
   const ws = await requireOrganization();
-  const [latest, lastComplete, cards, approvalsWaiting] = await Promise.all([
+  const [latest, lastComplete, cards, approvalsWaiting, ent] = await Promise.all([
     getLatestAnalysis(ws.organization.id),
     getLastCompleteAnalysis(ws.organization.id),
     getCards(ws.organization.id),
     getPendingApprovalCount(ws.organization.id),
+    getEntitlements(ws.organization.id),
   ]);
   const open = openCards(cards);
   const running = latest?.status === "running";
@@ -51,7 +52,7 @@ export default async function DashboardPage() {
       {!running && isStale(lastComplete?.completed_at) ? (
         <div className="notice row between" style={{ marginTop: 16 }}>
           <span>Your last analysis is more than 30 days old. Run a new one to see what&apos;s changed.</span>
-          <RunAnalysisButton label="Run a new analysis" />
+          <RunAnalysisButton label="Run a new analysis" entitled={ent.analyses} />
         </div>
       ) : null}
       <h3 style={{ margin: "26px 0 12px" }}>Your next best move</h3>
@@ -68,7 +69,7 @@ export default async function DashboardPage() {
           <Clicky size={72} alt="" />
           <h3>You&apos;re all caught up.</h3>
           <p className="muted">There&apos;s nothing open right now. Run a new analysis after you change your website.</p>
-          <RunAnalysisButton label="Run a new analysis" />
+          <RunAnalysisButton label="Run a new analysis" entitled={ent.analyses} />
         </div>
       ) : !ws.business?.website ? (
         <div className="card empty">
@@ -84,7 +85,7 @@ export default async function DashboardPage() {
           <Clicky size={72} alt="" />
           <h3>Let&apos;s find your first next step.</h3>
           <p className="muted">We&apos;ll review {new URL(ws.business.website).hostname} and turn what we find into a short list of actions.</p>
-          <RunAnalysisButton label="Run your first analysis" />
+          <RunAnalysisButton label="Run your first analysis" entitled={ent.analyses} />
         </div>
       )}
     </>

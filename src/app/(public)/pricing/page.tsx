@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { SoonButton } from "@/components/soon";
 import { formatPrice, PLANS } from "@/config/pricing";
 
 export const metadata: Metadata = { title: "Pricing" };
@@ -32,9 +31,9 @@ export default function PricingPage() {
             <small className="muted"> / month</small>
           </div>
           <p className="muted">{starter.summary}</p>
-          <SoonButton variant="light" reason="Plans open soon">
+          <Link className="btn light" href="/app/billing?plan=starter_ai">
             View plan
-          </SoonButton>
+          </Link>
         </div>
         <div className="card">
           <span className="pill">Popular working tier</span>
@@ -44,9 +43,9 @@ export default function PricingPage() {
             <small className="muted"> / month</small>
           </div>
           <p className="muted">{growth.summary}</p>
-          <SoonButton variant="light" reason="Plans open soon">
+          <Link className="btn light" href="/app/billing?plan=growth_ai">
             View plan
-          </SoonButton>
+          </Link>
         </div>
       </div>
       <div className="card" style={{ marginTop: 16 }}>
@@ -58,9 +57,9 @@ export default function PricingPage() {
             </div>
             <p className="muted">{scale.summary}</p>
           </div>
-          <SoonButton variant="light" reason="Plans open soon">
+          <Link className="btn light" href="/app/billing?plan=scale_automation">
             View plan
-          </SoonButton>
+          </Link>
         </div>
       </div>
     </>

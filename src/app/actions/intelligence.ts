@@ -13,6 +13,7 @@ const START_ERRORS: Record<string, string> = {
   already_running: "An analysis is already running. It usually takes about a minute.",
   daily_limit: "You've run 10 analyses today. You can run another tomorrow.",
   no_website: "Add your website first, then run the analysis.",
+  needs_plan: "Your plan doesn't include another analysis. See Billing to choose a plan.",
 };
 
 export async function startAnalysis(_prev: FormState, _form?: FormData): Promise<FormState> {

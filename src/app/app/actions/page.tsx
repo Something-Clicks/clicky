@@ -5,7 +5,7 @@ import { ActionCardItem } from "@/components/intelligence";
 import { RunAnalysisButton } from "@/components/run-analysis";
 import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
-import { getCards, openCards } from "@/lib/queries";
+import { getEntitlements, getCards, openCards } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Action cards" };
 export const maxDuration = 120;
@@ -19,7 +19,7 @@ const FILTERS = [
 export default async function ActionsPage({ searchParams }: { searchParams: Promise<{ show?: string; impact?: string }> }) {
   const ws = await requireOrganization();
   const { show = "open", impact } = await searchParams;
-  const all = await getCards(ws.organization.id);
+  const [all, ent] = await Promise.all([getCards(ws.organization.id), getEntitlements(ws.organization.id)]);
   let cards = show === "done" ? all.filter((c) => c.status === "done") : show === "dismissed" ? all.filter((c) => c.status === "dismissed") : openCards(all);
   if (impact && ["high", "medium", "low"].includes(impact)) cards = cards.filter((c) => c.impact_priority === impact);
 
@@ -55,7 +55,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
             <>
               <h3>No Action Cards yet.</h3>
               <p className="muted">Run an analysis of your website and your first recommendations will appear here.</p>
-              <RunAnalysisButton label="Run your first analysis" />
+              <RunAnalysisButton label="Run your first analysis" entitled={ent.analyses} />
             </>
           ) : (
             <>

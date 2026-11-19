@@ -231,6 +231,25 @@ export type Database = {
         { id: string; organization_id: string; user_id: string; kind: string; channel: string; status: string; detail: string | null; created_at: string },
         "organization_id" | "user_id" | "kind" | "status"
       >;
+      plan_entitlements: Table<{ plan_id: string; analyses: boolean; weekly: boolean; drafts: string }, "plan_id" | "analyses" | "weekly" | "drafts">;
+      subscriptions: Table<
+        {
+          id: string;
+          organization_id: string;
+          stripe_subscription_id: string;
+          plan_id: string;
+          status: string;
+          current_period_end: string | null;
+          cancel_at_period_end: boolean;
+          updated_at: string;
+          created_at: string;
+        },
+        "organization_id" | "stripe_subscription_id" | "plan_id" | "status"
+      >;
+      purchases: Table<
+        { id: string; organization_id: string; plan_id: string; stripe_checkout_session_id: string; amount_cents: number; paid_at: string },
+        "organization_id" | "plan_id" | "stripe_checkout_session_id" | "amount_cents"
+      >;
       platform_admins: Table<{ granted_at: string; note: string | null; user_id: string }, "user_id">;
       profiles: Table<{ created_at: string; full_name: string | null; id: string; updated_at: string }, "id">;
     };
@@ -257,6 +276,21 @@ export type Database = {
       };
       log_notification: {
         Args: { p_org: string; p_user: string; p_kind: string; p_status: string; p_detail: string | null };
+        Returns: undefined;
+      };
+      current_entitlements: { Args: { p_org: string }; Returns: Json };
+      billing_customer_id: { Args: { p_org: string }; Returns: string | null };
+      billing_record_event: { Args: { p_key: string; p_event_id: string; p_type: string }; Returns: string };
+      billing_finish_event: { Args: { p_key: string; p_event_id: string; p_status: string; p_error: string | null }; Returns: undefined };
+      billing_record_purchase: {
+        Args: { p_key: string; p_org: string; p_plan: string; p_session: string; p_customer: string | null; p_amount: number };
+        Returns: undefined;
+      };
+      billing_upsert_subscription: {
+        Args: {
+          p_key: string; p_org: string; p_customer: string | null; p_subscription: string; p_plan: string;
+          p_status: string; p_period_end: string | null; p_cancel_at_period_end: boolean;
+        };
         Returns: undefined;
       };
       start_analysis: { Args: { p_org: string }; Returns: string };
