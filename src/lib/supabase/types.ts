@@ -162,6 +162,64 @@ export type Database = {
           },
         ]
       >;
+      agent_runs: Table<
+        {
+          id: string;
+          organization_id: string;
+          action_card_id: string;
+          draft_type: string;
+          status: string;
+          permission: string;
+          instructions: string | null;
+          model: string | null;
+          output: Json | null;
+          usage: Json | null;
+          error: string | null;
+          started_by: string | null;
+          started_at: string;
+          completed_at: string | null;
+        },
+        "organization_id" | "action_card_id" | "draft_type",
+        [
+          {
+            foreignKeyName: "agent_runs_action_card_id_fkey";
+            columns: ["action_card_id"];
+            isOneToOne: false;
+            referencedRelation: "action_cards";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
+      approvals: Table<
+        {
+          id: string;
+          organization_id: string;
+          agent_run_id: string;
+          action_card_id: string;
+          decision: string;
+          note: string | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          created_at: string;
+        },
+        "organization_id" | "agent_run_id" | "action_card_id",
+        [
+          {
+            foreignKeyName: "approvals_agent_run_id_fkey";
+            columns: ["agent_run_id"];
+            isOneToOne: true;
+            referencedRelation: "agent_runs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "approvals_action_card_id_fkey";
+            columns: ["action_card_id"];
+            isOneToOne: false;
+            referencedRelation: "action_cards";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
       platform_admins: Table<{ granted_at: string; note: string | null; user_id: string }, "user_id">;
       profiles: Table<{ created_at: string; full_name: string | null; id: string; updated_at: string }, "id">;
     };
@@ -173,6 +231,11 @@ export type Database = {
         Returns: string;
       };
       current_user_is_platform_admin: { Args: never; Returns: boolean };
+      start_agent_run: { Args: { p_card: string; p_instructions: string }; Returns: string };
+      complete_agent_run: { Args: { p_run: string; p_output: Json; p_model: string; p_usage: Json }; Returns: string };
+      fail_agent_run: { Args: { p_run: string; p_reason: string }; Returns: undefined };
+      decide_approval: { Args: { p_approval: string; p_decision: string; p_note: string | null }; Returns: undefined };
+      admin_agent_runs: { Args: never; Returns: Json };
       start_analysis: { Args: { p_org: string }; Returns: string };
       complete_analysis: {
         Args: { p_analysis: string; p_evidence: Json; p_cards: Json; p_coverage: Json; p_summary: string; p_wording: string };

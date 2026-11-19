@@ -11,9 +11,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <Shell
       crumbRoot="Platform"
-      crumbs={{ "/admin": "Admin overview" }}
+      crumbs={{ "/admin": "Admin overview", "/admin/agent-runs": "Agent runs" }}
       groups={[
-        { label: "ADMIN", items: [{ href: "/admin", label: "Overview", exact: true }] },
+        {
+          label: "ADMIN",
+          items: [
+            { href: "/admin", label: "Overview", exact: true },
+            { href: "/admin/agent-runs", label: "Agent runs" },
+          ],
+        },
         { label: "CUSTOMER APP", items: [{ href: "/app", label: "Back to workspace" }] },
       ]}
       right={<span className="pill coral">Admin · every view is logged</span>}

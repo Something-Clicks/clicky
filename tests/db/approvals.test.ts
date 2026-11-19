@@ -15,7 +15,7 @@ const PERMISSION_DENIED = /permission denied/;
 const draft = { fields: [{ key: "title", label: "Page title", text: "Drain Cleaning in Salt Lake City | Sunrise Plumbing" }] };
 
 const q = <T = Record<string, unknown>>(user: string | null, sql: string, params: unknown[] = []) =>
-  db.as(user, async (c) => (await c.query(sql, params)).rows as T[]);
+  db.as(user, async (c) => (await c.query(sql, params)).rows as [T, ...T[]]);
 
 async function seedCards(user: string, orgId: string) {
   const [{ id: analysis }] = await q<{ id: string }>(user, "select public.start_analysis($1) as id", [orgId]);

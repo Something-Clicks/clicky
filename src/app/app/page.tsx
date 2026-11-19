@@ -5,7 +5,7 @@ import { ActionCardItem } from "@/components/intelligence";
 import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
 import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
-import { getCards, getLastCompleteAnalysis, getLatestAnalysis, openCards, relativeDay } from "@/lib/queries";
+import { getCards, getLastCompleteAnalysis, getLatestAnalysis, getPendingApprovalCount, openCards, relativeDay } from "@/lib/queries";
 
 import { Greeting } from "./greeting";
 
@@ -14,10 +14,11 @@ export const maxDuration = 120;
 
 export default async function DashboardPage() {
   const ws = await requireOrganization();
-  const [latest, lastComplete, cards] = await Promise.all([
+  const [latest, lastComplete, cards, approvalsWaiting] = await Promise.all([
     getLatestAnalysis(ws.organization.id),
     getLastCompleteAnalysis(ws.organization.id),
     getCards(ws.organization.id),
+    getPendingApprovalCount(ws.organization.id),
   ]);
   const open = openCards(cards);
   const running = latest?.status === "running";
@@ -37,8 +38,8 @@ export default async function DashboardPage() {
           <div className="metric-label">Actions to review</div>
         </div>
         <div className="card">
-          <div className="metric">0</div>
-          <div className="metric-label">Approvals waiting</div>
+          <div className="metric">{approvalsWaiting}</div>
+          <div className="metric-label">{approvalsWaiting === 1 ? "Approval waiting" : "Approvals waiting"}</div>
         </div>
         <div className="card">
           <div className="metric">{running ? "Running" : relativeDay(lastComplete?.completed_at)}</div>

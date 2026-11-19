@@ -9,6 +9,12 @@ const LABELS: Record<string, string> = {
   "action_card.done": "Action marked done",
   "action_card.dismissed": "Action dismissed",
   "action_card.new": "Action reopened",
+  "agent_run.started": "AI started preparing a draft",
+  "agent_run.succeeded": "AI prepared a draft for your review",
+  "agent_run.failed": "AI couldn't prepare a draft",
+  "approval.approved": "Draft approved",
+  "approval.rejected": "Draft rejected",
+  "approval.changes_requested": "Changes requested on a draft",
 };
 
 const FIELD_LABELS: Record<string, string> = {

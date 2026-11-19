@@ -57,6 +57,16 @@ export const getCards = cache(async (orgId: string) => {
   );
 });
 
+export const getPendingApprovalCount = cache(async (orgId: string) => {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("approvals")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .eq("decision", "pending");
+  return count ?? 0;
+});
+
 export const openCards = (cards: CardRow[]) => cards.filter((c) => OPEN.includes(c.status));
 
 export async function getCard(orgId: string, id: string) {
