@@ -3,13 +3,48 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { isProtectedPath } from "@/lib/redirect";
 
+/** Content Security Policy with a fresh nonce per request (Next.js adds it to its own scripts). */
+function contentSecurityPolicy(nonce: string): string {
+  const dev = process.env.NODE_ENV === "development";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
+    `style-src 'self' 'nonce-${nonce}'${dev ? " 'unsafe-inline'" : ""}`,
+    // The reference layout uses a few inline style attributes (not scripts).
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' blob: data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
 /**
- * Refreshes the Supabase session cookie on page requests and sends signed-out
- * visitors from /app and /admin to /login. Every protected page also checks the
- * user on the server: this is a convenience layer, not the authorization boundary.
+ * Runs before every page request:
+ *  - sets a per-request CSP nonce;
+ *  - refreshes the Supabase session cookie;
+ *  - sends signed-out visitors from /app and /admin to /login.
+ * Every protected page also checks the user on the server: this is a convenience
+ * layer, not the authorization boundary.
  */
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = contentSecurityPolicy(nonce);
+
+  const next = () => {
+    const headers = new Headers(request.headers);
+    headers.set("x-nonce", nonce);
+    headers.set("Content-Security-Policy", csp);
+    const res = NextResponse.next({ request: { headers } });
+    res.headers.set("Content-Security-Policy", csp);
+    return res;
+  };
+
+  let response = next();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   const { pathname, search } = request.nextUrl;
@@ -27,7 +62,7 @@ export async function proxy(request: NextRequest) {
       getAll: () => request.cookies.getAll(),
       setAll(cookiesToSet) {
         for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
-        response = NextResponse.next({ request });
+        response = next();
         for (const { name, value, options } of cookiesToSet) response.cookies.set(name, value, options);
       },
     },
@@ -40,6 +75,12 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|brand/|manifest.webmanifest|robots.txt).*)",
+    {
+      source: "/((?!api/|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|brand/|manifest.webmanifest|robots.txt).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };
