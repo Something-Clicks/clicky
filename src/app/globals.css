@@ -556,3 +556,57 @@ details.card > summary::marker {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── 3. Accessibility: WCAG 2.2 AA text contrast ──────────────────────────────
+ * The reference colors below fall just under 4.5:1 for small text. Each is darkened
+ * only as far as needed (≥ 4.6:1 on its background). Brand cobalt #3977d5 stays for
+ * non-text uses (focus rings, borders, progress); text and buttons use #346dc3.
+ */
+:root {
+  --blue-ink: #346dc3;
+  --muted: #6a717d;
+}
+.group {
+  color: #70757c;
+}
+.btn,
+a.btn {
+  background: var(--blue-ink);
+}
+.btn.light,
+a.btn.light,
+.pill,
+.nav:hover,
+.nav.active,
+a.nav:hover,
+a.nav.active,
+.eyebrow,
+.link,
+.avatar,
+.notice {
+  color: var(--blue-ink);
+}
+.btn.light,
+a.btn.light {
+  background: #edf4ff;
+}
+.btn.outline,
+a.btn.outline {
+  background: white;
+}
+.pill.green,
+.step.done {
+  color: #157d57;
+}
+.pill.coral {
+  color: #b14f46;
+}
+.pill.yellow {
+  color: #916800;
+}
+.action .tag {
+  color: #937000;
+}
+.notice.success {
+  color: #157d57;
+}

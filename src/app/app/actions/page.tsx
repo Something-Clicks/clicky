@@ -37,7 +37,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
           </Link>
         ))}
         {(["high", "medium", "low"] as const).map((i) => (
-          <Link key={i} href={impact === i ? href(show) : href(show, i)} className={impact === i ? "step done" : "step"} aria-pressed={impact === i} style={{ textDecoration: "none" }}>
+          <Link key={i} href={impact === i ? href(show) : href(show, i)} className={impact === i ? "step done" : "step"} aria-current={impact === i ? "true" : undefined} style={{ textDecoration: "none" }}>
             {i[0]!.toUpperCase() + i.slice(1)} impact
           </Link>
         ))}
