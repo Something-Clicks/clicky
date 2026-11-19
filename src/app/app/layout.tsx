@@ -24,7 +24,6 @@ const CRUMBS: Record<string, string> = {
   "/app": "Dashboard",
   "/app/onboarding": "Onboarding",
   "/app/actions": "Action cards",
-  "/app/actions/sample": "Action detail",
   "/app/analysis": "Analysis",
   "/app/connections": "Connections",
   "/app/approvals": "Approvals",

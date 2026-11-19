@@ -1,33 +1,73 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { SampleNotice } from "@/components/soon";
-import { SAMPLE_ACTIONS } from "@/content/samples";
+import { ActionCardItem } from "@/components/intelligence";
+import { RunAnalysisButton } from "@/components/run-analysis";
+import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
+import { getCards, openCards } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Action cards" };
+export const maxDuration = 120;
 
-export default async function ActionsPage() {
-  await requireOrganization();
+const FILTERS = [
+  { key: "open", label: "To do" },
+  { key: "done", label: "Done" },
+  { key: "dismissed", label: "Dismissed" },
+] as const;
+
+export default async function ActionsPage({ searchParams }: { searchParams: Promise<{ show?: string; impact?: string }> }) {
+  const ws = await requireOrganization();
+  const { show = "open", impact } = await searchParams;
+  const all = await getCards(ws.organization.id);
+  let cards = show === "done" ? all.filter((c) => c.status === "done") : show === "dismissed" ? all.filter((c) => c.status === "dismissed") : openCards(all);
+  if (impact && ["high", "medium", "low"].includes(impact)) cards = cards.filter((c) => c.impact_priority === impact);
+
+  const href = (s: string, i?: string) => `/app/actions?show=${s}${i ? `&impact=${i}` : ""}`;
+
   return (
     <>
       <div className="eyebrow">Your priorities</div>
       <h1 className="h1">A few things worth your attention.</h1>
       <p className="sub">Each recommendation explains the evidence, the reason, and the next step.</p>
-      <SampleNotice>These are samples. Your own Action Cards appear here after your first website analysis.</SampleNotice>
-      <div className="list">
-        {SAMPLE_ACTIONS.map((card) => (
-          <div className="card action" key={card.title}>
-            <div className="tag">{card.impact} · SAMPLE</div>
-            <h3>{card.title}</h3>
-            <p>{card.summary}</p>
-            <div className="evidence">{card.evidence}</div>
-            <Link className="btn light" href={`/app/actions/${card.id}`}>
-              {card.cta}
-            </Link>
-          </div>
+      <nav className="steps" aria-label="Filter actions" style={{ marginTop: 0 }}>
+        {FILTERS.map((f) => (
+          <Link key={f.key} href={href(f.key, impact)} className={show === f.key ? "step done" : "step"} aria-current={show === f.key ? "page" : undefined} style={{ textDecoration: "none" }}>
+            {f.label}
+          </Link>
         ))}
-      </div>
+        {(["high", "medium", "low"] as const).map((i) => (
+          <Link key={i} href={impact === i ? href(show) : href(show, i)} className={impact === i ? "step done" : "step"} aria-pressed={impact === i} style={{ textDecoration: "none" }}>
+            {i[0]!.toUpperCase() + i.slice(1)} impact
+          </Link>
+        ))}
+      </nav>
+      {cards.length ? (
+        <div className="list">
+          {cards.map((card) => (
+            <ActionCardItem key={card.id} card={card} />
+          ))}
+        </div>
+      ) : (
+        <div className="card empty">
+          <Clicky size={72} alt="" />
+          {all.length === 0 ? (
+            <>
+              <h3>No Action Cards yet.</h3>
+              <p className="muted">Run an analysis of your website and your first recommendations will appear here.</p>
+              <RunAnalysisButton label="Run your first analysis" />
+            </>
+          ) : (
+            <>
+              <h3>Nothing here.</h3>
+              <p className="muted">No cards match this filter.</p>
+              <Link className="btn light" href="/app/actions">
+                Show what&apos;s to do
+              </Link>
+            </>
+          )}
+        </div>
+      )}
     </>
   );
 }

@@ -67,7 +67,7 @@ export async function saveBusinessSetup(_prev: FormState, form: FormData): Promi
     return { error: GENERIC, values };
   }
   log.info("organization.created", { userId: user.id, organizationId: data });
-  redirect("/app");
+  redirect(parsed.data.website ? "/app/connections?onboarding=1" : "/app");
 }
 
 export async function updateProfile(_prev: FormState, form: FormData): Promise<FormState> {

@@ -1,27 +1,39 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ActionCardItem } from "@/components/intelligence";
+import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
+import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
-import { SAMPLE_NEXT_MOVE } from "@/content/samples";
+import { getCards, getLastCompleteAnalysis, getLatestAnalysis, openCards, relativeDay } from "@/lib/queries";
 
 import { Greeting } from "./greeting";
 
 export const metadata: Metadata = { title: "Dashboard" };
+export const maxDuration = 120;
 
 export default async function DashboardPage() {
-  await requireOrganization();
-  // Action Cards, approvals and analyses arrive in later phases. Until then the
-  // true values are zero / not yet, and the next-move card is a labeled sample.
+  const ws = await requireOrganization();
+  const [latest, lastComplete, cards] = await Promise.all([
+    getLatestAnalysis(ws.organization.id),
+    getLastCompleteAnalysis(ws.organization.id),
+    getCards(ws.organization.id),
+  ]);
+  const open = openCards(cards);
+  const running = latest?.status === "running";
+  const next = open.find((c) => c.status === "new") ?? open[0];
+
   return (
     <>
+      <AutoRefresh active={running} />
       <div className="eyebrow">Your workspace</div>
       <h1 className="h1">
         <Greeting /> Here&apos;s your next move.
       </h1>
-      <p className="sub">A clear view of what needs attention. The action below is a sample until your first analysis runs.</p>
+      <p className="sub">A clear view of what needs attention.</p>
       <div className="grid">
         <div className="card">
-          <div className="metric">0</div>
+          <div className="metric">{open.length}</div>
           <div className="metric-label">Actions to review</div>
         </div>
         <div className="card">
@@ -29,20 +41,43 @@ export default async function DashboardPage() {
           <div className="metric-label">Approvals waiting</div>
         </div>
         <div className="card">
-          <div className="metric">Not yet</div>
+          <div className="metric">{running ? "Running" : relativeDay(lastComplete?.completed_at)}</div>
           <div className="metric-label">Last analysis</div>
         </div>
       </div>
       <h3 style={{ margin: "26px 0 12px" }}>Your next best move</h3>
-      <div className="card action">
-        <div className="tag">{SAMPLE_NEXT_MOVE.impact} · SAMPLE</div>
-        <h3>{SAMPLE_NEXT_MOVE.title}</h3>
-        <p>{SAMPLE_NEXT_MOVE.summary}</p>
-        <div className="evidence">{SAMPLE_NEXT_MOVE.evidence}</div>
-        <Link className="btn" href="/app/actions/sample">
-          Review action
-        </Link>
-      </div>
+      {next ? (
+        <ActionCardItem card={next} cta="Review action" primary />
+      ) : running ? (
+        <div className="card empty" role="status">
+          <Clicky size={72} alt="" />
+          <h3>Analyzing your website…</h3>
+          <p className="muted">We&apos;re reviewing your pages and checking page speed. This usually takes about a minute.</p>
+        </div>
+      ) : lastComplete ? (
+        <div className="card empty">
+          <Clicky size={72} alt="" />
+          <h3>You&apos;re all caught up.</h3>
+          <p className="muted">There&apos;s nothing open right now. Run a new analysis after you change your website.</p>
+          <RunAnalysisButton label="Run a new analysis" />
+        </div>
+      ) : !ws.business?.website ? (
+        <div className="card empty">
+          <Clicky size={72} alt="" />
+          <h3>Add your website to get started.</h3>
+          <p className="muted">Your first Action Cards come from a review of your website.</p>
+          <Link className="btn" href="/app/onboarding">
+            Add your website
+          </Link>
+        </div>
+      ) : (
+        <div className="card empty">
+          <Clicky size={72} alt="" />
+          <h3>Let&apos;s find your first next step.</h3>
+          <p className="muted">We&apos;ll review {new URL(ws.business.website).hostname} and turn what we find into a short list of actions.</p>
+          <RunAnalysisButton label="Run your first analysis" />
+        </div>
+      )}
     </>
   );
 }
