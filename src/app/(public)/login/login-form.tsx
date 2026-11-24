@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import { sendSignInLink, signIn } from "@/app/actions/auth";
 import { Field, FormMessage, SubmitButton } from "@/components/form";
@@ -11,6 +11,16 @@ export function LoginForm({ next, linkError }: { next: string; linkError: boolea
   const [state, action] = useActionState(signIn, {} as FormState);
   const [linkState, linkAction] = useActionState(sendSignInLink, {} as FormState);
   const [mode, setMode] = useState<"password" | "link">("password");
+  useEffect(() => {
+    if (state.redirectTo) window.location.assign(state.redirectTo);
+  }, [state.redirectTo]);
+  if (state.redirectTo) {
+    return (
+      <div className="card" role="status">
+        <p>Signing you in…</p>
+      </div>
+    );
+  }
   return (
     <div className="card" data-clarity-mask="true">
       {linkError && !state.error ? (

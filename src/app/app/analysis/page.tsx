@@ -7,7 +7,7 @@ import { formatWhen } from "@/lib/activity";
 import { requireOrganization } from "@/lib/auth";
 import { getEntitlements, getEvidence, getLastCompleteAnalysis, getLatestAnalysis, isStale } from "@/lib/queries";
 
-export const metadata: Metadata = { title: "Analysis" };
+export const metadata: Metadata = { title: "Website check" };
 export const maxDuration = 120;
 
 type Coverage = {

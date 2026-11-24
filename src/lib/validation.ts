@@ -119,6 +119,8 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
 
 export interface FormState {
   ok?: boolean;
+  /** Same-site path the browser should open with a full page load (see signIn). */
+  redirectTo?: string;
   message?: string;
   error?: string;
   fieldErrors?: Record<string, string>;

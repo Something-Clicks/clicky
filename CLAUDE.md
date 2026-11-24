@@ -10,6 +10,7 @@ Marketing help for small businesses: check the website, show what's worth fixing
 ## Database safety
 - Migrations in `supabase/migrations/` are additive and reversible; every one has a rollback in `supabase/rollback/`.
 - **Never apply a migration or run write SQL against the production Supabase project ("Clicky", `ysmwnxvyjougetdlpnba`) without the owner's explicit approval.** Read-only inspection is fine.
+- **clicky-dev** (`ofstvbgaoznipsiqbjjp`) is the only project where write testing is allowed. Before any write or migration, confirm the target ref is `ofstvbgaoznipsiqbjjp`; abort otherwise. Migrations there were applied in order, then the launch migration.
 - Test locally: `pnpm test:db` runs every migration on a throwaway local Postgres (`PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres`). Local Postgres is not full Supabase validation; also check Supabase-specific details (roles, auth.users columns, constraint names, advisors) read-only.
 
 ## Architecture
@@ -31,6 +32,12 @@ Marketing help for small businesses: check the website, show what's worth fixing
 - Never invent business facts, results, integrations or features. Only show features as available when they work; otherwise "Coming soon".
 - One primary action per screen. Touch targets ≥ 44px. No horizontal scrolling at 390px.
 - Brand: Click Blue `#3977D5` for marks/borders; white text only on `#2A5DAE`. Flat Clicky for icons and small marks, 3D Clicky for homepage/onboarding. Never redraw the artwork; `pnpm icons` regenerates assets from `brand-source/`.
+
+## Environments and secrets
+- Vercel Preview for this branch points at clicky-dev and Stripe **TEST**; Production variables are never edited from a session without the owner's explicit approval (run an env snapshot before and after, and compare).
+- Never add `STRIPE_ALLOW_LIVE`, never use live Stripe keys in tests. Stripe ids per mode: `src/config/pricing.ts` (`STRIPE_CATALOG`), never borrowed across modes.
+- Secrets saved through the secure prompt are never visible to a session (a proxy attaches them); do not ask users to paste secrets in chat. Generated dev keys: print hashes only.
+- Signed-in journey tests: `tests/e2e/journey.spec.ts` (`E2E_FULL=1`, clicky-dev + Stripe TEST). Test users/reset: `tests/e2e/dev-seed.sql`, `dev-reset.sql` (clicky-dev only, opt-in guard). Steps: `docs/launch/LAUNCH_CHECKLIST.md`.
 
 ## Checks before every commit
 `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`, plus `pnpm e2e` when the customer journey changed (see the checklist for the local stack).

@@ -1,0 +1,275 @@
+{
+  "evidence": [
+    {
+      "key": "e1",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "site.page_reviewed",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "Reviewed your homepage: 9 words.",
+      "excerpt": null,
+      "measurement": {
+        "words": 9
+      }
+    },
+    {
+      "key": "e2",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "site.page_reviewed",
+      "url": "https://sunrise-plumbing.example/contact",
+      "observation": "Reviewed the /contact page: 1 words.",
+      "excerpt": null,
+      "measurement": {
+        "words": 1
+      }
+    },
+    {
+      "key": "e3",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "site.page_reviewed",
+      "url": "https://sunrise-plumbing.example/services",
+      "observation": "Reviewed the /services page: 1 words.",
+      "excerpt": null,
+      "measurement": {
+        "words": 1
+      }
+    },
+    {
+      "key": "e4",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "site.page_reviewed",
+      "url": "https://sunrise-plumbing.example/about",
+      "observation": "Reviewed the /about page: 1 words.",
+      "excerpt": null,
+      "measurement": {
+        "words": 1
+      }
+    },
+    {
+      "key": "e5",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "meta.title_missing",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "Your homepage has no page title.",
+      "excerpt": null,
+      "measurement": null
+    },
+    {
+      "key": "e6",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "meta.description_missing",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "Your homepage has no meta description.",
+      "excerpt": null,
+      "measurement": null
+    },
+    {
+      "key": "e7",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "content.h1_missing",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "Your homepage has no main heading (H1).",
+      "excerpt": null,
+      "measurement": {
+        "h1": 0
+      }
+    },
+    {
+      "key": "e8",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "contact.no_click_to_call",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "A phone number appears on your site ((214) 555-0147) but it can't be tapped to call from your homepage.",
+      "excerpt": null,
+      "measurement": {
+        "telLinksOnHomepage": 0,
+        "telLinksOnSite": false
+      }
+    },
+    {
+      "key": "e9",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "mobile.viewport_missing",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "Your homepage is missing the mobile viewport setting.",
+      "excerpt": null,
+      "measurement": null
+    },
+    {
+      "key": "e10",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "content.thin_homepage",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "Your homepage has about 9 words of text.",
+      "excerpt": null,
+      "measurement": {
+        "words": 9
+      }
+    },
+    {
+      "key": "e11",
+      "source": "website",
+      "kind": "observed",
+      "check_key": "a11y.images_missing_alt",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "1 of 2 images on the pages reviewed have no text description (alt text).",
+      "excerpt": null,
+      "measurement": {
+        "missing": 1,
+        "total": 2
+      }
+    },
+    {
+      "key": "e12",
+      "source": "pagespeed",
+      "kind": "missing",
+      "check_key": "pagespeed.unavailable",
+      "url": "https://sunrise-plumbing.example/",
+      "observation": "PageSpeed Insights is busy right now (quota reached).",
+      "excerpt": null,
+      "measurement": null
+    }
+  ],
+  "cards": [
+    {
+      "check_key": "meta.title_missing",
+      "title": "Add a page title to your homepage",
+      "explanation": "Your homepage does not have a page title, the line search engines show as the headline of your listing.",
+      "why_it_matters": "Without a title, search results guess what to show, and people may not see what you do or where.",
+      "recommended_action": "Write a title of about 50–60 characters that names your main service, followed by sunrise-plumbing.example.",
+      "expected_benefit": "People searching can tell what your page offers before they click.",
+      "impact_priority": "high",
+      "confidence": "high",
+      "ai_capable": true,
+      "execution_type": "meta",
+      "approval_required": true,
+      "evidence_keys": [
+        "e5"
+      ]
+    },
+    {
+      "check_key": "content.h1_missing",
+      "title": "Give your homepage a clear main headline",
+      "explanation": "Your homepage has no main heading that says what you do.",
+      "why_it_matters": "Visitors decide in seconds whether you can help them. A clear headline answers that right away.",
+      "recommended_action": "Add a headline at the top that names your main service.",
+      "expected_benefit": "Visitors understand what you offer as soon as the page opens.",
+      "impact_priority": "high",
+      "confidence": "high",
+      "ai_capable": true,
+      "execution_type": "page_copy",
+      "approval_required": true,
+      "evidence_keys": [
+        "e7"
+      ]
+    },
+    {
+      "check_key": "mobile.viewport_missing",
+      "title": "Make your homepage fit phone screens",
+      "explanation": "Your homepage is missing the setting that tells phones to size the page to the screen.",
+      "why_it_matters": "Without it, phones show a shrunken desktop page that is hard to read and tap.",
+      "recommended_action": "Ask your web designer to add the standard mobile viewport tag, or switch to a mobile-friendly theme.",
+      "expected_benefit": "Phone visitors can read and tap your page without zooming.",
+      "impact_priority": "high",
+      "confidence": "high",
+      "ai_capable": false,
+      "execution_type": "manual",
+      "approval_required": false,
+      "evidence_keys": [
+        "e9"
+      ]
+    },
+    {
+      "check_key": "meta.description_missing",
+      "title": "Add a short description for search results",
+      "explanation": "Your homepage has no meta description, the short summary search engines may show under your title.",
+      "why_it_matters": "Without one, search engines pick random text from the page, which may not explain why someone should choose you.",
+      "recommended_action": "Write one or two sentences (about 150 characters) that say what you offer, who it's for, and how to get in touch.",
+      "expected_benefit": "A summary in search results that you chose, instead of a random sentence.",
+      "impact_priority": "medium",
+      "confidence": "high",
+      "ai_capable": true,
+      "execution_type": "meta",
+      "approval_required": true,
+      "evidence_keys": [
+        "e6"
+      ]
+    },
+    {
+      "check_key": "contact.no_click_to_call",
+      "title": "Let phone visitors call you with one tap",
+      "explanation": "Your phone number is shown as plain text, so people on phones have to copy it to call.",
+      "why_it_matters": "Most local visitors browse on phones. Making it easy to call removes a step between interest and a conversation.",
+      "recommended_action": "Add your phone number near the top of the homepage as a tap-to-call link (a “tel:” link), and repeat it near the bottom.",
+      "expected_benefit": "Fewer steps for a visitor who wants to call you.",
+      "impact_priority": "medium",
+      "confidence": "high",
+      "ai_capable": false,
+      "execution_type": "manual",
+      "approval_required": false,
+      "evidence_keys": [
+        "e8"
+      ]
+    },
+    {
+      "check_key": "content.thin_homepage",
+      "title": "Explain your services in a few more words",
+      "explanation": "Your homepage has about 9 words, which may not be enough to explain what you offer.",
+      "why_it_matters": "Visitors and search engines both need a few clear sentences to understand your services and who they are for.",
+      "recommended_action": "Add a short section that lists your main services, who they help, and where you work.",
+      "expected_benefit": "Visitors get enough information to decide to contact you.",
+      "impact_priority": "medium",
+      "confidence": "medium",
+      "ai_capable": true,
+      "execution_type": "page_copy",
+      "approval_required": true,
+      "evidence_keys": [
+        "e10"
+      ]
+    },
+    {
+      "check_key": "a11y.images_missing_alt",
+      "title": "Describe your images",
+      "explanation": "1 images on your site have no text description.",
+      "why_it_matters": "Descriptions help people using screen readers and help search engines understand your photos.",
+      "recommended_action": "Add a short description to each image that shows your work, team or location.",
+      "expected_benefit": "Your site is easier to use for more people.",
+      "impact_priority": "low",
+      "confidence": "high",
+      "ai_capable": false,
+      "execution_type": "manual",
+      "approval_required": false,
+      "evidence_keys": [
+        "e11"
+      ]
+    }
+  ],
+  "coverage": {
+    "website": {
+      "status": "observed",
+      "pages_reviewed": 4,
+      "pages_unreachable": 0
+    },
+    "pagespeed": {
+      "status": "missing",
+      "reason": "PageSpeed Insights is busy right now (quota reached)."
+    },
+    "search_console": {
+      "status": "not_connected"
+    },
+    "google_business_profile": {
+      "status": "not_connected"
+    }
+  },
+  "summary": "We reviewed 4 pages and found 7 things worth your attention, 3 of them high impact. Start with the first card below.",
+  "wording": "template"
+}

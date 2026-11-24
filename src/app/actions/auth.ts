@@ -42,7 +42,11 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
         : "That email and password don't match. Try again.";
     return { error: message, values: keep };
   }
-  redirect(safeNextPath(form.get("next")));
+  const next = safeNextPath(form.get("next"));
+  // The claim link is handled by a route that signs the visitor onward; a client-side hop would leave
+  // the one-time code in the address bar. Ask the browser for a full page load instead.
+  if (next.startsWith("/claim")) return { ok: true, redirectTo: next, values: keep };
+  redirect(next);
 }
 
 export async function signUp(_prev: FormState, form: FormData): Promise<FormState> {

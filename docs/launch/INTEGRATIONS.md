@@ -71,6 +71,31 @@ Authentication → Rate Limits: emails per hour ≥ 30 once SMTP is set. Authent
 
 **S8. Plan.** Upgrade the project from Free to Pro before real customers (daily backups, no pausing).
 
+## Preview: two values only you can add
+The secure prompt stores a secret where the network proxy can use it; it never gives Claude the value, so Claude cannot copy it into Vercel. Add these two as **branch-scoped Preview** variables:
+1. Vercel → `something-clicks` → Settings → Environment Variables → **Add New**.
+2. Name `STRIPE_SECRET_KEY`, value = your Stripe **test** key (`sk_test_…` or `rk_test_…`; never a live key). Environments: **Preview** only → choose branch `claude/ecstatic-curie-9shvjf` → mark **Sensitive** → Save.
+3. Name `SUPABASE_SECRET_KEY`, value = clicky-dev's secret key (Supabase → clicky-dev → Project Settings → API Keys → Secret). Preview, same branch, Sensitive, Save. (Only the weekly worker uses it; previews do not run cron, so this one is optional.)
+4. Redeploy the branch's latest preview (Deployments → latest `claude/ecstatic-curie-9shvjf` → ⋯ → Redeploy).
+Without `STRIPE_SECRET_KEY`, the preview says "Checkout isn't switched on yet" and cannot re-read subscriptions.
+
+## Vercel Deployment Protection and the Stripe webhook
+Protection is **on** for previews (`all_except_custom_domains`), so Stripe's webhook request gets Vercel's login page, not the app. Stripe test events to the preview URL will fail until you allow them. Two options:
+- **Easiest (testing only): use your own Stripe CLI** — `stripe listen --forward-to localhost:3100/api/webhooks/stripe` on your computer; no Vercel change.
+- **Automation bypass on the preview:** Vercel → `something-clicks` → Settings → Deployment Protection → **Protection Bypass for Automation** → Add (this creates a secret and exposes `VERCEL_AUTOMATION_BYPASS_SECRET` to the project, including Production, so only do it if you accept that). Then in Stripe → Developers → Webhooks → edit endpoint `we_1Uf9ApFnFMCbDhHEbQoz3sYP` → set the URL to `…/api/webhooks/stripe?x-vercel-protection-bypass=<that secret>`.
+Do not turn protection off for the whole project.
+
+## clicky-dev Auth (Supabase → clicky-dev → Authentication)
+The Supabase connector cannot change these. Click by click:
+1. **URL Configuration** → Site URL: `https://something-clicks-git-claude-94123f-matt-hills-projects-54d303a1.vercel.app`.
+2. Redirect URLs → Add: `https://*-matt-hills-projects-54d303a1.vercel.app/**` and (for local tests) `http://localhost:3100/**`. Save.
+3. **Email → Templates** → Magic link and Confirm signup: replace the link with `<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next={{ .RedirectTo }}">Open Something Clicks</a>`; Reset password: `<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password">Choose a new password</a>`. Save each.
+4. Optional: custom SMTP with Resend (S5) so people outside your Supabase team can receive links. Until then, only team members get email.
+5. Provider → Email: keep "Confirm email" on.
+
+## Rotating the dev keys
+`SITE_SERVER_KEY` and `BILLING_WEBHOOK_KEY` for clicky-dev were generated randomly; only their SHA-256 hashes are in clicky-dev's `app_private.secrets`. To rotate: generate new values, update the Vercel Preview variables, and run the S2-style `insert … on conflict (name) do update` with the new hash.
+
 ## Resend
 1. Resend → Domains → Add `somethingclicks.com` → region US East.
 2. Add the DNS records Resend shows (at your DNS provider): **MX** and **TXT (SPF)** on the `send` subdomain, **TXT (DKIM)** `resend._domainkey`. Copy the exact values from Resend.
@@ -81,13 +106,8 @@ Authentication → Rate Limits: emails per hour ≥ 30 once SMTP is set. Authent
 ## Stripe
 The four products and seven prices already exist in **LIVE** mode; their ids are in `src/config/pricing.ts`.
 
-**Test mode first (needed for safe end-to-end payment tests):**
-1. Stripe → switch to Test mode → Products → create the same four products and seven prices.
-2. Send Claude the test product and price ids; they go into `STRIPE_CATALOG.test` (no logic change).
-3. Developers → Webhooks → Add endpoint `https://somethingclicks.com/api/webhooks/stripe` (or the preview URL) with events:
-   `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`,
-   `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`,
-   `customer.subscription.resumed`, `invoice.paid`, `invoice.payment_failed`.
+**Test mode (done Nov 24 2026):** the four products and seven prices were created in TEST mode with the same names, descriptions, amounts and intervals as live; their ids are in `STRIPE_CATALOG.test` in `src/config/pricing.ts`. A TEST webhook endpoint `we_1Uf9ApFnFMCbDhHEbQoz3sYP` points at the branch preview URL with the 9 events below. Two older test products and two test endpoints (for somethingclicks.com) were left untouched.
+Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid`, `invoice.payment_failed`.
 
 **Customer portal:** Settings → Billing → Customer portal → Activate. Allow: update payment method, view invoices,
 cancel at period end. Products for plan switching: Single Site (monthly and yearly). Add Business Plus / Multi-Site

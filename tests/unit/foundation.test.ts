@@ -164,5 +164,13 @@ describe("activity labels", () => {
     expect(activityLabel("organization.created")).toBe("Business account created");
     expect(activityDetail({ fields: ["website", "primary_goal"] })).toBe("Changed: website, main goal");
     expect(activityDetail({})).toBeNull();
+    expect(activityDetail({ cards: 7, evidence: 12 })).toBe("7 things to fix, from 12 pieces of evidence");
+    expect(activityDetail({ cards: 1, from_preview: true })).toBe("1 thing to fix");
+    expect(activityLabel("preview.claimed")).toBe("Saved your first result");
+    expect(activityLabel("billing.subscription_active")).toBe("Plan started");
+    // No label that a customer sees may use the banned words.
+    for (const a of ["agent_run.started", "agent_run.succeeded", "agent_run.failed", "analysis.started"]) {
+      expect(activityLabel(a)).not.toMatch(/\b(AI|agents?|prompts?|campaigns?)\b/);
+    }
   });
 });
