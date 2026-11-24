@@ -99,13 +99,15 @@ export async function analyzeWebsite(website: string, biz: BusinessContext, deps
   return { evidence, findings: worded.findings, coverage, summary: worded.summary, wording: worded.wording as "ai" | "template", pagespeed: psi.ok };
 }
 
+export type AnalysisOutcome = { ok: true; result: AnalysisResult } | { ok: false; reason: string };
+
 export async function runAnalysis(
   db: Pick<Db, "rpc">,
   analysisId: string,
   website: string,
   biz: BusinessContext,
   deps: AnalysisDeps = {},
-) {
+): Promise<AnalysisOutcome> {
   const started = Date.now();
   try {
     const r = await analyzeWebsite(website, biz, deps);
@@ -121,9 +123,12 @@ export async function runAnalysis(
     if (deps.notifyOrg) await notify(db, deps.notifyOrg, biz.businessName, "analysis_complete");
     await track("reanalysis_completed");
     log.info("analysis.completed", { analysisId, ms: Date.now() - started, cards: r.findings.length, evidence: r.evidence.length, wording: r.wording, pagespeed: r.pagespeed });
+    return { ok: true, result: r };
   } catch (error) {
     log.error("analysis.failed", { analysisId, ms: Date.now() - started, error });
-    const { error: failError } = await db.rpc("fail_analysis", { p_analysis: analysisId, p_reason: friendlyReason(error, website) });
+    const reason = friendlyReason(error, website);
+    const { error: failError } = await db.rpc("fail_analysis", { p_analysis: analysisId, p_reason: reason });
     if (failError) log.error("analysis.fail_record_failed", { analysisId, error: failError.message });
+    return { ok: false, reason };
   }
 }

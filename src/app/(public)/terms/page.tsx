@@ -38,7 +38,7 @@ export default function TermsPage() {
 
       <h2>5. Plans and payment</h2>
       <ul>
-        <li><b>Marketing Plan</b> is a one-time purchase of $49.</li>
+        <li><b>Marketing Report</b> is a one-time purchase of $49.</li>
         <li>
           <b>Subscriptions</b> are billed monthly or yearly in advance and renew automatically until canceled. You can cancel
           any time in Manage billing; you keep access until the end of the paid period.

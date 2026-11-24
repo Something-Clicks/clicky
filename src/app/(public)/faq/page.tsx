@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { priceLabel } from "@/config/pricing";
+import { PLANS, priceLabel } from "@/config/pricing";
 
 export const metadata: Metadata = { title: "FAQ" };
 
@@ -23,7 +23,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "How much does it cost after that?",
-    a: `The Marketing Plan is ${priceLabel("marketing_plan", "one_time")}. Single Site is ${priceLabel("single_site", "month")} or ${priceLabel("single_site", "year")}. No retainers, cancel any time.`,
+    a: `The ${PLANS.marketing_plan.name} is ${priceLabel("marketing_plan", "one_time")}. ${PLANS.single_site.name} is ${priceLabel("single_site", "month")} or ${priceLabel("single_site", "year")}. No retainers, cancel any time.`,
   },
   {
     q: "Do you guarantee rankings, calls or sales?",

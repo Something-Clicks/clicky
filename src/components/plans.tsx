@@ -10,7 +10,7 @@ import { PLANS, priceLabel, type Interval, type PlanId } from "@/config/pricing"
 export const INCLUDES: Partial<Record<PlanId, string[]>> = {
   marketing_plan: ["A full check of your website", "A clear, ranked list of what to fix", "The evidence behind every item"],
   single_site: [
-    "Everything in Marketing Plan",
+    `Everything in ${PLANS.marketing_plan.name}`,
     "Check your website again any time",
     "Mark things done and see what's fixed",
     "A history of your checks",
@@ -32,7 +32,7 @@ function Buy({ plan, interval, label, mode, light }: { plan: PlanId; interval: I
   return <CheckoutButton plan={plan} interval={interval} label={label} variant={light ? "light" : undefined} />;
 }
 
-/** The plan list: Marketing Plan (one-time), then subscriptions with monthly and yearly prices. */
+/** The plan list: Marketing Report (one-time), then subscriptions with monthly and yearly prices. */
 export function Plans({ mode, highlight }: { mode: Mode; highlight?: string }) {
   const mp = PLANS.marketing_plan;
   const ss = PLANS.single_site;
@@ -74,7 +74,7 @@ export function Plans({ mode, highlight }: { mode: Mode; highlight?: string }) {
         </section>
       </div>
       <section className="card quiet" aria-labelledby="plan-soon">
-        <h3 id="plan-soon">Coming soon</h3>
+        <h3 id="plan-soon">Planned</h3>
         <table className="table">
           <thead>
             <tr>
@@ -94,7 +94,7 @@ export function Plans({ mode, highlight }: { mode: Mode; highlight?: string }) {
           </tbody>
         </table>
         <p className="muted small" style={{ marginTop: 8 }}>
-          Business Plus adds hands-off work for you. Multi-Site covers several websites or locations. Neither is ready yet.
+          {PLANS.business_plus.name} and {PLANS.multi_site.name} are planned future plans. Neither is available yet.
         </p>
       </section>
     </div>

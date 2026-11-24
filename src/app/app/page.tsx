@@ -19,6 +19,7 @@ import {
 } from "@/lib/queries";
 import { FEATURES } from "@/config/features";
 import { planName } from "@/config/pricing";
+import { stageCounts } from "@/lib/stages";
 
 import { Greeting } from "./greeting";
 
@@ -37,6 +38,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     getFreeUses(ws.organization.id),
   ]);
   const open = openCards(cards);
+  const stages = stageCounts(open);
   const running = latest?.status === "running";
   const next = open.find((c) => c.status === "new") ?? open[0];
   const more = open.filter((c) => c.id !== next?.id).slice(0, 2);
@@ -83,6 +85,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       ) : next ? (
         <>
           <h2 style={{ margin: "8px 0 0" }}>Your next move</h2>
+          {stages.prepared || stages.approved ? (
+            <p className="small muted" style={{ margin: 0 }}>
+              {[
+                stages.prepared ? `${stages.prepared} ready for your review` : null,
+                stages.approved ? `${stages.approved} approved, not done yet` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : null}
           <ActionCardItem card={next} cta="Let's do it" primary />
           {more.length ? (
             <>

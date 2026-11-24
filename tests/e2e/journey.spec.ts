@@ -301,8 +301,8 @@ test.describe("claim and free uses", () => {
       await expect(main.getByText("Checkout opens soon.")).toBeVisible();
       await expect(main.locator("form input[name=plan]")).toHaveCount(0);
     }
-    await expect(main.getByRole("table").getByRole("row", { name: /Business Plus/ })).toBeVisible();
-    await expect(main.getByRole("table").getByRole("row", { name: /Multi-Site/ })).toBeVisible();
+    await expect(main.getByRole("table").getByRole("row", { name: /Marketing Studio/ })).toBeVisible();
+    await expect(main.getByRole("table").getByRole("row", { name: /Marketing Suite/ })).toBeVisible();
     expect(await main.innerText()).not.toMatch(BANNED);
     await noSideScroll(page);
     await axe(page);
@@ -393,7 +393,7 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
     const c = await ctx(browser, info);
     const page = await c.newPage();
     await login(page, email("pat", info), "/app/billing");
-    await expect(page.getByRole("heading", { name: "Single Site" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Marketing Assistant" })).toBeVisible();
     await expect(page.getByText("$79/month")).toBeVisible();
     await expect(page.getByText("Active", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Manage billing" })).toBeVisible();
@@ -431,7 +431,7 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
       }
       expect((await deliver(event!)).status).toBe(200);
       await page.goto("/app/billing");
-      await expect(page.getByRole("heading", { name: "Single Site" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Marketing Assistant" })).toBeVisible();
       await expect(page.getByText("$756 billed yearly")).toBeVisible();
       await stripe(`/v1/subscriptions/${sub.id}`, { method: "DELETE" });
       await stripe(`/v1/customers/${buyerCust}`, { method: "DELETE" });
@@ -468,7 +468,7 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
     const { data: ent } = await mp.rpc("current_entitlements", { p_org: org });
     expect(ent).toMatchObject({ plan: "marketing_plan", analyses: true, weekly: false, drafts: "none" });
     await page.goto("/app/billing");
-    await expect(page.getByRole("heading", { name: "Marketing Plan" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Marketing Report" })).toBeVisible();
     await expect(page.getByText("Paid $49")).toBeVisible();
     const { data: a, error } = await mp.rpc("start_analysis", { p_org: org });
     expect(error).toBeNull();

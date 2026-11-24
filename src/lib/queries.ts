@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import { log } from "@/lib/log";
+import { cardStage } from "@/lib/stages";
 import { createClient } from "@/lib/supabase/server";
 
 /** Reads for the workspace. Every query runs as the signed-in user, so RLS scopes it. */
@@ -67,7 +68,10 @@ export const getPendingApprovalCount = cache(async (orgId: string) => {
   return count ?? 0;
 });
 
-export const openCards = (cards: CardRow[]) => cards.filter((c) => OPEN.includes(c.status));
+/** Still needs the owner: prepared or approved, and not already verified fixed. */
+export const openCards = (cards: CardRow[]) => cards.filter((c) => OPEN.includes(c.status) && cardStage(c) !== "completed");
+/** Completed: marked done by the team, or approved and verified fixed by a later check. */
+export const completedCards = (cards: CardRow[]) => cards.filter((c) => cardStage(c) === "completed");
 
 export async function getCard(orgId: string, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;

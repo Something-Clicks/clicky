@@ -107,6 +107,7 @@ Branch-scoped Preview variables for this branch point at clicky-dev and Stripe T
 Do these in order. Stop if any check fails.
 
 **1. Approve the production migration**
+- Also `supabase/migrations/20261126120000_marketing_workflow.sql` (marketing agent foundation, after the two below). The app tolerates it missing (website checks still run; workflow records and the Approve button do not), but apply it before merging.
 - Review `supabase/migrations/20261124120000_launch_redesign.sql` **and then** `supabase/migrations/20261125120000_funnel_events_and_local_keys.sql` (adds five funnel steps and optional `*_local` server keys; production has none), and their rollbacks in `supabase/rollback/`. Apply in that order. Both were applied, rolled back and re-applied on clicky-dev with in-transaction checks.
 - Tell Claude "apply the launch migration to production". It will confirm the target ref is `ysmwnxvyjougetdlpnba`, apply, then verify tables/functions and run the security advisor.
 - Store the server-key hash in production (INTEGRATIONS S2) with a **new** production `SITE_SERVER_KEY` (not the dev one).

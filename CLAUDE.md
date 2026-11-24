@@ -46,5 +46,8 @@ Marketing help for small businesses: check the website, show what's worth fixing
 - Anthropic is not our AI provider and is not a dependency. Never request an Anthropic key. The existing code (`src/lib/server/ai.ts`, `drafts.ts`) stays dormant and unconfigured; do not delete it.
 - `FEATURES.drafts` (`src/config/features.ts`) is `false`: draft creation, approvals and their screens/routes are hidden from customers. Recommendations come from fixed checks; never describe them as AI analysis.
 
-## Not now
-Customer-facing agents are planned in `docs/agents/AGENT_ROADMAP.md`. Do not build them without the owner's approval.
+## Marketing agent
+- Foundation built and approved: `docs/agents/MARKETING_AGENT.md`. One orchestrator (`src/lib/server/agent/orchestrator.ts`) runs every website check and records it in `marketing_workflows`.
+- Model calls only through `src/lib/server/agent/provider.ts`. No provider is registered; never add a mock model or stand-in answers, and never activate a provider without the owner's decision.
+- Stages: prepared → approved (owner only) → completed (marked done, or verified fixed). Never mark generated work completed.
+- Plan names (app only; Stripe unchanged): Marketing Report $49, Marketing Assistant $79/$756, Marketing Studio and Marketing Suite are planned tiers.

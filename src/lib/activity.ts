@@ -6,6 +6,7 @@ const LABELS: Record<string, string> = {
   "analysis.started": "Website check started",
   "analysis.completed": "Website check finished",
   "analysis.failed": "Website check couldn't finish",
+  "action_card.approved": "Action approved",
   "action_card.done": "Action marked done",
   "action_card.dismissed": "Action dismissed",
   "action_card.new": "Action reopened",

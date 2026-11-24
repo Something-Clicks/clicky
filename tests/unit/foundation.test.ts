@@ -97,8 +97,11 @@ describe("structured logging", () => {
 });
 
 describe("price catalog", () => {
-  it("holds the Stripe product names and prices", () => {
-    expect(Object.values(PLANS).map((p) => p.name)).toEqual(["Marketing Plan", "Single Site", "Business Plus", "Multi-Site"]);
+  it("holds the approved customer-facing names, the unchanged Stripe names, and the prices", () => {
+    expect(Object.values(PLANS).map((p) => p.name)).toEqual(["Marketing Report", "Marketing Assistant", "Marketing Studio", "Marketing Suite"]);
+    // Stripe was not changed: its products keep their names.
+    expect(Object.values(PLANS).map((p) => p.stripeName)).toEqual(["Marketing Plan", "Single Site", "Business Plus", "Multi-Site"]);
+    expect(Object.values(PLANS).map((p) => p.tier)).toEqual(["current", "current", "planned", "planned"]);
     expect(priceLabel("marketing_plan", "one_time")).toBe("$49 one-time");
     expect(priceLabel("single_site", "month")).toBe("$79/month");
     expect(priceLabel("single_site", "year")).toBe("$756 billed yearly");
@@ -153,9 +156,10 @@ describe("price catalog", () => {
   it("offers only plans whose promises the app keeps", () => {
     expect(PLANS.marketing_plan.available).toBe(true);
     expect(PLANS.single_site.available).toBe(true);
-    // Business Plus promises automated actions; Multi-Site promises several websites. Neither works yet.
+    // Marketing Studio and Marketing Suite are planned future tiers: never sold.
     expect(PLANS.business_plus.available).toBe(false);
     expect(PLANS.multi_site.available).toBe(false);
+    for (const p of Object.values(PLANS)) expect(p.available).toBe(p.tier === "current");
   });
 });
 

@@ -86,14 +86,14 @@ test("pricing: exact names and prices; unavailable plans can't be bought", async
   await decline(page);
   await page.goto("/pricing");
   const main = page.locator("main");
-  await expect(main.getByRole("heading", { name: "Marketing Plan" })).toBeVisible();
+  await expect(main.getByRole("heading", { name: "Marketing Report" })).toBeVisible();
   await expect(main.getByText("$49 one-time")).toBeVisible();
-  await expect(main.getByRole("heading", { name: "Single Site" })).toBeVisible();
+  await expect(main.getByRole("heading", { name: "Marketing Assistant" })).toBeVisible();
   await expect(main.getByText("$79/month", { exact: true })).toBeVisible();
   await expect(main.getByText("or $756 billed yearly")).toBeVisible();
   const soon = main.getByRole("table");
-  await expect(soon.getByRole("row", { name: /Business Plus \$179\/month \$1,716 billed yearly/ })).toBeVisible();
-  await expect(soon.getByRole("row", { name: /Multi-Site \$399\/month \$3,828 billed yearly/ })).toBeVisible();
+  await expect(soon.getByRole("row", { name: /Marketing Studio \$179\/month \$1,716 billed yearly/ })).toBeVisible();
+  await expect(soon.getByRole("row", { name: /Marketing Suite \$399\/month \$3,828 billed yearly/ })).toBeVisible();
   // Buy links exist only for Marketing Plan and Single Site.
   const hrefs = await main.locator("a[href*='plan=']").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
   expect(hrefs.sort()).toEqual([

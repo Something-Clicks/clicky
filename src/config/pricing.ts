@@ -1,7 +1,11 @@
 /**
  * THE product catalog: names, descriptions, prices and Stripe ids, in one place.
  *
- * - Prices and names match the products created in Stripe (Nov 2026).
+ * - Customer-facing names were renamed in the app (Nov 24 2026): Marketing Report, Marketing Assistant,
+ *   Marketing Studio, Marketing Suite. Stripe was NOT changed: its products still carry the old names
+ *   (`stripeName`), which Stripe shows on its hosted checkout page until the owner renames them in Stripe.
+ *   Plan ids (marketing_plan, single_site, ...) are stored in the database and Stripe metadata; they stay.
+ * - Amounts match the prices created in Stripe (Nov 2026).
  * - Stripe ids are kept per mode. LIVE ids are filled in; TEST ids are empty until
  *   test-mode products exist. A missing id for the active mode is a configuration
  *   error: checkout refuses to start and says which id is missing. Ids are never
@@ -14,8 +18,10 @@ export type StripeMode = "live" | "test";
 
 export interface Plan {
   id: PlanId;
-  /** Exact Stripe product name. */
+  /** Customer-facing name. */
   name: string;
+  /** The product's current name in Stripe (unchanged; for reconciliation only, never shown). */
+  stripeName: string;
   /** Exact Stripe product description (approved copy). */
   stripeDescription: string;
   /** Amounts in cents, per billing interval this plan offers. */
@@ -25,40 +31,50 @@ export interface Plan {
    * not offered to customers (see docs/launch/LAUNCH_CHECKLIST.md, "Product promises").
    */
   available: boolean;
+  /** "current": offered now. "planned": a future tier, shown as planned and never sold. */
+  tier: "current" | "planned";
 }
 
 export const PLANS = {
   marketing_plan: {
     id: "marketing_plan",
-    name: "Marketing Plan",
+    name: "Marketing Report",
+    stripeName: "Marketing Plan",
     stripeDescription: "See what needs work and get a clear plan for your marketing.",
     amounts: { one_time: 4900 },
     available: true,
+    tier: "current",
   },
   single_site: {
     id: "single_site",
-    name: "Single Site",
+    name: "Marketing Assistant",
+    stripeName: "Single Site",
     // The approved text was "Get marketing recommendations and ready-to-use content for your business."; "ready-to-use
     // content" is not delivered (drafts are switched off), so TEST now carries the honest text below. Check what LIVE says.
     stripeDescription: "Get clear recommendations for your website, and check it again any time to see what's fixed.",
     amounts: { month: 7900, year: 75600 },
     available: true,
+    tier: "current",
   },
   business_plus: {
     id: "business_plus",
-    name: "Business Plus",
+    name: "Marketing Studio",
+    stripeName: "Business Plus",
     stripeDescription: "Get more marketing insights, content and automated actions to grow your business.",
     amounts: { month: 17900, year: 171600 },
-    // "Automated actions" don't exist yet, and nothing else sets it apart from Single Site.
+    // "Automated actions" don't exist yet, and nothing else sets it apart from Marketing Assistant.
     available: false,
+    tier: "planned",
   },
   multi_site: {
     id: "multi_site",
-    name: "Multi-Site",
+    name: "Marketing Suite",
+    stripeName: "Multi-Site",
     stripeDescription: "Manage marketing across multiple websites or business locations.",
     amounts: { month: 39900, year: 382800 },
     // One subscription cannot cover several websites yet.
     available: false,
+    tier: "planned",
   },
 } as const satisfies Record<PlanId, Plan>;
 

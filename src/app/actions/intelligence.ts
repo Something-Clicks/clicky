@@ -5,7 +5,7 @@ import { after } from "next/server";
 
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
-import { runAnalysis } from "@/lib/server/analysis";
+import { runWebsiteReview } from "@/lib/server/agent/orchestrator";
 import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/validation";
@@ -43,7 +43,8 @@ export async function startAnalysis(_prev: FormState, _form?: FormData): Promise
   log.info("analysis.started", { organizationId: ws.organization.id, analysisId, free });
   if (free) await track("free_use_consumed", { kind: "analysis" });
   // The visitor gets an answer right away; the analysis keeps running on the server.
-  after(() => runAnalysis(supabase, analysisId, website, biz, { notifyOrg: ws.organization!.id }));
+  const orgId = ws.organization.id;
+  after(() => runWebsiteReview(supabase, { orgId, analysisId, business: { ...biz, website } }, { notifyOrg: orgId }));
   revalidatePath("/app", "layout");
   return { ok: true, message: "Checking your website. This usually takes about a minute." };
 }
@@ -57,5 +58,25 @@ export async function setCardStatus(form: FormData): Promise<void> {
   const { error } = await supabase.rpc("set_action_card_status", { p_card: id, p_status: status, p_note: null });
   if (error) log.error("action_card.status_failed", { cardId: id, error: error.message });
   else if (status === "done") await track("work_completed");
+  revalidatePath("/app", "layout");
+}
+
+const APPROVE_ERRORS: Record<string, string> = {
+  owner_only: "Only the account owner can approve.",
+  already_approved: "This is already approved.",
+  not_prepared: "This one can't be approved right now.",
+};
+
+/** The owner approves a prepared recommendation. Approval is not completion: mark it done once it's done. */
+export async function approveCard(form: FormData): Promise<void> {
+  const ws = await getWorkspace();
+  const id = String(form.get("id") ?? "");
+  if (!ws.organization || ws.organization.role !== "owner" || !/^[0-9a-f-]{36}$/i.test(id)) return;
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("approve_action_card", { p_card: id, p_note: null });
+  if (error) {
+    const hint = (error as { hint?: string }).hint ?? "";
+    if (!APPROVE_ERRORS[hint]) log.error("action_card.approve_failed", { cardId: id, error: error.message });
+  }
   revalidatePath("/app", "layout");
 }

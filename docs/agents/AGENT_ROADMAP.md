@@ -1,6 +1,6 @@
-# Agent roadmap (proposal — not built)
+# Agent roadmap
 
-**Status:** proposal only. Nothing here is implemented. Wait for the owner's approval before building any of it.
+**Status:** the foundation is built (owner-approved Nov 24 2026): see `MARKETING_AGENT.md`. The orchestrator, workflow records and Prepared / Approved / Completed stages exist; every model-dependent capability is blocked until the provider decision.
 
 ## Principle
 The customer never picks or manages an agent. They see one flow:

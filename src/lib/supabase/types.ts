@@ -144,8 +144,33 @@ export type Database = {
           verification: string | null;
           verified_at: string | null;
           verification_analysis_id: string | null;
+          // ── marketing workflow (20261126120000); stage and completion_basis are generated ──
+          origin: string;
+          stage: string;
+          completion_basis: string | null;
         },
         "organization_id" | "analysis_id" | "check_key" | "title"
+      >;
+      marketing_workflows: Table<
+        {
+          id: string;
+          organization_id: string;
+          kind: string;
+          status: string;
+          request: string | null;
+          capabilities: string[];
+          analysis_id: string | null;
+          steps: Json;
+          result: Json | null;
+          provider: string | null;
+          model: string | null;
+          usage: Json | null;
+          error: string | null;
+          started_by: string | null;
+          started_at: string;
+          completed_at: string | null;
+        },
+        "organization_id" | "kind"
       >;
       action_card_evidence: Table<
         { action_card_id: string; evidence_id: string; organization_id: string },
@@ -307,6 +332,19 @@ export type Database = {
       };
       fail_analysis: { Args: { p_analysis: string; p_reason: string }; Returns: undefined };
       set_action_card_status: { Args: { p_card: string; p_status: string; p_note: string | null }; Returns: undefined };
+      // ── marketing workflow (20261126120000) ──
+      start_marketing_workflow: {
+        Args: { p_org: string; p_kind: string; p_request: string | null; p_capabilities: string[]; p_analysis: string | null };
+        Returns: string;
+      };
+      finish_marketing_workflow: {
+        Args: {
+          p_workflow: string; p_status: string; p_steps: Json; p_result: Json | null; p_error: string | null;
+          p_provider: string | null; p_model: string | null; p_usage: Json | null;
+        };
+        Returns: undefined;
+      };
+      approve_action_card: { Args: { p_card: string; p_note: string | null }; Returns: undefined };
       // ── launch redesign (20261124120000) ──
       free_uses: { Args: { p_org: string }; Returns: Json };
       claim_preview: { Args: { p_claim: string }; Returns: Json };

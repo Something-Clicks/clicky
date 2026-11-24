@@ -5,7 +5,7 @@ import { ActionCardItem } from "@/components/intelligence";
 import { RunAnalysisButton } from "@/components/run-analysis";
 import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
-import { getEntitlements, getCards, openCards } from "@/lib/queries";
+import { completedCards, getEntitlements, getCards, openCards } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Action cards" };
 export const maxDuration = 120;
@@ -20,7 +20,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const ws = await requireOrganization();
   const { show = "open", impact } = await searchParams;
   const [all, ent] = await Promise.all([getCards(ws.organization.id), getEntitlements(ws.organization.id)]);
-  let cards = show === "done" ? all.filter((c) => c.status === "done") : show === "dismissed" ? all.filter((c) => c.status === "dismissed") : openCards(all);
+  let cards = show === "done" ? completedCards(all) : show === "dismissed" ? all.filter((c) => c.status === "dismissed") : openCards(all);
   if (impact && ["high", "medium", "low"].includes(impact)) cards = cards.filter((c) => c.impact_priority === impact);
 
   const href = (s: string, i?: string) => `/app/actions?show=${s}${i ? `&impact=${i}` : ""}`;

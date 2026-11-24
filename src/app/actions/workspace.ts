@@ -8,7 +8,7 @@ import { FEATURES } from "@/config/features";
 import { getWorkspace, requireUser } from "@/lib/auth";
 import { clearStartFlow, getStartFlow } from "@/lib/start-flow";
 import { log } from "@/lib/log";
-import { runAnalysis } from "@/lib/server/analysis";
+import { runWebsiteReview } from "@/lib/server/agent/orchestrator";
 import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -90,7 +90,7 @@ export async function saveBusinessSetup(_prev: FormState, form: FormData): Promi
       await track("free_use_consumed", { kind: "analysis" });
       const website = parsed.data.website;
       const biz = { businessName: parsed.data.businessName, serviceArea: null, primaryGoal: null };
-      after(() => runAnalysis(supabase, analysisId, website, biz, { notifyOrg: orgId }));
+      after(() => runWebsiteReview(supabase, { orgId, analysisId, business: { ...biz, website } }, { notifyOrg: orgId }));
     } else if (startError) {
       log.warn("onboarding.first_analysis_not_started", { organizationId: orgId, hint: (startError as { hint?: string }).hint });
     }

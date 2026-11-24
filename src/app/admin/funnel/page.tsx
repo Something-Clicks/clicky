@@ -30,7 +30,7 @@ const STEPS: [string, string][] = [
   ["free_use_consumed", "Free uses consumed"],
   ["upgrade_viewed", "Upgrade viewed"],
   ["checkout_started", "Checkout started"],
-  ["purchase_completed", "Marketing Plan purchases"],
+  ["purchase_completed", "Marketing Report purchases"],
   ["subscription_completed", "Subscriptions started"],
   ["draft_created", "Drafts created"],
   ["draft_approved", "Drafts approved"],

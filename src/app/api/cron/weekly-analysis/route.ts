@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { log } from "@/lib/log";
-import { runAnalysis } from "@/lib/server/analysis";
+import { runWebsiteReview } from "@/lib/server/agent/orchestrator";
 import { createWorkerClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -47,11 +47,14 @@ export async function GET(req: NextRequest) {
       results.push({ organizationId: org.organization_id, started: false });
       continue;
     }
-    await runAnalysis(
+    await runWebsiteReview(
       db,
-      analysisId,
-      org.website,
-      { businessName: org.business_name, serviceArea: org.service_area, primaryGoal: org.primary_goal },
+      {
+        orgId: org.organization_id,
+        analysisId,
+        business: { businessName: org.business_name, serviceArea: org.service_area, primaryGoal: org.primary_goal, website: org.website },
+        request: "Weekly re-check",
+      },
       { notifyOrg: org.organization_id },
     );
     results.push({ organizationId: org.organization_id, started: true });

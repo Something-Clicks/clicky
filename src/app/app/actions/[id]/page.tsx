@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { setCardStatus } from "@/app/actions/intelligence";
+import { approveCard, setCardStatus } from "@/app/actions/intelligence";
 import { ApprovalActions } from "@/components/approval-actions";
 import { DRAFT_LABEL, DraftPreview, DraftUseButtons, draftAsText, draftFields } from "@/components/draft";
-import { EvidenceLine, StatusPill, VerificationPill } from "@/components/intelligence";
+import { EvidenceLine, OriginPill, StagePill, VerificationPill } from "@/components/intelligence";
 import { PrepareDraftForm } from "@/components/prepare-draft";
 import { AutoRefresh } from "@/components/run-analysis";
 import { FEATURES } from "@/config/features";
+import { PLANS } from "@/config/pricing";
 import { requireOrganization } from "@/lib/auth";
 import { getCard, getEntitlements, getFreeUses, getSpeedComparison } from "@/lib/queries";
 import Link from "next/link";
@@ -84,14 +85,18 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         </div>
         <div className="card">
           <div className="row">
-            <StatusPill status={card.status} />
+            <StagePill card={card} />
+            <OriginPill origin={card.origin} />
             <VerificationPill verification={card.verification} />
             {FEATURES.drafts ? (card.approval_required ? <span className="pill yellow">Needs your approval</span> : <span className="pill">No approval needed</span>) : null}
           </div>
           {!draftable ? (
             <>
               <h3 style={{ marginTop: 12 }}>Do this on your website</h3>
-              <p className="muted">Make this change yourself, or ask your web designer. Mark it done when it&apos;s fixed, then check your website again to see it confirmed.</p>
+              <p className="muted">
+                {card.status === "new" && isOwner ? "Approve it if you want to do it. " : null}
+                Make this change yourself, or ask your web designer. Mark it done when it&apos;s fixed, then check your website again to see it confirmed.
+              </p>
             </>
           ) : running ? (
             <>
@@ -127,7 +132,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           ) : !canDraft ? (
             <>
               <h3 style={{ marginTop: 12 }}>We can draft this for you</h3>
-              <p className="muted">Drafts come with Single Site. You can still follow the steps yourself.</p>
+              <p className="muted">Drafts come with {PLANS.single_site.name}. You can still follow the steps yourself.</p>
               <Link className="btn light" href="/app/upgrade">
                 See plans
               </Link>
@@ -178,7 +183,15 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
               <StatusButton id={card.id} status="new" label="Reopen" variant="outline" />
             ) : (
               <>
-                <StatusButton id={card.id} status="done" label="Mark done" />
+                {card.status === "new" && isOwner ? (
+                  <form data-clarity-mask="true" action={approveCard}>
+                    <input type="hidden" name="id" value={card.id} />
+                    <button className="btn" type="submit">
+                      Approve
+                    </button>
+                  </form>
+                ) : null}
+                <StatusButton id={card.id} status="done" label="Mark done" variant={card.status === "new" && isOwner ? "light" : undefined} />
                 <StatusButton id={card.id} status="dismissed" label="Dismiss" variant="outline" />
               </>
             )}

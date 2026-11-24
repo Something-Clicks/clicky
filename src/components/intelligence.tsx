@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { firstEvidence, impactLabel, type CardRow } from "@/lib/queries";
+import { cardStage, STAGE_LABEL } from "@/lib/stages";
 
 export const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   new: { label: "New", cls: "pill" },
@@ -29,6 +30,17 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={s.cls}>{s.label}</span>;
 }
 
+/** Where the work is: ready for your review, approved, done, or dismissed. */
+export function StagePill({ card }: { card: { status: string; verification: string | null } }) {
+  const s = STAGE_LABEL[cardStage(card)];
+  return <span className={s.cls}>{s.label}</span>;
+}
+
+/** Where a card came from. Every card today comes from a fixed website check, never from a model. */
+export function OriginPill({ origin }: { origin: string | null | undefined }) {
+  return origin === "model" ? <span className="pill">Prepared for you</span> : <span className="pill">From a website check</span>;
+}
+
 /** One Action Card in the reference's .card.action style. */
 export function ActionCardItem({ card, cta = "See why it matters", primary = false }: { card: CardRow; cta?: string; primary?: boolean }) {
   const ev = firstEvidence(card);
@@ -39,7 +51,7 @@ export function ActionCardItem({ card, cta = "See why it matters", primary = fal
           {impactLabel(card.impact_priority)} · {card.confidence.toUpperCase()} CONFIDENCE
         </div>
         <div className="row" style={{ gap: 6 }}>
-          {card.status !== "new" ? <StatusPill status={card.status} /> : null}
+          {cardStage(card) !== "prepared" ? <StagePill card={card} /> : null}
           <VerificationPill verification={card.verification} />
         </div>
       </div>

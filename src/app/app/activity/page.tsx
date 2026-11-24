@@ -14,6 +14,8 @@ export default async function ActivityPage() {
     .from("activity_log")
     .select("id, action, metadata, created_at")
     .eq("organization_id", organization.id)
+    // Internal orchestrator records (workflow.*) stay out of the customer's history.
+    .not("action", "like", "workflow.%")
     .order("created_at", { ascending: false })
     .limit(100);
   if (error) log.error("activity.query_failed", { organizationId: organization.id, error: error.message });
