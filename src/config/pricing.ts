@@ -67,7 +67,7 @@ interface StripeIds {
   prices: Partial<Record<Interval, string>>;
 }
 
-/** Stripe product and price ids per mode. Add TEST ids here when the test products exist. */
+/** Stripe product and price ids per mode. */
 export const STRIPE_CATALOG: Record<StripeMode, Partial<Record<PlanId, StripeIds>>> = {
   live: {
     marketing_plan: { product: "prod_Vg9MOCNzSD7QlV", prices: { one_time: "price_1Uen3OFnFMCbDhHEw36S1zXr" } },
@@ -84,7 +84,22 @@ export const STRIPE_CATALOG: Record<StripeMode, Partial<Record<PlanId, StripeIds
       prices: { month: "price_1Uen8GFnFMCbDhHE4Bx85tPA", year: "price_1Uen8ZFnFMCbDhHEYeMMWK7K" },
     },
   },
-  test: {},
+  // Stripe TEST mode (created Nov 24 2026 with the same names, descriptions, amounts and intervals).
+  test: {
+    marketing_plan: { product: "prod_VgWCuvuzJqbNPr", prices: { one_time: "price_1Uf9AQFnFMCbDhHEIoXcE8yg" } },
+    single_site: {
+      product: "prod_VgWCIEn78ciboM",
+      prices: { month: "price_1Uf9AQFnFMCbDhHEdFmjNCCM", year: "price_1Uf9ARFnFMCbDhHEnfWuOh5u" },
+    },
+    business_plus: {
+      product: "prod_VgWCAxqTXhlgg8",
+      prices: { month: "price_1Uf9ARFnFMCbDhHEf32O0EzC", year: "price_1Uf9ARFnFMCbDhHEzY6QKJXT" },
+    },
+    multi_site: {
+      product: "prod_VgWCrguEmvyU4Y",
+      prices: { month: "price_1Uf9ASFnFMCbDhHEI4dkmgWg", year: "price_1Uf9ASFnFMCbDhHEMPdzx4qH" },
+    },
+  },
 };
 
 export const isPlanId = (v: unknown): v is PlanId => typeof v === "string" && Object.hasOwn(PLANS, v);

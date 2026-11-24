@@ -46,7 +46,7 @@ test.describe("every public page", () => {
 test("homepage: headline from the config slot, one primary action, tappable targets", async ({ page }) => {
   await decline(page);
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Enter your website");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Know exactly what to fix next");
   const main = page.locator("main");
   await expect(main.getByRole("button")).toHaveCount(1);
   await expect(main.getByRole("button", { name: "Check my website" })).toBeVisible();

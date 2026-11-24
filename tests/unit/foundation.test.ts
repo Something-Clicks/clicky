@@ -122,9 +122,32 @@ describe("price catalog", () => {
   });
 
   it("never borrows ids from the other mode", () => {
-    expect(resolvePrice("single_site", "month", "test")).toEqual({ ok: false, missing: "TEST price id for Single Site (month)" });
+    // A live id is unknown in test mode, and a test id is unknown in live mode.
     expect(planForPrice("price_1Uen6xFnFMCbDhHEm8XTUgNR", "test")).toBeNull();
+    expect(planForPrice("price_1Uf9AQFnFMCbDhHEdFmjNCCM", "live")).toBeNull();
+    const live = resolvePrice("single_site", "month", "live");
+    const test = resolvePrice("single_site", "month", "test");
+    expect(live.ok && test.ok && live.priceId !== test.priceId && live.productId !== test.productId).toBe(true);
     expect(resolvePrice("marketing_plan", "month", "live")).toEqual({ ok: false, missing: "marketing_plan has no month price" });
+  });
+
+  it("has a TEST id for every live price, with the same plan and interval", () => {
+    for (const plan of Object.keys(PLANS) as (keyof typeof PLANS)[]) {
+      for (const interval of Object.keys(PLANS[plan].amounts) as ("one_time" | "month" | "year")[]) {
+        const l = resolvePrice(plan, interval, "live");
+        const t = resolvePrice(plan, interval, "test");
+        expect(l.ok && t.ok, `${plan} ${interval}`).toBe(true);
+        if (l.ok && t.ok) {
+          expect(t.amount).toBe(l.amount);
+          expect(planForPrice(t.priceId, "test")).toEqual({ plan, interval });
+          expect(planForPrice(l.priceId, "live")).toEqual({ plan, interval });
+        }
+      }
+    }
+  });
+
+  it("reports which id is missing when a mode has none", () => {
+    expect(resolvePrice("single_site", "week" as never, "test")).toEqual({ ok: false, missing: "single_site has no week price" });
   });
 
   it("offers only plans whose promises the app keeps", () => {
