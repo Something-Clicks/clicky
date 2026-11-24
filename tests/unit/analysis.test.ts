@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { runAnalysis } from "@/lib/server/analysis";
+import { friendlyReason, runAnalysis } from "@/lib/server/analysis";
 import { runChecks } from "@/lib/server/checks";
 import type { FetchedPage } from "@/lib/server/safe-fetch";
 import { FetchBlockedError } from "@/lib/server/safe-fetch";
@@ -107,13 +107,13 @@ describe("runAnalysis", () => {
     const rpc = vi.fn().mockResolvedValue({ error: null });
     await runAnalysis({ rpc } as never, "a2", "https://sunrise.example/", biz, {
       fetchPage: async () => {
-        throw new FetchBlockedError("That website points to a private address.");
+        throw new FetchBlockedError("That website points to a private address.", "not_public");
       },
       pageSpeed: async () => psiMissing,
     });
     expect(rpc).toHaveBeenCalledWith("fail_analysis", {
       p_analysis: "a2",
-      p_reason: "We couldn't analyze sunrise.example: That website points to a private address.",
+      p_reason: "sunrise.example isn't a public website we can check. Use the address people type to visit your site, like yourbusiness.com.",
     });
   });
 
@@ -124,6 +124,35 @@ describe("runAnalysis", () => {
       pageSpeed: async () => psiMissing,
     });
     expect(rpc.mock.calls[0]![0]).toBe("fail_analysis");
-    expect(rpc.mock.calls[0]![1].p_reason).toMatch(/homepage returned an error \(500\)/);
+    expect(rpc.mock.calls[0]![1].p_reason).toBe("sunrise.example is having trouble answering right now. Try again in a few minutes.");
+  });
+});
+
+describe("friendlyReason: calm words and a way forward", () => {
+  const w = "https://www.sunrise.example/";
+  const JARGON = /\b(403|404|429|500|status|error code|port|redirect|private address|dns|ssl|tls|exception|stack)\b/i;
+  const cases: [string, unknown, RegExp][] = [
+    ["a bot-blocked site", new FetchBlockedError("x", "status", 403), /didn't let us in.*try again in a few minutes.*ask whoever runs your website/i],
+    ["rate limited", new FetchBlockedError("x", "status", 429), /didn't let us in/i],
+    ["not found", new FetchBlockedError("x", "status", 404), /couldn't find a page.*check the address/i],
+    ["server trouble", new FetchBlockedError("x", "status", 503), /having trouble answering.*try again in a few minutes/i],
+    ["not a website", new FetchBlockedError("x", "invalid_address"), /doesn't look like a website address.*yourbusiness\.com/i],
+    ["internal address", new FetchBlockedError("x", "not_public"), /isn't a public website/i],
+    ["redirect loop", new FetchBlockedError("x", "redirects"), /in circles.*main address/i],
+    ["a file, not a page", new FetchBlockedError("x", "not_a_page"), /file, not a web page.*homepage address/i],
+    ["too big", new FetchBlockedError("x", "too_large"), /too big for us to read/i],
+    ["timeout or no connection", new Error("timeout"), /couldn't reach sunrise\.example.*online.*try again/i],
+  ];
+  for (const [name, error, expected] of cases) {
+    it(`${name}`, () => {
+      const m = friendlyReason(error, w);
+      expect(m).toMatch(expected);
+      expect(m).not.toMatch(JARGON);
+      expect(m).not.toMatch(/\bAI\b/);
+      expect(m.length).toBeLessThan(220);
+    });
+  }
+  it("never leaks the internal message", () => {
+    expect(friendlyReason(new FetchBlockedError("Only standard web ports are allowed.", "invalid_address"), w)).not.toMatch(/ports/);
   });
 });

@@ -75,8 +75,15 @@ export function isPublicAddress(ip: string): boolean {
   return false;
 }
 
+/** Why a fetch was refused. Drives the plain-words message the customer sees (see friendlyReason). */
+export type FetchBlockKind = "invalid_address" | "not_public" | "redirects" | "not_a_page" | "too_large" | "status" | "other";
+
 export class FetchBlockedError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly kind: FetchBlockKind = "other",
+    readonly status?: number,
+  ) {
     super(message);
     this.name = "FetchBlockedError";
   }
@@ -115,14 +122,14 @@ export function validateUrl(raw: string, allowedPorts = ["", "80", "443"]): URL 
   try {
     url = new URL(raw);
   } catch {
-    throw new FetchBlockedError("Not a valid web address.");
+    throw new FetchBlockedError("Not a valid web address.", "invalid_address");
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") throw new FetchBlockedError("Only web addresses can be fetched.");
-  if (url.username || url.password) throw new FetchBlockedError("Web addresses with passwords are not allowed.");
-  if (!allowedPorts.includes(url.port)) throw new FetchBlockedError("Only standard web ports are allowed.");
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new FetchBlockedError("Only web addresses can be fetched.", "invalid_address");
+  if (url.username || url.password) throw new FetchBlockedError("Web addresses with passwords are not allowed.", "invalid_address");
+  if (!allowedPorts.includes(url.port)) throw new FetchBlockedError("Only standard web ports are allowed.", "invalid_address");
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  if (BLOCKED_HOST.test(host)) throw new FetchBlockedError("That address is not public.");
-  if (net.isIP(host) && !isPublicAddress(host)) throw new FetchBlockedError("That address is not public.");
+  if (BLOCKED_HOST.test(host)) throw new FetchBlockedError("That address is not public.", "not_public");
+  if (net.isIP(host) && !isPublicAddress(host)) throw new FetchBlockedError("That address is not public.", "not_public");
   return url;
 }
 
@@ -147,7 +154,7 @@ export function createSafeFetcher(options: SafeFetchOptions = {}) {
     resolve(hostname).then(
       (list) => {
         if (list.length === 0 || !list.every((a) => isAllowedAddress(a.address))) {
-          return callback(new FetchBlockedError("That website points to a private address.") as NodeJS.ErrnoException, "", 0);
+          return callback(new FetchBlockedError("That website points to a private address.", "not_public") as NodeJS.ErrnoException, "", 0);
         }
         if (opts?.all) return callback(null, list);
         callback(null, list[0]!.address, list[0]!.family);
@@ -239,7 +246,7 @@ export function createSafeFetcher(options: SafeFetchOptions = {}) {
 
       if (status >= 300 && status < 400 && headers.location) {
         res.destroy();
-        if (hop === maxRedirects) throw new FetchBlockedError("Too many redirects.");
+        if (hop === maxRedirects) throw new FetchBlockedError("Too many redirects.", "redirects");
         current = validateUrl(new URL(headers.location, current).toString(), allowedPorts);
         redirects.push(current.toString());
         continue;
@@ -248,15 +255,15 @@ export function createSafeFetcher(options: SafeFetchOptions = {}) {
       const contentType = String(headers["content-type"] ?? "");
       if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) {
         res.destroy();
-        throw new FetchBlockedError("That address did not return a web page.");
+        throw new FetchBlockedError("That address did not return a web page.", "not_a_page");
       }
       if (Number(headers["content-length"] ?? "0") > maxBytes * 4) {
         res.destroy();
-        throw new FetchBlockedError("That page is too large to analyze.");
+        throw new FetchBlockedError("That page is too large to analyze.", "too_large");
       }
       const { body, truncated } = await readBody(res, deadline);
       return { url: current.toString(), status, contentType, body, truncated, redirects };
     }
-    throw new FetchBlockedError("Too many redirects.");
+    throw new FetchBlockedError("Too many redirects.", "redirects");
   };
 }
