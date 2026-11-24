@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 
+import { NOINDEX } from "@/config/seo";
+
 import { safeNextPath } from "@/lib/redirect";
 
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Log in" };
+// Sign-in pages are public but not search results.
+export const metadata: Metadata = { title: "Log in", robots: NOINDEX, alternates: { canonical: "/login" } };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
   const params = await searchParams;

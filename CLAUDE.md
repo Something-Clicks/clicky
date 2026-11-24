@@ -24,6 +24,7 @@ Marketing help for small businesses: check the website, show what's worth fixing
 - Free uses: three per person/business (`app_config.free_run_limit`), enforced in `start_analysis` / `start_agent_run`. First use can be anonymous; Save this + `claim_preview` moves it into an account (works across browsers; same verified email + single-use token).
 - Prices and Stripe ids: only in `src/config/pricing.ts` (per mode; never borrow ids across modes). Paid access only from the verified webhook.
 - Homepage headline: only in `src/config/site.ts`.
+- SEO: titles, descriptions, canonical URLs and social cards only in `src/config/seo.ts` (production domain `https://somethingclicks.com`). `/sitemap.xml` lists only the pages in `PAGE_SEO`; auth, results, draft legal pages and signed-in areas are noindex. No "AI" in metadata until AI features are live and the Privacy Policy says so (owner decision, Nov 24 2026).
 - Analytics (GA4, Clarity) load only after consent (`src/components/consent.tsx`). Supabase `funnel_events` holds counts with no personal data.
 
 ## Product and copy rules

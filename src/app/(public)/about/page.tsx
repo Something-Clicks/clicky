@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+
+import { pageMetadata } from "@/config/seo";
 import Image from "next/image";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "About" };
+export const metadata: Metadata = pageMetadata("/about");
 
 export default function AboutPage() {
   return (

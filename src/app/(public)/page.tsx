@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import Image from "next/image";
+
+import { ORGANIZATION_JSON_LD, pageMetadata } from "@/config/seo";
 
 import { TrackEvent } from "@/components/track-event";
 import { StartForm } from "@/components/start-form";
@@ -6,6 +9,7 @@ import { HOME_HEADLINE, HOME_SUBHEAD } from "@/config/site";
 import { formTicket, isPreviewEnabled, track } from "@/lib/server/site";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = pageMetadata("/");
 export const maxDuration = 120;
 
 /**
@@ -17,6 +21,7 @@ export default async function HomePage() {
   return (
     <>
       <TrackEvent name="landing_visit" />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_JSON_LD) }} />
       <section className="home-hero" aria-labelledby="home-title">
         <Image className="art" src="/brand/clicky-3d.png" alt="Clicky, the Something Clicks character" width={720} height={502} priority />
         <h1 id="home-title">{HOME_HEADLINE}</h1>

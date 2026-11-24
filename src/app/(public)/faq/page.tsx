@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/config/seo";
+
 import { PLANS, priceLabel } from "@/config/pricing";
 
-export const metadata: Metadata = { title: "FAQ" };
+export const metadata: Metadata = pageMetadata("/faq");
 
 const FAQS: { q: string; a: string }[] = [
   {

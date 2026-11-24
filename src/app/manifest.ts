@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Something Clicks",
     short_name: "Something Clicks",
-    description: "Marketing help that gets work done.",
+    description: "Website marketing checks for small businesses: what to fix, why it matters, and what to do next.",
     start_url: "/app",
     display: "standalone",
     background_color: "#fff9ef",

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 
+import { NOINDEX } from "@/config/seo";
+
 import { getStartFlow } from "@/lib/start-flow";
 
 import { SignupForm } from "./signup-form";
 
-export const metadata: Metadata = { title: "Sign up" };
+// Sign-in pages are public but not search results.
+export const metadata: Metadata = { title: "Sign up", robots: NOINDEX, alternates: { canonical: "/signup" } };
 
 export default async function SignupPage() {
   const start = await getStartFlow();

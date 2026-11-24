@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+
+import { pageMetadata } from "@/config/seo";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "How it works" };
+export const metadata: Metadata = pageMetadata("/how-it-works");
 
 export default function HowItWorksPage() {
   return (

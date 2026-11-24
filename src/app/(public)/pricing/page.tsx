@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+
+import { pageMetadata } from "@/config/seo";
 import Link from "next/link";
 
 import { TrackEvent } from "@/components/track-event";
 import { Plans } from "@/components/plans";
 
-export const metadata: Metadata = { title: "Pricing" };
+export const metadata: Metadata = pageMetadata("/pricing");
 
 export default function PricingPage() {
   return (
