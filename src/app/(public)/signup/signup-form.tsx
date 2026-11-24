@@ -11,14 +11,14 @@ export function SignupForm({ email = "" }: { email?: string }) {
   const [state, action] = useActionState(signUp, {} as FormState);
   if (state.ok) {
     return (
-      <div className="card" style={{ maxWidth: 480 }}>
+      <div className="card">
         <FormMessage state={state} />
-        <p className="small muted">Open the link on this device to continue setting up your business.</p>
+        <p className="small muted">Open the link to continue. It works on any device.</p>
       </div>
     );
   }
   return (
-    <form className="card" style={{ maxWidth: 480 }} action={action} noValidate>
+    <form className="card" action={action} noValidate data-clarity-mask="true">
       <FormMessage state={state} />
       <Field label="Name" name="fullName" placeholder="Your name" autoComplete="name" state={state} required />
       <Field label="Email" name="email" type="email" placeholder="you@example.com" autoComplete="email" defaultValue={email} state={state} required />

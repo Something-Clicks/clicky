@@ -6,20 +6,23 @@ import { after } from "next/server";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { runAnalysis } from "@/lib/server/analysis";
+import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/validation";
 
 const START_ERRORS: Record<string, string> = {
   already_running: "An analysis is already running. It usually takes about a minute.",
-  daily_limit: "You've run 10 analyses today. You can run another tomorrow.",
+  daily_limit: "You've checked your website 10 times today. You can check again tomorrow.",
   no_website: "Add your website first, then run the analysis.",
-  needs_plan: "Your plan doesn't include another analysis. See Billing to choose a plan.",
+  needs_plan: "You've used your free uses. Choose a plan to keep going.",
 };
 
 export async function startAnalysis(_prev: FormState, _form?: FormData): Promise<FormState> {
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Finish your business setup first." };
   const supabase = await createClient();
+  const { data: ent } = await supabase.rpc("current_entitlements", { p_org: ws.organization.id });
+  const free = !(ent as { analyses?: boolean } | null)?.analyses;
   const { data: analysisId, error } = await supabase.rpc("start_analysis", { p_org: ws.organization.id });
   if (error || !analysisId) {
     const known = START_ERRORS[(error as { hint?: string } | null)?.hint ?? ""];
@@ -37,11 +40,12 @@ export async function startAnalysis(_prev: FormState, _form?: FormData): Promise
     serviceArea: ws.business.serviceArea,
     primaryGoal: ws.business.primaryGoal,
   };
-  log.info("analysis.started", { organizationId: ws.organization.id, analysisId });
+  log.info("analysis.started", { organizationId: ws.organization.id, analysisId, free });
+  if (free) await track("free_use_consumed", { kind: "analysis" });
   // The visitor gets an answer right away; the analysis keeps running on the server.
   after(() => runAnalysis(supabase, analysisId, website, biz, { notifyOrg: ws.organization!.id }));
   revalidatePath("/app", "layout");
-  return { ok: true, message: "Analysis started. This usually takes about a minute." };
+  return { ok: true, message: "Checking your website. This usually takes about a minute." };
 }
 
 export async function setCardStatus(form: FormData): Promise<void> {
@@ -52,5 +56,6 @@ export async function setCardStatus(form: FormData): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_action_card_status", { p_card: id, p_status: status, p_note: null });
   if (error) log.error("action_card.status_failed", { cardId: id, error: error.message });
+  else if (status === "done") await track("work_completed");
   revalidatePath("/app", "layout");
 }

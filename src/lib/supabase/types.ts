@@ -45,6 +45,7 @@ export type Database = {
           service_area: string | null;
           updated_at: string;
           website: string | null;
+          zip_code: string | null;
         },
         "business_name" | "organization_id"
       >;
@@ -94,6 +95,7 @@ export type Database = {
           wording: string | null;
           failure_reason: string | null;
           triggered_by: string | null;
+          free_use: boolean;
           started_at: string;
           completed_at: string | null;
           created_at: string;
@@ -172,6 +174,7 @@ export type Database = {
           action_card_id: string;
           draft_type: string;
           status: string;
+          free_use: boolean;
           permission: string;
           instructions: string | null;
           model: string | null;
@@ -241,6 +244,8 @@ export type Database = {
           status: string;
           current_period_end: string | null;
           cancel_at_period_end: boolean;
+          billing_interval: string | null;
+          stripe_price_id: string | null;
           updated_at: string;
           created_at: string;
         },
@@ -290,6 +295,8 @@ export type Database = {
         Args: {
           p_key: string; p_org: string; p_customer: string | null; p_subscription: string; p_plan: string;
           p_status: string; p_period_end: string | null; p_cancel_at_period_end: boolean;
+          /** Launch migration: the 10-argument version also stores interval and price. */
+          p_interval?: "month" | "year"; p_price?: string;
         };
         Returns: undefined;
       };
@@ -300,6 +307,29 @@ export type Database = {
       };
       fail_analysis: { Args: { p_analysis: string; p_reason: string }; Returns: undefined };
       set_action_card_status: { Args: { p_card: string; p_status: string; p_note: string | null }; Returns: undefined };
+      // ── launch redesign (20261124120000) ──
+      free_uses: { Args: { p_org: string }; Returns: Json };
+      claim_preview: { Args: { p_claim: string }; Returns: Json };
+      admin_funnel: { Args: { p_days: number }; Returns: Json };
+      site_preview_start: {
+        Args: { p_key: string; p_website: string; p_domain: string; p_zip: string; p_ip_hash: string; p_view: string };
+        Returns: Json;
+      };
+      site_preview_complete: {
+        Args: { p_key: string; p_id: string; p_evidence: Json; p_cards: Json; p_coverage: Json; p_summary: string; p_wording: string };
+        Returns: undefined;
+      };
+      site_preview_fail: { Args: { p_key: string; p_id: string; p_reason: string }; Returns: undefined };
+      site_preview_get: { Args: { p_key: string; p_id: string; p_view: string }; Returns: Json };
+      site_preview_save: { Args: { p_key: string; p_id: string; p_view: string; p_email: string; p_claim: string }; Returns: undefined };
+      site_submit_feedback: {
+        Args: {
+          p_key: string; p_kind: string; p_rating: string | null; p_reason: string | null; p_preview: string | null;
+          p_org: string | null; p_ip_hash: string; p_followup_email: string | null;
+        };
+        Returns: undefined;
+      };
+      site_track: { Args: { p_key: string; p_event: string; p_props: Json }; Returns: undefined };
 
     };
     Enums: { [_ in never]: never };

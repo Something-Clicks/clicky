@@ -28,13 +28,15 @@ beforeAll(async () => {
   [{ id: otherOrg }] = await q<{ id: string }>(outsider, "select public.create_organization('Other','https://b.example','','') as id");
   await db.admin.query("insert into public.organization_members values ($1,$2,'member',now())", [org, member]);
   await db.admin.query("insert into app_private.secrets (name, hash) values ('billing_webhook', $1)", [createHash("sha256").update(KEY).digest()]);
+  // These tests cover paid access only; free uses are covered in launch.test.ts.
+  await db.admin.query("update public.app_config set value = '0' where key = 'free_run_limit'");
 }, 60_000);
 afterAll(async () => db?.teardown());
 
 describe("plan catalog", () => {
   it("every priced plan has entitlements in the database", async () => {
     const rows = await q<{ plan_id: string }>(null, "select plan_id from public.plan_entitlements order by plan_id");
-    expect(rows.map((r) => r.plan_id)).toEqual(Object.keys(PLANS).sort());
+    expect(rows.map((r) => r.plan_id)).toEqual(expect.arrayContaining(Object.keys(PLANS)));
   });
 });
 

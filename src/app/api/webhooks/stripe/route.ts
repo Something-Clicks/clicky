@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
       const { error } = await db.rpc("billing_upsert_subscription", {
         p_key: key, p_org: s.org, p_customer: s.customer, p_subscription: s.subscription, p_plan: s.plan,
         p_status: s.status, p_period_end: s.periodEnd, p_cancel_at_period_end: s.cancelAtPeriodEnd,
+        p_interval: s.interval, p_price: s.priceId,
       });
       if (error) throw new Error(error.message);
     },

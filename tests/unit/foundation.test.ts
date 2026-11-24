@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatPrice, PLANS } from "@/config/pricing";
+import { PLANS, planForPrice, priceLabel, resolvePrice } from "@/config/pricing";
 import { activityDetail, activityLabel } from "@/lib/activity";
 import { formatLine, redact } from "@/lib/log";
 import { isProtectedPath, safeNextPath } from "@/lib/redirect";
@@ -97,13 +97,42 @@ describe("structured logging", () => {
 });
 
 describe("price catalog", () => {
-  it("holds the approved working prices", () => {
-    expect(formatPrice(PLANS.diagnostic_audit)).toBe("$39");
-    expect(formatPrice(PLANS.starter_ai)).toBe("$49");
-    expect(formatPrice(PLANS.growth_ai)).toBe("$149");
-    expect(formatPrice(PLANS.scale_automation)).toBe("$399");
-    expect(PLANS.diagnostic_audit.interval).toBe("one_time");
-    expect(Object.values(PLANS).filter((p) => p.interval === "month")).toHaveLength(3);
+  it("holds the Stripe product names and prices", () => {
+    expect(Object.values(PLANS).map((p) => p.name)).toEqual(["Marketing Plan", "Single Site", "Business Plus", "Multi-Site"]);
+    expect(priceLabel("marketing_plan", "one_time")).toBe("$49 one-time");
+    expect(priceLabel("single_site", "month")).toBe("$79/month");
+    expect(priceLabel("single_site", "year")).toBe("$756 billed yearly");
+    expect(priceLabel("business_plus", "month")).toBe("$179/month");
+    expect(priceLabel("business_plus", "year")).toBe("$1,716 billed yearly");
+    expect(priceLabel("multi_site", "month")).toBe("$399/month");
+    expect(priceLabel("multi_site", "year")).toBe("$3,828 billed yearly");
+    expect(priceLabel("marketing_plan", "year")).toBe("");
+  });
+
+  it("maps the exact LIVE ids", () => {
+    const live = (plan: Parameters<typeof resolvePrice>[0], i: Parameters<typeof resolvePrice>[1]) => resolvePrice(plan, i, "live");
+    expect(live("marketing_plan", "one_time")).toEqual({ ok: true, priceId: "price_1Uen3OFnFMCbDhHEw36S1zXr", productId: "prod_Vg9MOCNzSD7QlV", amount: 4900 });
+    expect(live("single_site", "month")).toMatchObject({ priceId: "price_1Uen6xFnFMCbDhHEm8XTUgNR", productId: "prod_Vg9PQyz53iF3nS", amount: 7900 });
+    expect(live("single_site", "year")).toMatchObject({ priceId: "price_1Uen6xFnFMCbDhHEVERLfWyA", amount: 75600 });
+    expect(live("business_plus", "month")).toMatchObject({ priceId: "price_1Uen7RFnFMCbDhHEjuPCIKjK", productId: "prod_Vg9QSKyOjmg9oL", amount: 17900 });
+    expect(live("business_plus", "year")).toMatchObject({ priceId: "price_1Uen7uFnFMCbDhHE7l1ZLhw7", amount: 171600 });
+    expect(live("multi_site", "month")).toMatchObject({ priceId: "price_1Uen8GFnFMCbDhHE4Bx85tPA", productId: "prod_Vg9Rsw79aaZCgs", amount: 39900 });
+    expect(live("multi_site", "year")).toMatchObject({ priceId: "price_1Uen8ZFnFMCbDhHEYeMMWK7K", amount: 382800 });
+    expect(planForPrice("price_1Uen7uFnFMCbDhHE7l1ZLhw7", "live")).toEqual({ plan: "business_plus", interval: "year" });
+  });
+
+  it("never borrows ids from the other mode", () => {
+    expect(resolvePrice("single_site", "month", "test")).toEqual({ ok: false, missing: "TEST price id for Single Site (month)" });
+    expect(planForPrice("price_1Uen6xFnFMCbDhHEm8XTUgNR", "test")).toBeNull();
+    expect(resolvePrice("marketing_plan", "month", "live")).toEqual({ ok: false, missing: "marketing_plan has no month price" });
+  });
+
+  it("offers only plans whose promises the app keeps", () => {
+    expect(PLANS.marketing_plan.available).toBe(true);
+    expect(PLANS.single_site.available).toBe(true);
+    // Business Plus promises automated actions; Multi-Site promises several websites. Neither works yet.
+    expect(PLANS.business_plus.available).toBe(false);
+    expect(PLANS.multi_site.available).toBe(false);
   });
 });
 

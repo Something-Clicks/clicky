@@ -30,7 +30,8 @@ function connectionConfig(database: string): pg.ClientConfig {
 export interface TestDb {
   /** Superuser connection (setup only; bypasses RLS). */
   admin: pg.Client;
-  createUser(fullName?: string): Promise<string>;
+  /** Creates a user with a verified email (pass confirmed: false for an unverified one). */
+  createUser(fullName?: string, opts?: { email?: string; confirmed?: boolean }): Promise<string>;
   /** Gives an organization an active subscription (as a verified webhook would). */
   grantPlan(orgId: string, plan?: string): Promise<void>;
   /** Runs `fn` in a transaction as the given user, anon (null), or the service role ("service"), then commits. */
@@ -57,10 +58,14 @@ export async function setupTestDb(): Promise<TestDb> {
 
   return {
     admin,
-    async createUser(fullName) {
+    async createUser(fullName, opts = {}) {
       const { rows } = await admin.query<{ id: string }>(
-        "insert into auth.users (email, raw_user_meta_data) values ($1, $2) returning id",
-        [`${randomUUID()}@example.test`, JSON.stringify(fullName ? { full_name: fullName } : {})],
+        "insert into auth.users (email, raw_user_meta_data, email_confirmed_at) values ($1, $2, $3) returning id",
+        [
+          opts.email ?? `${randomUUID()}@example.test`,
+          JSON.stringify(fullName ? { full_name: fullName } : {}),
+          opts.confirmed === false ? null : new Date().toISOString(),
+        ],
       );
       return rows[0]!.id;
     },

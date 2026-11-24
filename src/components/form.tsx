@@ -28,7 +28,7 @@ export function Field({
   required?: boolean;
   disabled?: boolean;
   options?: readonly { value: string; label: string }[];
-  inputMode?: "url" | "email" | "text";
+  inputMode?: "url" | "email" | "text" | "numeric";
 }) {
   const error = state?.fieldErrors?.[name];
   const value = state?.values?.[name] ?? defaultValue;

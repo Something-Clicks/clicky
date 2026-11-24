@@ -68,12 +68,27 @@ export const signUpSchema = z.object({
   password: newPassword,
 });
 
+const zip = z
+  .string()
+  .trim()
+  .regex(/^[0-9]{5}$/, "Enter a 5-digit ZIP code.");
+
 export const businessSchema = z.object({
   businessName: trimmed(160, "business name"),
   website,
   serviceArea: optionalText(160, "service area"),
   primaryGoal: z.enum(goalValues).nullable(),
+  zipCode: zip.nullable().optional(),
 });
+
+/** Homepage: website + ZIP. */
+export const startSchema = z.object({
+  website: website.refine((v) => v !== null, "Enter your website, like example.com."),
+  zipCode: zip,
+});
+
+/** Lower-case host without "www." — what a preview is cached and limited by. */
+export const domainOf = (url: string) => new URL(url).hostname.toLowerCase().replace(/^www\./, "");
 
 export const settingsBusinessSchema = businessSchema.pick({ businessName: true, website: true });
 

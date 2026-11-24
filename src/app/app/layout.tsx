@@ -8,30 +8,21 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-const APP_NAV = [
-  { href: "/app/onboarding", label: "Onboarding" },
-  { href: "/app", label: "Dashboard", exact: true },
-  { href: "/app/actions", label: "Action cards" },
-  { href: "/app/analysis", label: "Analysis" },
-  { href: "/app/connections", label: "Connections" },
-  { href: "/app/approvals", label: "Approvals" },
-  { href: "/app/activity", label: "Activity" },
-  { href: "/app/billing", label: "Billing" },
+const NAV = [
+  { href: "/app", label: "Home", exact: true },
+  { href: "/app/actions", label: "To do" },
+  { href: "/app/approvals", label: "Drafts" },
+  { href: "/app/analysis", label: "Website check" },
+  { href: "/app/activity", label: "History" },
+  { href: "/app/billing", label: "Plan" },
   { href: "/app/settings", label: "Settings" },
 ];
-
-const CRUMBS: Record<string, string> = {
-  "/app": "Dashboard",
-  "/app/onboarding": "Onboarding",
-  "/app/actions": "Action cards",
-  "/app/analysis": "Analysis",
-  "/app/connections": "Connections",
-  "/app/approvals": "Approvals",
-  "/app/activity": "Activity",
-  "/app/billing": "Billing",
-  "/app/settings": "Settings",
-  "/app/settings/members": "Members",
-};
+const TABS = [
+  { href: "/app", label: "Home", icon: "⌂", exact: true },
+  { href: "/app/actions", label: "To do", icon: "✓" },
+  { href: "/app/approvals", label: "Drafts", icon: "✎" },
+  { href: "/app/settings", label: "Account", icon: "☺" },
+];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const workspace = await getWorkspace();
@@ -41,26 +32,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <Shell
-      crumbRoot={workspace.business?.businessName ?? "Your workspace"}
-      crumbs={CRUMBS}
       groups={[
-        { label: "CUSTOMER APP", items: APP_NAV },
-        ...(isAdmin === true ? [{ label: "PLATFORM", items: [{ href: "/admin", label: "Admin" }] }] : []),
+        { label: workspace.business?.businessName ?? "Your business", items: NAV },
+        ...(isAdmin === true ? [{ label: "Platform", items: [{ href: "/admin", label: "Admin" }] }] : []),
       ]}
+      tabs={TABS}
       right={
-        <Link className="avatar" href="/app/settings" aria-label="Your settings" style={{ textDecoration: "none" }}>
+        <Link className="avatar" href="/app/settings" aria-label="Your account">
           {initial}
         </Link>
       }
       sideFooter={
-        <>
-          <div className="group">ACCOUNT</div>
-          <form action={signOut}>
-            <button className="nav" type="submit">
-              Sign out
-            </button>
-          </form>
-        </>
+        <form action={signOut}>
+          <button className="nav" type="submit" style={{ border: 0, background: "none", font: "inherit", cursor: "pointer", width: "100%", textAlign: "left" }}>
+            Sign out
+          </button>
+        </form>
       }
     >
       {children}

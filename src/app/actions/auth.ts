@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { log } from "@/lib/log";
+import { confirmUrl } from "@/lib/email-links";
 import { safeNextPath } from "@/lib/redirect";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -56,7 +57,7 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.fullName },
-      emailRedirectTo: `${await siteOrigin()}/auth/callback?next=/app/onboarding`,
+      emailRedirectTo: confirmUrl(await siteOrigin(), "/app/onboarding"),
     },
   });
   if (error) {
@@ -81,6 +82,29 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
   };
 }
 
+/**
+ * Emails a one-time sign-in link (for accounts made with Save this, which have no
+ * password). Same answer whether or not the address has an account.
+ */
+export async function sendSignInLink(_prev: FormState, form: FormData): Promise<FormState> {
+  const values = formFields(form, ["email"]);
+  const parsed = emailSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
+  const next = safeNextPath(form.get("next"));
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    email: parsed.data.email,
+    options: { shouldCreateUser: false, emailRedirectTo: confirmUrl(await siteOrigin(), next) },
+  });
+  if (error && error.code === "over_email_send_rate_limit") {
+    return { error: "Too many attempts. Please wait a minute and try again.", values };
+  }
+  if (error && error.code !== "otp_disabled" && error.code !== "user_not_found") {
+    log.warn("auth.sign_in_link_failed", { code: error.code ?? error.name });
+  }
+  return { ok: true, message: "If that email has an account, a sign-in link is on its way.", values };
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -98,7 +122,7 @@ export async function requestPasswordReset(_prev: FormState, form: FormData): Pr
 
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${await siteOrigin()}/auth/callback?next=/reset-password`,
+    redirectTo: confirmUrl(await siteOrigin(), "/reset-password"),
   });
   if (error) {
     log.warn("auth.reset_request_failed", { code: error.code ?? error.name });

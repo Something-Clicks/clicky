@@ -9,7 +9,7 @@ import { FormMessage, SubmitButton } from "@/components/form";
 import type { FormState } from "@/lib/validation";
 
 export function RunAnalysisButton({
-  label = "Run analysis",
+  label = "Check my website",
   disabled = false,
   entitled = true,
 }: {
@@ -20,8 +20,8 @@ export function RunAnalysisButton({
   const [state, action] = useActionState(startAnalysis, {} as FormState);
   if (!entitled) {
     return (
-      <Link className="btn" href="/app/billing">
-        Choose a plan to start
+      <Link className="btn" href="/app/upgrade">
+        See plans
       </Link>
     );
   }
@@ -30,7 +30,7 @@ export function RunAnalysisButton({
       <FormMessage state={state} />
       {disabled ? (
         <button className="btn" type="button" disabled aria-disabled="true">
-          Analyzing…
+          Checking…
         </button>
       ) : (
         <SubmitButton pending="Starting…">{label}</SubmitButton>

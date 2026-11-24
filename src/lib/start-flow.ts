@@ -4,17 +4,14 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 
 /**
- * Details from the Diagnostic Audit form, carried through sign-up and business setup
- * so the visitor doesn't type them twice. Short-lived, HTTP-only, same-site cookie;
- * never placed in a URL.
+ * Website and ZIP from the homepage, carried through sign-up and business setup when
+ * the free first result is switched off (or the visitor chooses to sign up first).
+ * Short-lived, HTTP-only, same-site cookie; never placed in a URL.
  */
 const COOKIE = "sc_start";
 const StartSchema = z.object({
-  businessName: z.string().max(160),
   website: z.string().max(300),
-  primaryGoal: z.string().max(40),
-  email: z.string().max(254),
-  plan: z.literal("diagnostic_audit"),
+  zipCode: z.string().regex(/^[0-9]{5}$/),
 });
 export type StartFlow = z.infer<typeof StartSchema>;
 

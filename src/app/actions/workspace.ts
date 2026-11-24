@@ -2,10 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { getWorkspace, requireUser } from "@/lib/auth";
 import { clearStartFlow, getStartFlow } from "@/lib/start-flow";
 import { log } from "@/lib/log";
+import { runAnalysis } from "@/lib/server/analysis";
+import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
 import {
   businessSchema,
@@ -24,8 +27,13 @@ const GENERIC = "Something went wrong saving that. Please try again.";
  */
 export async function saveBusinessSetup(_prev: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
-  const values = formFields(form, ["businessName", "website", "serviceArea", "primaryGoal"]);
-  const parsed = businessSchema.safeParse({ ...values, primaryGoal: values.primaryGoal || null });
+  const values = formFields(form, ["businessName", "website", "zipCode"]);
+  const parsed = businessSchema.safeParse({
+    ...values,
+    serviceArea: "",
+    primaryGoal: null,
+    zipCode: values.zipCode ? values.zipCode : null,
+  });
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
 
   const workspace = await getWorkspace();
@@ -40,8 +48,7 @@ export async function saveBusinessSetup(_prev: FormState, form: FormData): Promi
       .update({
         business_name: parsed.data.businessName,
         website: parsed.data.website,
-        service_area: parsed.data.serviceArea,
-        primary_goal: parsed.data.primaryGoal,
+        ...(parsed.data.zipCode ? { zip_code: parsed.data.zipCode } : {}),
       })
       .eq("organization_id", workspace.organization.id)
       .select("organization_id");
@@ -57,22 +64,38 @@ export async function saveBusinessSetup(_prev: FormState, form: FormData): Promi
     redirect("/app");
   }
 
-  const { data, error } = await supabase.rpc("create_organization", {
+  const { data: orgId, error } = await supabase.rpc("create_organization", {
     p_business_name: parsed.data.businessName,
     p_website: parsed.data.website ?? "",
-    p_service_area: parsed.data.serviceArea ?? "",
-    p_primary_goal: parsed.data.primaryGoal ?? "",
+    p_service_area: "",
+    p_primary_goal: "",
   });
-  if (error) {
-    log.error("organization.create_failed", { userId: user.id, code: error.code, error: error.message });
+  if (error || !orgId) {
+    log.error("organization.create_failed", { userId: user.id, code: error?.code, error: error?.message });
     return { error: GENERIC, values };
   }
-  log.info("organization.created", { userId: user.id, organizationId: data });
+  log.info("organization.created", { userId: user.id, organizationId: orgId });
+  if (parsed.data.zipCode) {
+    await supabase.from("business_profiles").update({ zip_code: parsed.data.zipCode }).eq("organization_id", orgId);
+  }
   if (await getStartFlow()) {
     await clearStartFlow();
-    redirect("/app/billing?plan=diagnostic_audit");
+    await track("signup_completed", { from: "home" });
   }
-  redirect(parsed.data.website ? "/app/connections?onboarding=1" : "/app");
+  // The first website check starts right away (a free use, enforced in the database).
+  if (parsed.data.website) {
+    const { data: analysisId, error: startError } = await supabase.rpc("start_analysis", { p_org: orgId });
+    if (analysisId && !startError) {
+      await track("free_use_consumed", { kind: "analysis" });
+      const website = parsed.data.website;
+      const biz = { businessName: parsed.data.businessName, serviceArea: null, primaryGoal: null };
+      after(() => runAnalysis(supabase, analysisId, website, biz, { notifyOrg: orgId }));
+    } else if (startError) {
+      log.warn("onboarding.first_analysis_not_started", { organizationId: orgId, hint: (startError as { hint?: string }).hint });
+    }
+  }
+  revalidatePath("/app", "layout");
+  redirect("/app");
 }
 
 export async function updateProfile(_prev: FormState, form: FormData): Promise<FormState> {

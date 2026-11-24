@@ -135,7 +135,7 @@ export async function getSpeedComparison(orgId: string, cardId: string) {
 }
 
 export interface Entitlements {
-  plan: "diagnostic_audit" | "starter_ai" | "growth_ai" | "scale_automation" | null;
+  plan: string | null;
   analyses: boolean;
   weekly: boolean;
   drafts: "none" | "meta" | "all";
@@ -146,4 +146,18 @@ export const getEntitlements = cache(async (orgId: string): Promise<Entitlements
   const { data, error } = await supabase.rpc("current_entitlements", { p_org: orgId });
   if (error) log.error("query.entitlements_failed", { orgId, error: error.message });
   return (data as Entitlements | null) ?? { plan: null, analyses: false, weekly: false, drafts: "none" };
+});
+
+export interface FreeUses {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+/** Free uses left for this person and business (database-enforced; this is for display). */
+export const getFreeUses = cache(async (orgId: string): Promise<FreeUses> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("free_uses", { p_org: orgId });
+  if (error) log.error("query.free_uses_failed", { orgId, error: error.message });
+  return (data as FreeUses | null) ?? { used: 0, limit: 3, remaining: 0 };
 });

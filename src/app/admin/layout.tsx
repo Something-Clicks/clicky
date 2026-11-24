@@ -10,24 +10,28 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   await requirePlatformAdmin();
   return (
     <Shell
-      crumbRoot="Platform"
-      crumbs={{ "/admin": "Admin overview", "/admin/agent-runs": "Agent runs" }}
       groups={[
         {
-          label: "ADMIN",
+          label: "Admin",
           items: [
             { href: "/admin", label: "Overview", exact: true },
-            { href: "/admin/agent-runs", label: "Agent runs" },
+            { href: "/admin/funnel", label: "Funnel and feedback" },
+            { href: "/admin/agent-runs", label: "Draft runs" },
           ],
         },
-        { label: "CUSTOMER APP", items: [{ href: "/app", label: "Back to workspace" }] },
+        { label: "Customer app", items: [{ href: "/app", label: "Back to workspace" }] },
+      ]}
+      tabs={[
+        { href: "/admin", label: "Overview", icon: "◎", exact: true },
+        { href: "/admin/funnel", label: "Funnel", icon: "▤" },
+        { href: "/admin/agent-runs", label: "Runs", icon: "↻" },
+        { href: "/app", label: "App", icon: "⌂" },
       ]}
       right={<span className="pill coral">Admin · every view is logged</span>}
       sideFooter={
         <>
-          <div className="group">ACCOUNT</div>
           <form action={signOut}>
-            <button className="nav" type="submit">
+            <button className="nav" type="submit" style={{ border: 0, background: "none", font: "inherit", cursor: "pointer" }}>
               Sign out
             </button>
           </form>

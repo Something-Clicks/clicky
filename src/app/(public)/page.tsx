@@ -1,46 +1,62 @@
-import Link from "next/link";
+import Image from "next/image";
 
-import { Clicky } from "@/components/shell";
+import { StartForm } from "@/components/start-form";
+import { HOME_HEADLINE, HOME_SUBHEAD } from "@/config/site";
+import { formTicket, isPreviewEnabled, track } from "@/lib/server/site";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
+/**
+ * Homepage: one action. Below it, an example of the work (clearly labeled), not a feature list.
+ */
+export default async function HomePage() {
+  await track("homepage_visit");
+  const preview = isPreviewEnabled();
   return (
     <>
-      <div className="hero">
-        <div>
-          <div className="eyebrow">Marketing, made clearer</div>
-          <h1>Make the complicated click.</h1>
-          <p>
-            Know what is working, what needs attention, and what to do next. AI helps prepare the work. You stay in
-            control.
-          </p>
+      <section className="home-hero" aria-labelledby="home-title">
+        <Image className="art" src="/brand/clicky-3d.png" alt="Clicky, the Something Clicks character" width={720} height={502} priority />
+        <h1 id="home-title">{HOME_HEADLINE}</h1>
+        {HOME_SUBHEAD ? <p className="sub">{preview ? HOME_SUBHEAD : "Free to start. See your first results in about a minute."}</p> : null}
+        <StartForm ticket={formTicket()} />
+      </section>
+
+      <section className="show" aria-labelledby="show-title">
+        <p className="show-head" id="show-title">
+          Here&apos;s the kind of thing you&apos;ll see
+        </p>
+        <div className="card action high">
           <div className="row">
-            <Link className="btn" href="/diagnostic-audit">
-              Start your $39 audit
-            </Link>
-            <Link className="btn outline" href="/how-it-works">
-              See how it works
-            </Link>
+            <span className="pill coral">High impact</span>
+            <span className="pill">Example</span>
+          </div>
+          <h3>Make it easy to call you</h3>
+          <p className="muted small">Your phone number isn&apos;t a tap-to-call link on your homepage.</p>
+          <div className="evidence">
+            <b>Observed</b> · your homepage
           </div>
         </div>
-        <Clicky size={150} className="mascot" alt="Clicky, the Something Clicks mascot" />
-      </div>
-      <div className="grid">
         <div className="card">
-          <span className="pill">01 · Understand</span>
-          <h3>See what needs attention</h3>
-          <p className="muted">Your website and connected marketing data, explained in plain language.</p>
+          <div className="row">
+            <span className="pill lavender">Draft ready</span>
+            <span className="pill">Example</span>
+          </div>
+          <h3>New page title</h3>
+          <div className="mock">Emergency Plumbing in Dallas | Sunrise Plumbing</div>
+          <p className="muted small" style={{ marginTop: 8 }}>
+            Review it, change it, approve it.
+          </p>
         </div>
         <div className="card">
-          <span className="pill yellow">02 · Decide</span>
-          <h3>Know your next move</h3>
-          <p className="muted">Prioritized Action Cards show what matters and why.</p>
+          <div className="row">
+            <span className="pill green">Verified fixed</span>
+            <span className="pill">Example</span>
+          </div>
+          <h3>Checked again next time</h3>
+          <p className="muted small">We look again after you make a change and show what improved.</p>
         </div>
-        <div className="card">
-          <span className="pill green">03 · Do</span>
-          <h3>Get the work moving</h3>
-          <p className="muted">AI prepares useful work. You approve what happens next.</p>
-        </div>
-      </div>
+      </section>
     </>
   );
 }

@@ -15,15 +15,14 @@ export function NavLink({ href, exact, children }: { href: string; exact?: boole
   );
 }
 
-/** "Root / <b>Page</b>": the longest matching path prefix names the page. */
-export function Crumb({ root, names }: { root: string; names: Record<string, string> }) {
-  const pathname = usePathname();
-  const match = Object.keys(names)
-    .filter((path) => isActive(pathname, path, path === "/" || path === "/app" || path === "/admin"))
-    .sort((a, b) => b.length - a.length)[0];
+export function TabLink({ href, exact, icon, children }: { href: string; exact?: boolean; icon: string; children: React.ReactNode }) {
+  const active = isActive(usePathname(), href, exact);
   return (
-    <div className="crumb">
-      {root} / <b>{match ? names[match] : ""}</b>
-    </div>
+    <Link href={href} className={active ? "active" : undefined} aria-current={active ? "page" : undefined}>
+      <span className="ico" aria-hidden="true">
+        {icon}
+      </span>
+      {children}
+    </Link>
   );
 }

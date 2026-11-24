@@ -5,89 +5,128 @@ import { ActionCardItem } from "@/components/intelligence";
 import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
 import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
-import { getEntitlements, getCards, getLastCompleteAnalysis, getLatestAnalysis, getPendingApprovalCount, isStale, openCards, relativeDay } from "@/lib/queries";
+import {
+  getCards,
+  getEntitlements,
+  getFreeUses,
+  getLastCompleteAnalysis,
+  getLatestAnalysis,
+  getPendingApprovalCount,
+  isStale,
+  openCards,
+  relativeDay,
+} from "@/lib/queries";
+import { planName } from "@/config/pricing";
 
 import { Greeting } from "./greeting";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export const metadata: Metadata = { title: "Home" };
 export const maxDuration = 120;
 
-export default async function DashboardPage() {
+export default async function HomePage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
   const ws = await requireOrganization();
-  const [latest, lastComplete, cards, approvalsWaiting, ent] = await Promise.all([
+  const { welcome } = await searchParams;
+  const [latest, lastComplete, cards, approvalsWaiting, ent, free] = await Promise.all([
     getLatestAnalysis(ws.organization.id),
     getLastCompleteAnalysis(ws.organization.id),
     getCards(ws.organization.id),
     getPendingApprovalCount(ws.organization.id),
     getEntitlements(ws.organization.id),
+    getFreeUses(ws.organization.id),
   ]);
   const open = openCards(cards);
   const running = latest?.status === "running";
   const next = open.find((c) => c.status === "new") ?? open[0];
+  const more = open.filter((c) => c.id !== next?.id).slice(0, 2);
+  const canRun = ent.analyses || free.remaining > 0;
+  const site = ws.business?.website ? new URL(ws.business.website).hostname.replace(/^www\./, "") : null;
 
   return (
-    <>
+    <div className="stack">
       <AutoRefresh active={running} />
-      <div className="eyebrow">Your workspace</div>
-      <h1 className="h1">
-        <Greeting /> Here&apos;s your next move.
-      </h1>
-      <p className="sub">A clear view of what needs attention.</p>
-      <div className="grid">
-        <div className="card">
-          <div className="metric">{open.length}</div>
-          <div className="metric-label">Actions to review</div>
-        </div>
-        <div className="card">
-          <div className="metric">{approvalsWaiting}</div>
-          <div className="metric-label">{approvalsWaiting === 1 ? "Approval waiting" : "Approvals waiting"}</div>
-        </div>
-        <div className="card">
-          <div className="metric">{running ? "Running" : relativeDay(lastComplete?.completed_at)}</div>
-          <div className="metric-label">
-            Last analysis{!running && isStale(lastComplete?.completed_at) ? <> · <span className="pill yellow">Out of date</span></> : null}
-          </div>
+      {welcome ? (
+        <p className="notice green" role="status">
+          Your results are saved.{" "}
+          {free.remaining > 0 ? `You have ${free.remaining} free ${free.remaining === 1 ? "use" : "uses"} left.` : null}
+        </p>
+      ) : null}
+      <div>
+        <h1 className="h1">
+          <Greeting />
+        </h1>
+        <div className="row">
+          {site ? <span className="pill">{site}</span> : null}
+          {ent.plan ? (
+            <span className="pill green">{planName(ent.plan)}</span>
+          ) : (
+            <Link href="/app/upgrade" className={free.remaining > 0 ? "pill lavender" : "pill coral"} style={{ textDecoration: "none" }}>
+              {free.remaining > 0 ? `${free.remaining} of ${free.limit} free uses left` : "Free uses used up"}
+            </Link>
+          )}
+          {approvalsWaiting > 0 ? (
+            <Link href="/app/approvals" className="pill yellow" style={{ textDecoration: "none" }}>
+              {approvalsWaiting} {approvalsWaiting === 1 ? "draft" : "drafts"} to review
+            </Link>
+          ) : null}
         </div>
       </div>
-      {!running && isStale(lastComplete?.completed_at) ? (
-        <div className="notice row between" style={{ marginTop: 16 }}>
-          <span>Your last analysis is more than 30 days old. Run a new one to see what&apos;s changed.</span>
-          <RunAnalysisButton label="Run a new analysis" entitled={ent.analyses} />
+
+      {running ? (
+        <div className="card empty working" role="status">
+          <Clicky size={140} alt="" />
+          <h2>Checking {site ?? "your website"}…</h2>
+          <p className="muted">This usually takes about a minute.</p>
         </div>
-      ) : null}
-      <h3 style={{ margin: "26px 0 12px" }}>Your next best move</h3>
-      {next ? (
-        <ActionCardItem card={next} cta="Review action" primary />
-      ) : running ? (
-        <div className="card empty" role="status">
-          <Clicky size={72} alt="" />
-          <h3>Analyzing your website…</h3>
-          <p className="muted">We&apos;re reviewing your pages and checking page speed. This usually takes about a minute.</p>
-        </div>
+      ) : next ? (
+        <>
+          <h2 style={{ margin: "8px 0 0" }}>Your next move</h2>
+          <ActionCardItem card={next} cta="Let's do it" primary />
+          {more.length ? (
+            <>
+              {more.map((c) => (
+                <ActionCardItem key={c.id} card={c} cta="Open" />
+              ))}
+              {open.length > 3 ? (
+                <Link className="btn ghost" href="/app/actions">
+                  See all {open.length}
+                </Link>
+              ) : null}
+            </>
+          ) : null}
+        </>
       ) : lastComplete ? (
         <div className="card empty">
           <Clicky size={72} alt="" />
-          <h3>You&apos;re all caught up.</h3>
-          <p className="muted">There&apos;s nothing open right now. Run a new analysis after you change your website.</p>
-          <RunAnalysisButton label="Run a new analysis" entitled={ent.analyses} />
+          <h2>You&apos;re all caught up</h2>
+          <p className="muted">Nothing open right now. Check again after you change your website.</p>
+          <RunAnalysisButton entitled={canRun} />
         </div>
-      ) : !ws.business?.website ? (
+      ) : !site ? (
         <div className="card empty">
           <Clicky size={72} alt="" />
-          <h3>Add your website to get started.</h3>
-          <p className="muted">Your first Action Cards come from a review of your website.</p>
+          <h2>Add your website</h2>
           <Link className="btn" href="/app/onboarding">
             Add your website
           </Link>
         </div>
       ) : (
         <div className="card empty">
-          <Clicky size={72} alt="" />
-          <h3>Let&apos;s find your first next step.</h3>
-          <p className="muted">We&apos;ll review {new URL(ws.business.website).hostname} and turn what we find into a short list of actions.</p>
-          <RunAnalysisButton label="Run your first analysis" entitled={ent.analyses} />
+          <Clicky size={140} alt="" />
+          <h2>Let&apos;s check {site}</h2>
+          <p className="muted">About a minute. Uses one free use.</p>
+          <RunAnalysisButton entitled={canRun} />
         </div>
       )}
-    </>
+
+      {lastComplete && !running ? (
+        <div className="card quiet between">
+          <div>
+            <b>Last checked {relativeDay(lastComplete.completed_at).toLowerCase()}</b>
+            {isStale(lastComplete.completed_at) ? <div className="small muted">More than 30 days ago.</div> : null}
+          </div>
+          <RunAnalysisButton label="Check again" entitled={canRun} />
+        </div>
+      ) : null}
+    </div>
   );
 }
