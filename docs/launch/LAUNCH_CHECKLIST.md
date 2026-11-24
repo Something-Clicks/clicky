@@ -11,42 +11,65 @@ Commits: `c6da947` foundation · `1cef428` homepage, consent, legal · `489fa38`
 3. Checks before every commit: `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`.
 4. Journey tests (see "Journey tests") only ever run against **clicky-dev** (`ofstvbgaoznipsiqbjjp`), never production (`ysmwnxvyjougetdlpnba`).
 
-## Status (Nov 24 2026)
+## Item status (every item is in exactly one group)
 
-| Check | Result |
-|---|---|
-| Lint, typecheck, build | pass |
-| Unit tests | 106 / 106 |
-| Database tests (local Postgres, all 8 migrations) | 98 / 98 |
-| Public-page browser tests (iPhone profile 390px + desktop Chromium), axe | 50 / 50, 0 violations |
-| **Signed-in journey on clicky-dev + Stripe TEST** (iPhone profile + desktop) | **32 / 32** (16 each) |
-| Real iPhone WebKit | not run: the WebKit download is blocked in this sandbox |
-| clicky-dev: all migrations applied in order, rollback → re-apply cycle | pass; all 52 function bodies match the repo files |
-| Production Supabase | **untouched** (launch migration not applied) |
-| Production Vercel variables | **values unchanged**; 7 Production rows intact. Six rows that used to be shared with every Preview branch were scoped to **Production only** (Option B, approved Nov 24); their values and Production targets are untouched |
+"Real" means the actual service was exercised (real Supabase on clicky-dev, real Stripe TEST API). "Stand-in" items are listed in group 2 or 4, never in group 1.
 
-### What the journey tests cover (real: Supabase Auth/REST/RLS, Stripe TEST, the app)
-Anonymous first result (cached path, unreachable site, spam trap, minimum fill time) · Save this stores the email against the result · a link opened in a **different browser** claims the saved result for the same verified email · replay refused · wrong email refused · signed-out visitor sent to sign in · three free uses, then the database refuses the fourth · upgrade page offers only Marketing Plan and Single Site (Business Plus and Multi-Site under "Coming soon") · "What stopped you?" + follow-up permission stored apart from feedback · draft approval · checkout for Marketing Plan, Single Site monthly and yearly (real TEST sessions: price id, product, mode, org, metadata) · real Stripe subscription events grant access, replays are no-ops, forged events refused, wrong amount refused · "$756 billed yearly" · Marketing Plan allows exactly one paid check · onboarding saves business name, website and ZIP · admin funnel page for admins only (others get 404) · cross-customer isolation and anonymous access · axe and 390px layout on every signed-in screen.
+### 1. Complete and verified (with real services, not fixtures)
+- **Database on clicky-dev:** 8 migrations applied in order; rollback → re-apply cycle passed with in-transaction checks; all 52 function bodies match the repo; advisor has no errors. Real Supabase.
+- **Auth with a password** on real Supabase Auth (sign-in, redirects, `/claim` hard navigation). Real.
+- **Cross-browser claim rules on real Supabase:** a different browser claims for the same verified email; replay, wrong email and signed-out visitor are handled; the database refuses the fourth free use. Real database and Auth, with a saved result created through the real functions (the scan content itself was a fixture; see group 2).
+- **Stripe TEST checkout configuration:** Marketing Plan, Single Site monthly and yearly create real TEST Checkout Sessions with the right price id, product, mode, business id and metadata. Real Stripe API.
+- **Entitlements from real Stripe objects:** real TEST subscriptions and their stored events grant Single Site; replay is a no-op; forged and wrong-amount events are refused; "$756 billed yearly" displays. Real Stripe objects and real database; the delivery path was a stand-in (group 2).
+- **Customer isolation, admin-only funnel page, feedback and funnel counts** on real Supabase.
+- **Environment separation:** the six formerly shared Vercel variables are Production-only; this branch resolves to clicky-dev (Vercel's own resolver, before and after a redeploy). Production Vercel values unchanged. Real Vercel API.
+- **Consent and analytics gating** (nothing loads before Yes) in a real browser; **public pages**: 50/50 at 390px (iPhone profile) and desktop, axe 0 violations.
+- **Local checks:** lint, types, build; 143 unit tests; 98 database tests (local Postgres).
 
-### Stand-ins used (be aware)
-- **Website scan:** this sandbox has no public internet, so results come from the real analyzer run over fixture HTML (`tests/e2e/fixtures/analysis.json`) and are saved through the real database functions. Real scanning was verified in earlier phases on production.
-- **Sign-in:** test users were created in clicky-dev with a known password (`tests/e2e/dev-seed.sql`), so no email was sent. **Real email delivery and the `/auth/confirm` link have not been exercised on clicky-dev.**
-- **Stripe webhooks:** Stripe cannot reach localhost, so Stripe's own stored events were re-sent to the local route, signed with the TEST endpoint's secret. Hosted Stripe Checkout was not completed in a browser (host unreachable); the sessions were verified through the Stripe API.
-- **Drafts:** no Anthropic key, so draft text was saved through the real `complete_agent_run` function; wording used the template fallback. Real AI output is untested.
-- **Deployed preview:** the preview URL sits behind Vercel login (and this sandbox cannot reach it), so tests ran locally against the same clicky-dev and Stripe TEST configuration the preview uses.
+### 2. Complete but awaiting my verification (stand-ins used, or needs a real device or real email)
+- **Plain-words scan failure messages** (bot-blocked, not found, down, bad address, redirect loop, too big, timeout): fixed and unit-tested with injected errors; **not yet seen against real sites**.
+- **First result with a real site:** only fixture HTML scanned so far (the sandbox has no public internet). Needs the real scan (group 4: hosts and sites).
+- **Save this email → link → claim:** database and routes verified; **the real email was never sent or opened**, so `/auth/confirm` with a real Supabase link and the email templates are unverified.
+- **Webhook delivery:** Stripe's real events were re-sent to a local route (stand-in). Real delivery needs your local Stripe CLI run (INTEGRATIONS, "Webhook testing: local Stripe CLI").
+- **Drafts and model wording:** output handling is unit-tested with a stub client. **No real model call has been made**: no Anthropic key reached this environment.
+- **Model-output safeguards added this round** (shared leak/jargon guard, plain draft errors, every template fallback logged with its reason, "AI-worded" only when every card has the model's words; also fixed a filter that let "40%" and "#1" through). Unit-tested only.
+- **Real iPhone / Safari / WebKit** (the 10-step checklist below is yours to run; WebKit could not be installed here).
+- **Resend** sending and the weekly worker: not run.
+- **Stripe hosted checkout page, customer portal use** (plan change, cancel): not run.
+- **Deployed preview:** never browsed or exercised end to end (login wall; host not reachable from the sandbox).
 
-## P0 items
-- [x] **P0.0 Foundation** — `c6da947`: launch migration + rollback, mode-aware catalog, docs.
-- [x] **P0.1 Homepage and responsive design** — headline slot (`src/config/site.ts`, now "Know exactly what to fix next"), website + ZIP form, 390px-first. Browser-verified.
-- [x] **P0.2 Website analysis and first result** — verified on clicky-dev (with fixture scan). Remaining: real scan of a live site, real AI wording, on the deployed preview.
-- [~] **P0.3 Save this and signup** — claim, limits, three free uses verified in a real browser on real Supabase. **Remaining: real email delivery** (Supabase email settings: INTEGRATIONS S4, S5) and a click-through on a real phone. Fixed during testing: after a password login the address bar kept the one-time claim code; now a full page load.
-- [x] **P0.4 Pricing and Stripe** — LIVE ids + TEST ids in `src/config/pricing.ts`; checkout and webhook verified in TEST mode. Remaining: customer portal not configured in Stripe test (not exercised); live go-live (runbook step 4).
-- [x] **P0.5 Workspace and marketing work** — phone tab bar, home, free-use counter, draft approval, History copy cleaned (found and fixed "AI …" and raw labels by test).
-- [x] **P0.6 Feedback and funnel** — verified: funnel counts for every step, feedback rows, follow-up email in its own table, admin page admin-only.
-- [x] **P0.7 Consent and analytics** — verified: nothing loads before Yes.
-- [x] **P0.8 Legal drafts** — `/privacy`, `/terms` labeled "Draft for attorney review".
-- [~] **P0.9 Final testing** — see Status. Remaining: WebKit, real devices, real scan/email/AI.
-- [~] **P0.10 Launch readiness** — see report; **not ready for customers yet** (see "Needs the owner").
+### 3. Still requiring code
+- Nothing known right now. Changes will be needed only if the real scan, real model output, real email or the real checkout and portal runs reveal defects.
+- Business Plus and Multi-Site stay "Coming soon" (they need product features: automated actions; several websites under one plan).
+
+### 4. Still requiring external configuration
+See "Needs from me" in the latest report and INTEGRATIONS. Open items, with the exact thing needed:
+- **Network and credentials do not match your description.** The live environment shows only `ofstvbgaoznipsiqbjjp.supabase.co` allowed, and only the Stripe and Vercel credentials. Missing here: Anthropic, PageSpeed and Resend credentials; hosts `api.resend.com`, `checkout.stripe.com`, `billing.stripe.com`, `cdn.playwright.dev`, the preview host, and the scan sites. The tool accepts exact host names (no wildcards): the preview needs `something-clicks-git-claude-94123f-matt-hills-projects-54d303a1.vercel.app`.
+- **Scan sites** (3–4 real public sites incl. slow, redirecting, JavaScript-heavy, bot-blocking, invalid) and a **test email address you control**.
+- **Resend sending domain** name and its verified status.
+- **Stripe TEST customer portal:** Stripe's API shows **0 portal configurations** in this TEST account, so it is not activated here (check the account and mode).
+- **Preview secrets** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` on this branch, plus `ANTHROPIC_API_KEY`, `PAGESPEED_API_KEY`, and Resend values if previews should use them.
+- **Your local Stripe CLI run** and, at that step only, the local-key hash swap (Vercel Preview values must be updated to match).
+- **Stripe TEST webhook endpoints:** decision pending (see below); no change made.
+- **Dashboard confirmation:** delivery attempts for the 24 failed production events (Stripe Dashboard → Developers → Webhooks → endpoint → Event deliveries).
+
+### 5. Requires my explicit production approval
+- Applying `20261124120000_launch_redesign.sql` to production, then the Production variables, merge and deploy, live Stripe, and the free first result flag (go-live runbook below).
+- Fast-forwarding `main` (decided: not now).
+- Setting `EMAIL_FROM` on Production (decided: stays unset).
+- Attorney approval of `/privacy` and `/terms` before they are final.
+- Changing, disabling or deleting any Stripe webhook endpoint (inventory below).
+
+### Stripe TEST webhook inventory (read-only, Nov 24; no endpoint was changed)
+| Endpoint | Points to | Events | Assessment |
+|---|---|---|---|
+| `we_1UTXVOFnFMCbDhHEJUw9R9kt` (Oct 23) "Adds buyer credits when payments succeed; removes them on refunds." | Production | `charge.refunded`, 4 × `checkout.session.*` | Looks like another project's endpoint, created before this app; overlaps on two checkout events. Probably obsolete. |
+| `we_1UdMKLFnFMCbDhHEe4L3M6V7` "Something Clicks (Vercel production, test mode)" (Nov 19) | Production | the 9 handled events | Production's current TEST endpoint (its secret is production's `STRIPE_WEBHOOK_SECRET`). Delivered the 24 events. |
+| `we_1Uf9ApFnFMCbDhHEbQoz3sYP` "launch preview" (Nov 24) | Preview alias | the 9 handled events | Cannot receive events while Deployment Protection is on (Vercel login page, non-2xx). Not needed now that webhook tests use the local CLI. |
+
+### The 24 failed production events (Nov 24 02:25:17–02:33:05 UTC; all TEST)
+8 × `customer.subscription.created`, 8 × `invoice.paid`, 8 × `customer.subscription.deleted`; only endpoints 2 and 3 subscribe to those types, so endpoint 2 delivered them (inferred from subscriptions). Each is one `failed` row ("Stripe is not configured"); 22 handled once, 2 show a second processing about 17 s later. Stripe reports `pending_webhooks: 2` on all 24: none has been delivered successfully on either subscribed endpoint. Attempt timestamps, HTTP codes and whether retries are exhausted are not available through Stripe's API (Dashboard only). No customer billing impact: production has no businesses or subscriptions. All rows preserved.
+
 
 ## Production state (investigated Nov 24, read-only; nothing changed)
 - **What is live:** deployment `dpl_ph62pF1pwkzicecUCHdEz79UFHcT`, a Vercel **redeploy** created Nov 24 01:34 UTC by Vercel user `hiyamattie-3986` (the account owner). It redeployed the original production deployment `dpl_9x3WmjWztUq7y1FpCTte71P3hnWu` (Nov 19 03:56 UTC, same user, not a git push). Both were built from branch `claude/fervent-knuth-0fo94q` at `063cca4`. `RESEND_API_KEY` was added to Production at 01:33 UTC, one minute before the redeploy.
@@ -140,15 +163,6 @@ To offer Business Plus: build something it adds (recurring drafts, or a verified
 | Scale & Automation | Multi-Site (hidden) | ✓ | ✓ | all |
 Old plan rows stay in the database (production has 0 customers). No monthly draft quota is invented; the existing 20 drafts/day safety cap remains.
 
-## Needs the owner
-- [ ] **Add two Preview secrets** (`STRIPE_SECRET_KEY` test, `SUPABASE_SECRET_KEY` clicky-dev) — see INTEGRATIONS.
-- [ ] **Webhook testing without changing Vercel:** Deployment Protection stays on and no bypass secret is added. Use the local Stripe CLI procedure in INTEGRATIONS ("Webhook testing: local Stripe CLI", guarded by `scripts/stripe-local-webhook.sh`). Decide whether to disable the TEST webhook endpoints that point at production and at the preview (same section, warning).
-- [ ] **clicky-dev Auth URLs and email settings** (the Supabase connector cannot change Auth settings) — INTEGRATIONS "clicky-dev Auth".
-- [ ] Approve and apply the launch migration to production (runbook step 1).
-- [ ] Attorney review of `/privacy` and `/terms`; fill the [bracketed] items.
-- [ ] Anthropic and PageSpeed keys if you want real wording and drafts on Preview/Production.
-- [ ] Business Plus / Multi-Site decision; Stripe customer portal activation (test and live).
-- [ ] Revoke the Vercel token and remove the saved credentials from the Default environment's network secrets once you have read the report.
 
-## Not ready
-Real email delivery (Supabase email), the `/auth/confirm` link on real Supabase, real website scans on the deployed app, real AI drafts, Stripe's hosted checkout page and webhook delivery to the preview, customer portal, weekly worker, real iPhone/WebKit, attorney-approved legal pages, and everything in the go-live runbook.
+## Resume notes
+- Keep pushing only to `claude/ecstatic-curie-9shvjf`. Re-enable the 12 e2e accounts only for a test run and disable them again immediately (see Journey tests).

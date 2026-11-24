@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { isAiConfigured } from "@/lib/server/ai";
-import { DraftError, generateDraft, SUPPORTED_DRAFTS, type DraftType } from "@/lib/server/drafts";
+import { draftFailureMessage, generateDraft, SUPPORTED_DRAFTS, type DraftType } from "@/lib/server/drafts";
 import { notify } from "@/lib/server/notify";
 import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
@@ -79,7 +79,7 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
       await notify(supabase, ws.organization!.id, b.businessName, "draft_ready");
     } catch (e) {
       log.error("agent_run.failed", { runId, ms: Date.now() - started, error: e });
-      const reason = e instanceof DraftError ? e.message : "The draft could not be prepared. Please try again.";
+      const reason = draftFailureMessage(e);
       const { error: failError } = await supabase.rpc("fail_agent_run", { p_run: runId, p_reason: reason });
       if (failError) log.error("agent_run.fail_record_failed", { runId, error: failError.message });
     }

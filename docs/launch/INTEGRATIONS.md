@@ -3,6 +3,13 @@
 Everything here is done by the owner in each dashboard. Nothing in this file has been changed by Claude.
 "Public" means the value is sent to browsers (`NEXT_PUBLIC_*`); everything else stays on the server.
 
+## Integration status (Nov 24; each item in exactly one group)
+**1. Verified with real services:** Supabase on clicky-dev (migrations, Auth password sign-in, RLS, functions); Stripe TEST products/prices and Checkout Session creation; Vercel Preview variables and environment separation; Stripe TEST webhook endpoint inventory.
+**2. Done, awaiting your verification / stand-ins used:** clicky-dev Auth email settings and templates (you completed them; no real email sent or opened yet); Stripe webhook handling (real events re-sent locally; real delivery needs your local CLI run, see "Webhook testing"); Resend DNS (you added the records; nothing sent); Anthropic and PageSpeed keys (you saved them; none reached this environment, no real call made).
+**3. Still requiring code:** none known.
+**4. Still requiring external configuration:** allowed hosts and saved credentials do not match your description (this environment shows only clicky-dev allowed, and only Stripe and Vercel credentials; missing: Anthropic, PageSpeed, Resend credentials; hosts `api.resend.com`, `checkout.stripe.com`, `billing.stripe.com`, `cdn.playwright.dev`, the exact preview host, scan sites); Stripe TEST customer portal (0 configurations seen via the API); Preview secrets `STRIPE_SECRET_KEY`, `SUPABASE_SECRET_KEY`, and the Anthropic, PageSpeed and Resend values on the branch; Resend sending domain and a test email address; GA4/Clarity ids (Production only, later).
+**5. Requires your explicit production approval:** production migration, Production variables, merge and deploy, live Stripe, `EMAIL_FROM` (stays unset), `main`, any Stripe webhook endpoint change.
+
 ## Environment variables (exact names read by the code)
 
 Set in **Vercel → Project `something-clicks` → Settings → Environment Variables**, then **Redeploy**.
