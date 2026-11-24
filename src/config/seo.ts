@@ -31,7 +31,7 @@ export const PAGE_SEO: Record<PublicPath, PageSeo> = {
   "/": {
     title: "Marketing Platform for Small Businesses | Something Clicks",
     description:
-      "Check your website free and get a ranked list of marketing fixes, each with the evidence behind it. Something Clicks helps small businesses understand their marketing and take action.",
+      "Check your website and discover what needs fixing. Get clear marketing recommendations, supporting evidence and practical next steps for your business.",
     intent: "Small business owners looking for a marketing platform or tool that shows what to improve on their website.",
   },
   "/how-it-works": {
@@ -43,7 +43,7 @@ export const PAGE_SEO: Record<PublicPath, PageSeo> = {
   "/pricing": {
     title: "Pricing for Small Business Marketing Plans | Something Clicks",
     description:
-      "Start with three free uses. Marketing Report is $49 one-time; Marketing Assistant is $79 a month or $756 a year. No retainers, cancel any time.",
+      "Start with three free uses. The Marketing Report is $49 one-time: a detailed look at your website, what needs improvement and what to do next.",
     intent: "Prospects comparing the cost of small business marketing software.",
   },
   "/about": {

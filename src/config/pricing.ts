@@ -1,6 +1,8 @@
 /**
  * THE product catalog: names, descriptions, prices and Stripe ids, in one place.
  *
+ * - Only the Marketing Report can be bought. Marketing Assistant is on hold (planned) until its
+ *   features work; Marketing Studio and Marketing Suite are planned future tiers.
  * - Customer-facing names were renamed in the app (Nov 24 2026): Marketing Report, Marketing Assistant,
  *   Marketing Studio, Marketing Suite. Stripe was NOT changed: its products still carry the old names
  *   (`stripeName`), which Stripe shows on its hosted checkout page until the owner renames them in Stripe.
@@ -22,8 +24,10 @@ export interface Plan {
   name: string;
   /** The product's current name in Stripe (unchanged; for reconciliation only, never shown). */
   stripeName: string;
-  /** Exact Stripe product description (approved copy). */
+  /** Exact Stripe product description (unchanged in Stripe; never shown). */
   stripeDescription: string;
+  /** Customer-facing description (approved copy), or null when none is approved yet. */
+  description: string | null;
   /** Amounts in cents, per billing interval this plan offers. */
   amounts: Partial<Record<Interval, number>>;
   /**
@@ -40,6 +44,7 @@ export const PLANS = {
     id: "marketing_plan",
     name: "Marketing Report",
     stripeName: "Marketing Plan",
+    description: "Get a detailed look at your website. See what needs improvement, why it matters and what to do next.",
     stripeDescription: "See what needs work and get a clear plan for your marketing.",
     amounts: { one_time: 4900 },
     available: true,
@@ -49,17 +54,22 @@ export const PLANS = {
     id: "single_site",
     name: "Marketing Assistant",
     stripeName: "Single Site",
+    // Future description (owner-approved Nov 24 2026). Shown only as a planned plan.
+    description: "Ongoing marketing guidance, content creation and help putting your marketing into action.",
     // The approved text was "Get marketing recommendations and ready-to-use content for your business."; "ready-to-use
     // content" is not delivered (drafts are switched off), so TEST now carries the honest text below. Check what LIVE says.
     stripeDescription: "Get clear recommendations for your website, and check it again any time to see what's fixed.",
     amounts: { month: 7900, year: 75600 },
-    available: true,
-    tier: "current",
+    // On hold (owner decision, Nov 24 2026) until drafts and ongoing help actually work. Planned, never sold:
+    // startCheckout refuses it for both monthly and yearly. Stripe products and prices are unchanged.
+    available: false,
+    tier: "planned",
   },
   business_plus: {
     id: "business_plus",
     name: "Marketing Studio",
     stripeName: "Business Plus",
+    description: null,
     stripeDescription: "Get more marketing insights, content and automated actions to grow your business.",
     amounts: { month: 17900, year: 171600 },
     // "Automated actions" don't exist yet, and nothing else sets it apart from Marketing Assistant.
@@ -70,6 +80,7 @@ export const PLANS = {
     id: "multi_site",
     name: "Marketing Suite",
     stripeName: "Multi-Site",
+    description: null,
     stripeDescription: "Manage marketing across multiple websites or business locations.",
     amounts: { month: 39900, year: 382800 },
     // One subscription cannot cover several websites yet.

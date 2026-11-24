@@ -101,7 +101,9 @@ describe("price catalog", () => {
     expect(Object.values(PLANS).map((p) => p.name)).toEqual(["Marketing Report", "Marketing Assistant", "Marketing Studio", "Marketing Suite"]);
     // Stripe was not changed: its products keep their names.
     expect(Object.values(PLANS).map((p) => p.stripeName)).toEqual(["Marketing Plan", "Single Site", "Business Plus", "Multi-Site"]);
-    expect(Object.values(PLANS).map((p) => p.tier)).toEqual(["current", "current", "planned", "planned"]);
+    expect(Object.values(PLANS).map((p) => p.tier)).toEqual(["current", "planned", "planned", "planned"]);
+    expect(PLANS.marketing_plan.description).toBe("Get a detailed look at your website. See what needs improvement, why it matters and what to do next.");
+    expect(PLANS.single_site.description).toBe("Ongoing marketing guidance, content creation and help putting your marketing into action.");
     expect(priceLabel("marketing_plan", "one_time")).toBe("$49 one-time");
     expect(priceLabel("single_site", "month")).toBe("$79/month");
     expect(priceLabel("single_site", "year")).toBe("$756 billed yearly");
@@ -155,7 +157,8 @@ describe("price catalog", () => {
 
   it("offers only plans whose promises the app keeps", () => {
     expect(PLANS.marketing_plan.available).toBe(true);
-    expect(PLANS.single_site.available).toBe(true);
+    // Marketing Assistant is on hold until drafts and ongoing help work (owner decision, Nov 24 2026).
+    expect(PLANS.single_site.available).toBe(false);
     // Marketing Studio and Marketing Suite are planned future tiers: never sold.
     expect(PLANS.business_plus.available).toBe(false);
     expect(PLANS.multi_site.available).toBe(false);

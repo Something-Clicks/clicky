@@ -291,16 +291,16 @@ test.describe("claim and free uses", () => {
     await expect(page.getByText("You've used your 3 free uses.")).toBeVisible();
     const main = page.locator("main");
     if (STRIPE_ON) {
-      await expect(main.getByRole("button", { name: "Get my plan" })).toBeVisible();
-      await expect(main.getByRole("button", { name: "Choose monthly" })).toBeVisible();
-      await expect(main.getByRole("button", { name: "Choose yearly" })).toBeVisible();
-      // Marketing Plan, Single Site monthly, Single Site yearly: the only things that can be bought.
-      await expect(main.locator("form input[name=plan]")).toHaveCount(3);
+      await expect(main.getByRole("button", { name: "Get my report" })).toBeVisible();
+      // Marketing Assistant is on hold: no monthly or yearly checkout. The Marketing Report is the only thing for sale.
+      await expect(main.getByRole("button", { name: /Choose (monthly|yearly)/ })).toHaveCount(0);
+      await expect(main.locator("form input[name=plan]")).toHaveCount(1);
     } else {
       // No Stripe key on this server: nothing can be bought, and the page says so plainly.
       await expect(main.getByText("Checkout opens soon.")).toBeVisible();
       await expect(main.locator("form input[name=plan]")).toHaveCount(0);
     }
+    await expect(main.getByRole("table").getByRole("row", { name: /Marketing Assistant/ })).toBeVisible();
     await expect(main.getByRole("table").getByRole("row", { name: /Marketing Studio/ })).toBeVisible();
     await expect(main.getByRole("table").getByRole("row", { name: /Marketing Suite/ })).toBeVisible();
     expect(await main.innerText()).not.toMatch(BANNED);
@@ -337,11 +337,8 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
     return stripe(`/v1/checkout/sessions/${id}?expand[]=line_items`);
   }
 
-  for (const [button, plan, interval, mode] of [
-    ["Get my plan", "marketing_plan", "one_time", "payment"],
-    ["Choose monthly", "single_site", "month", "subscription"],
-    ["Choose yearly", "single_site", "year", "subscription"],
-  ] as const) {
+  // Marketing Assistant (single_site) is on hold, so only the Marketing Report can start a checkout.
+  for (const [button, plan, interval, mode] of [["Get my report", "marketing_plan", "one_time", "payment"]] as const) {
     test(`${button}: opens Stripe Checkout with the right TEST price`, async ({ browser }, info) => {
       test.skip(!STRIPE_ON, NEED_STRIPE);
       const s = await startCheckout(browser, info, button);

@@ -20,7 +20,7 @@ export default function PricingPage() {
         </Link>
       </div>
       <Plans mode={{ kind: "link" }} />
-      <p className="muted small">Prices in US dollars. Cancel a subscription any time from your account.</p>
+      <p className="muted small">Prices in US dollars.</p>
     </div>
   );
 }

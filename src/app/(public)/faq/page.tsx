@@ -25,7 +25,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "How much does it cost after that?",
-    a: `The ${PLANS.marketing_plan.name} is ${priceLabel("marketing_plan", "one_time")}. ${PLANS.single_site.name} is ${priceLabel("single_site", "month")} or ${priceLabel("single_site", "year")}. No retainers, cancel any time.`,
+    a: `The ${PLANS.marketing_plan.name} is ${priceLabel("marketing_plan", "one_time")}: a detailed look at your website, what needs improvement, why it matters and what to do next. ${PLANS.single_site.name}, for ongoing help, is planned and can't be bought yet. No subscriptions or retainers today.`,
   },
   {
     q: "Do you guarantee rankings, calls or sales?",

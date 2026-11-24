@@ -132,7 +132,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           ) : !canDraft ? (
             <>
               <h3 style={{ marginTop: 12 }}>We can draft this for you</h3>
-              <p className="muted">Drafts come with {PLANS.single_site.name}. You can still follow the steps yourself.</p>
+              <p className="muted">Drafts are planned for {PLANS.single_site.name}, which isn&apos;t available yet. You can still follow the steps yourself.</p>
               <Link className="btn light" href="/app/upgrade">
                 See plans
               </Link>

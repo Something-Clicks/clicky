@@ -88,19 +88,15 @@ test("pricing: exact names and prices; unavailable plans can't be bought", async
   const main = page.locator("main");
   await expect(main.getByRole("heading", { name: "Marketing Report" })).toBeVisible();
   await expect(main.getByText("$49 one-time")).toBeVisible();
-  await expect(main.getByRole("heading", { name: "Marketing Assistant" })).toBeVisible();
-  await expect(main.getByText("$79/month", { exact: true })).toBeVisible();
-  await expect(main.getByText("or $756 billed yearly")).toBeVisible();
+  await expect(main.getByText("Get a detailed look at your website. See what needs improvement, why it matters and what to do next.")).toBeVisible();
+  // Marketing Assistant is on hold: listed as planned, never sold.
   const soon = main.getByRole("table");
+  await expect(soon.getByRole("row", { name: /Marketing Assistant Ongoing marketing guidance, content creation and help putting your marketing into action\. \$79\/month \$756 billed yearly/ })).toBeVisible();
   await expect(soon.getByRole("row", { name: /Marketing Studio \$179\/month \$1,716 billed yearly/ })).toBeVisible();
   await expect(soon.getByRole("row", { name: /Marketing Suite \$399\/month \$3,828 billed yearly/ })).toBeVisible();
-  // Buy links exist only for Marketing Plan and Single Site.
+  // The only buy link is the Marketing Report.
   const hrefs = await main.locator("a[href*='plan=']").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
-  expect(hrefs.sort()).toEqual([
-    "/app/upgrade?plan=marketing_plan&interval=one_time",
-    "/app/upgrade?plan=single_site&interval=month",
-    "/app/upgrade?plan=single_site&interval=year",
-  ]);
+  expect(hrefs).toEqual(["/app/upgrade?plan=marketing_plan&interval=one_time"]);
   expect(await main.innerText()).not.toMatch(/Solo|Growth AI|Starter AI|Scale|Diagnostic Audit|\$39\b/);
 });
 
