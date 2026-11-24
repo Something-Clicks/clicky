@@ -7,13 +7,13 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
 export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
-  title: { default: "Something Clicks: Make the complicated click.", template: "%s | Something Clicks" },
+  title: { default: "Something Clicks", template: "%s | Something Clicks" },
   description:
-    "Know what is working, what needs attention, and what to do next. AI helps prepare the work. You stay in control.",
+    "See what's worth fixing on your website, get the work drafted, and approve what you like.",
   applicationName: "Something Clicks",
 };
 
-export const viewport: Viewport = { themeColor: "#f7f9fc" };
+export const viewport: Viewport = { themeColor: "#fff9ef" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

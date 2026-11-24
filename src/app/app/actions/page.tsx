@@ -27,9 +27,8 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <div className="eyebrow">Your priorities</div>
-      <h1 className="h1">A few things worth your attention.</h1>
-      <p className="sub">Each recommendation explains the evidence, the reason, and the next step.</p>
+      <h1 className="h1">To do</h1>
+      <p className="sub">Most important first. Each one shows the evidence.</p>
       <nav className="steps" aria-label="Filter actions" style={{ marginTop: 0 }}>
         {FILTERS.map((f) => (
           <Link key={f.key} href={href(f.key, impact)} className={show === f.key ? "step done" : "step"} aria-current={show === f.key ? "page" : undefined} style={{ textDecoration: "none" }}>

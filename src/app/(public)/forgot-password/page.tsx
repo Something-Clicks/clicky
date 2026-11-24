@@ -11,10 +11,9 @@ export default function ForgotPasswordPage() {
   const [state, action] = useActionState(requestPasswordReset, {} as FormState);
   return (
     <>
-      <div className="eyebrow">Reset your password</div>
-      <h1 className="h1">Let&apos;s get you back in.</h1>
+      <h1 className="h1">Reset your password</h1>
       <p className="sub">Enter your email and we&apos;ll send you a link to choose a new password.</p>
-      <form className="card" style={{ maxWidth: 480 }} action={action} noValidate>
+      <form className="card" action={action} noValidate data-clarity-mask="true">
         <FormMessage state={state} />
         {state.ok ? null : (
           <>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Analytics consent. Nothing loads until the visitor chooses Yes:
@@ -93,6 +94,17 @@ export const OPEN_CONSENT = "sc:open-consent";
 
 export function ConsentBanner() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const first = useRef(true);
+
+  // Page views for client-side navigation (the first view is sent when analytics loads).
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    trackPageView();
+  }, [pathname]);
 
   useEffect(() => {
     if (!analyticsConfigured) return;

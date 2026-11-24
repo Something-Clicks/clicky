@@ -8,7 +8,7 @@ import { EvidenceLine, StatusPill, VerificationPill } from "@/components/intelli
 import { PrepareDraftForm } from "@/components/prepare-draft";
 import { AutoRefresh } from "@/components/run-analysis";
 import { requireOrganization } from "@/lib/auth";
-import { getCard, getEntitlements, getSpeedComparison, impactLabel } from "@/lib/queries";
+import { getCard, getEntitlements, getFreeUses, getSpeedComparison } from "@/lib/queries";
 import Link from "next/link";
 import { formatWhen } from "@/lib/activity";
 import { isAiConfigured } from "@/lib/server/ai";
@@ -17,7 +17,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { CopyButton } from "./copy-button";
 
-export const metadata: Metadata = { title: "Action detail" };
+export const metadata: Metadata = { title: "To do" };
+export const maxDuration = 120;
 
 function StatusButton({ id, status, label, variant }: { id: string; status: string; label: string; variant?: string }) {
   return (
@@ -49,24 +50,27 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const running = run?.status === "running";
-  const ent = await getEntitlements(ws.organization.id);
+  const [ent, free] = await Promise.all([getEntitlements(ws.organization.id), getFreeUses(ws.organization.id)]);
   const planAllowsDraft = ent.drafts === "all" || (ent.drafts === "meta" && card.execution_type === "meta");
+  const canDraft = planAllowsDraft || free.remaining > 0;
   const speed = card.check_key === "pagespeed.performance" ? await getSpeedComparison(ws.organization.id, card.id) : null;
   const fields = draftFields(approval?.agent_runs?.output);
   const lastFailed = run?.status === "failed" ? run.error : null;
 
   return (
     <>
-      <div className="eyebrow">
-        Action card · {impactLabel(card.impact_priority).toLowerCase()} · {card.confidence} confidence
+      <div className="row" style={{ marginBottom: 8 }}>
+        <span className={card.impact_priority === "high" ? "pill coral" : card.impact_priority === "low" ? "pill green" : "pill yellow"}>
+          {card.impact_priority === "high" ? "High" : card.impact_priority === "low" ? "Low" : "Medium"} impact
+        </span>
       </div>
       <h1 className="h1">{card.title}</h1>
       <p className="sub">{card.explanation}</p>
-      <div className="grid two">
+      <div className="two">
         <div className="card">
           <h3>Why this matters</h3>
           <p className="muted">{card.why_it_matters}</p>
-          <h3 style={{ marginTop: 22 }}>Recommended action</h3>
+          <h3 style={{ marginTop: 22 }}>What to do</h3>
           <p className="muted">{card.recommended_action}</p>
           <h3 style={{ marginTop: 22 }}>What it should help with</h3>
           <p className="muted">{card.expected_benefit} This is an expected benefit, not a guaranteed result.</p>
@@ -74,9 +78,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           {evidence.map((e) => (
             <EvidenceLine key={e.id} e={e} />
           ))}
-          <p className="small muted">
-            {card.wording === "ai" ? "Explained by AI from the evidence above." : "Explained from the evidence above."}
-          </p>
+
         </div>
         <div className="card">
           <div className="row">
@@ -87,18 +89,18 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           {!draftable ? (
             <>
               <h3 style={{ marginTop: 12 }}>A task for you or your web designer</h3>
-              <p className="muted">This needs a change on your website that AI can&apos;t make for you. Mark it done once it&apos;s fixed.</p>
+              <p className="muted">This needs a change on your website that we can&apos;t draft for you. Mark it done once it&apos;s fixed.</p>
             </>
           ) : running ? (
             <>
               <AutoRefresh active />
               <h3 style={{ marginTop: 12 }}>Preparing your draft…</h3>
-              <p className="muted" role="status">AI is writing a {DRAFT_LABEL[card.execution_type]?.toLowerCase()} from your business details and the evidence. This usually takes under a minute.</p>
+              <p className="muted" role="status">Writing a {DRAFT_LABEL[card.execution_type]?.toLowerCase()} from your business details and the evidence. This usually takes under a minute.</p>
             </>
           ) : approval?.decision === "pending" ? (
             <>
               <span className="pill yellow" style={{ marginTop: 12 }}>Waiting for approval</span>
-              <h3 style={{ marginTop: 12 }}>AI-prepared draft</h3>
+              <h3 style={{ marginTop: 12 }}>Your draft</h3>
               <DraftPreview fields={fields} />
               {isOwner ? (
                 <ApprovalActions approvalId={approval.id}>
@@ -120,26 +122,26 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
             </>
           ) : closed ? (
             <h3 style={{ marginTop: 12 }}>{card.status === "done" ? "Done" : "Dismissed"}</h3>
-          ) : !planAllowsDraft ? (
+          ) : !canDraft ? (
             <>
-              <h3 style={{ marginTop: 12 }}>AI can help prepare this</h3>
-              <p className="muted">
-                {ent.drafts === "none" ? "AI drafts come with a monthly plan." : "This kind of draft comes with the Growth AI plan."} You can
-                still follow the recommended action yourself.
-              </p>
-              <Link className="btn light" href="/app/billing">
+              <h3 style={{ marginTop: 12 }}>We can draft this for you</h3>
+              <p className="muted">Drafts come with Single Site. You can still follow the steps yourself.</p>
+              <Link className="btn light" href="/app/upgrade">
                 See plans
               </Link>
             </>
           ) : !isAiConfigured() ? (
             <>
-              <h3 style={{ marginTop: 12 }}>AI can help prepare this</h3>
-              <p className="muted">AI drafting isn&apos;t switched on yet. You can still follow the recommended action yourself.</p>
+              <h3 style={{ marginTop: 12 }}>We can draft this for you</h3>
+              <p className="muted">Drafts aren&apos;t switched on yet. You can still follow the steps yourself.</p>
             </>
           ) : (
             <>
-              <h3 style={{ marginTop: 12 }}>AI can help prepare this</h3>
-              <p className="muted">AI will prepare a {DRAFT_LABEL[card.execution_type]?.toLowerCase()} for you to review. Nothing changes on your website unless you use it.</p>
+              <h3 style={{ marginTop: 12 }}>We can draft this for you</h3>
+              <p className="muted">
+                We&apos;ll write a {DRAFT_LABEL[card.execution_type]?.toLowerCase()} for you to review. Nothing changes on your website unless you use it.
+                {!planAllowsDraft ? ` Uses one free use (${free.remaining} left).` : ""}
+              </p>
               {lastFailed ? <p className="notice error" role="alert">The last draft couldn&apos;t be prepared: {lastFailed}</p> : null}
               {approval?.decision === "changes_requested" && approval.note ? (
                 <p className="notice">Your requested changes: {approval.note}</p>
@@ -156,12 +158,12 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
             <div className="evidence">
               <b>Result</b> ·{" "}
               {card.verification === "fixed"
-                ? `The analysis on ${formatWhen(card.verified_at)} no longer found this issue.`
-                : `The analysis on ${formatWhen(card.verified_at)} still found this issue.`}
+                ? `The check on ${formatWhen(card.verified_at)} no longer found this.`
+                : `The check on ${formatWhen(card.verified_at)} still found this.`}
             </div>
           ) : (card.status === "done" || card.status === "approved") ? (
             <div className="evidence">
-              <b>Result</b> · Run a new analysis to check whether this is fixed.
+              <b>Result</b> · Check your website again to see whether this is fixed.
             </div>
           ) : null}
           {speed?.after != null ? (

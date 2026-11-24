@@ -2,9 +2,7 @@
 export default function Loading() {
   return (
     <div role="status" aria-live="polite">
-      <div className="eyebrow">Your workspace</div>
-      <h1 className="h1">Loading your workspace…</h1>
-      <p className="sub">Getting your latest business details and activity.</p>
+      <h1 className="h1">Loading…</h1>
     </div>
   );
 }

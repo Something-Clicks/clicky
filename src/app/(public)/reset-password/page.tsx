@@ -10,8 +10,7 @@ export default async function ResetPasswordPage() {
   const user = await getUser();
   return (
     <>
-      <div className="eyebrow">Reset your password</div>
-      <h1 className="h1">Choose a new password.</h1>
+      <h1 className="h1">Choose a new password</h1>
       <p className="sub">Use at least 8 characters.</p>
       {user ? (
         <PasswordForm afterSuccess={{ href: "/app", label: "Go to your workspace" }} />

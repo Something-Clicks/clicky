@@ -41,9 +41,8 @@ export default async function ApprovalsPage() {
   return (
     <>
       <AutoRefresh active={(preparing ?? 0) > 0} />
-      <div className="eyebrow">Your approval</div>
-      <h1 className="h1">Review before anything goes live.</h1>
-      <p className="sub">You stay in control. Preview the work, approve it, or copy it for use elsewhere.</p>
+      <h1 className="h1">Drafts</h1>
+      <p className="sub">Review, approve, then copy or download. We never publish anything for you.</p>
       {preparing ? (
         <p className="notice" role="status">
           Preparing {preparing} draft{preparing === 1 ? "" : "s"}… They&apos;ll appear here when ready.
@@ -53,7 +52,7 @@ export default async function ApprovalsPage() {
         <div className="card empty">
           <Clicky size={72} alt="" />
           <h3>Nothing is waiting for you.</h3>
-          <p className="muted">When AI prepares a draft for one of your actions, it will appear here for your review.</p>
+          <p className="muted">Drafts you ask for show up here for your review.</p>
           <Link className="btn light" href="/app/actions">
             See your actions
           </Link>
@@ -69,7 +68,7 @@ export default async function ApprovalsPage() {
                     <span className="pill yellow">Waiting for approval</span>
                     <h3 style={{ marginTop: 10 }}>{DRAFT_LABEL[a.agent_runs?.draft_type ?? ""] ?? "Draft"}</h3>
                     <p className="muted">
-                      For “{a.action_cards?.title}”. Prepared by AI from your business details and the evidence on that
+                      For “{a.action_cards?.title}”. Prepared from your business details and the evidence on that
                       action{a.agent_runs?.instructions ? ", with your notes" : ""}.
                     </p>
                   </div>

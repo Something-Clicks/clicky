@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { signOut } from "@/app/actions/auth";
 import { PasswordForm } from "@/components/password-form";
 import { requireOrganization } from "@/lib/auth";
 import { isEmailConfigured } from "@/lib/server/notify";
@@ -8,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { BusinessForm, NotificationsForm, ProfileForm } from "./forms";
 
-export const metadata: Metadata = { title: "Settings" };
+export const metadata: Metadata = { title: "Account" };
 
 export default async function SettingsPage() {
   const ws = await requireOrganization();
@@ -19,10 +20,19 @@ export default async function SettingsPage() {
   ]);
   return (
     <>
-      <div className="eyebrow">Your account</div>
-      <h1 className="h1">Settings</h1>
-      <p className="sub">Manage your profile, business, team access, and preferences.</p>
-      <div className="grid two">
+      <h1 className="h1">Account</h1>
+      <div className="stack" style={{ marginBottom: 16 }}>
+        <div className="row">
+          <Link className="btn small light" href="/app/billing">Plan and payments</Link>
+          <Link className="btn small light" href="/app/activity">History</Link>
+          <Link className="btn small light" href="/app/analysis">Website check</Link>
+          <Link className="btn small light" href="/app/settings/members">Members</Link>
+        </div>
+        <form action={signOut}>
+          <button className="btn small ghost" type="submit">Sign out</button>
+        </form>
+      </div>
+      <div className="two">
         <ProfileForm fullName={ws.fullName ?? ""} email={ws.email} />
         <BusinessForm
           canEdit={ws.organization.role === "owner"}

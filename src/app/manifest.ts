@@ -4,10 +4,10 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Something Clicks",
     short_name: "Something Clicks",
-    description: "Make the complicated click.",
+    description: "Marketing help that gets work done.",
     start_url: "/app",
     display: "standalone",
-    background_color: "#f7f9fc",
+    background_color: "#fff9ef",
     theme_color: "#3977d5",
     icons: [
       { src: "/brand/icon-192.png", sizes: "192x192", type: "image/png" },

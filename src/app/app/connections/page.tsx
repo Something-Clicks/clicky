@@ -29,8 +29,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
           </div>
         </div>
       ) : null}
-      <div className="eyebrow">Your data, your choice</div>
-      <h1 className="h1">Connect the tools you already use.</h1>
+      <h1 className="h1">Connections</h1>
       <p className="sub">
         A source shows as connected only after you authorize it. You can disconnect at any time, and we explain what
         each permission is for.
@@ -65,7 +64,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
           <div>
             <h3>PageSpeed Insights</h3>
             <p className="muted">
-              Check page loading and user experience. Public data, so no sign-in is needed: it runs with each analysis.
+              Check page loading and user experience. Public data, so no sign-in is needed: it runs with each website check.
               {psi?.status === "measured" && last?.completed_at ? ` Last checked ${formatWhen(last.completed_at)}.` : ""}
             </p>
           </div>

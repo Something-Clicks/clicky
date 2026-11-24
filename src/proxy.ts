@@ -6,15 +6,20 @@ import { isProtectedPath } from "@/lib/redirect";
 /** Content Security Policy with a fresh nonce per request (Next.js adds it to its own scripts). */
 function contentSecurityPolicy(nonce: string): string {
   const dev = process.env.NODE_ENV === "development";
+  // Analytics hosts are allowed only when configured; the scripts still load only after consent.
+  const ga = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
+    ? " https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com"
+    : "";
+  const clarity = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID ? " https://*.clarity.ms https://c.bing.com" : "";
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
     `style-src 'self' 'nonce-${nonce}'${dev ? " 'unsafe-inline'" : ""}`,
     // The reference layout uses a few inline style attributes (not scripts).
     "style-src-attr 'unsafe-inline'",
-    "img-src 'self' blob: data:",
+    `img-src 'self' blob: data:${ga}${clarity}`,
     "font-src 'self'",
-    "connect-src 'self'",
+    `connect-src 'self'${ga}${clarity}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",

@@ -21,8 +21,9 @@ type Mode = { kind: "link" } | { kind: "checkout"; canBuy: boolean };
 
 function Buy({ plan, interval, label, mode, light }: { plan: PlanId; interval: Interval; label: string; mode: Mode; light?: boolean }) {
   if (mode.kind === "link") {
+    // On the public pricing page the one filled button is "Start free".
     return (
-      <Link className={`btn block${light ? " light" : ""}`} href={`/app/upgrade?plan=${plan}&interval=${interval}`}>
+      <Link className="btn block light" href={`/app/upgrade?plan=${plan}&interval=${interval}`}>
         {label}
       </Link>
     );
@@ -86,7 +87,7 @@ export function Plans({ mode, highlight }: { mode: Mode; highlight?: string }) {
             {(["business_plus", "multi_site"] as const).map((id) => (
               <tr key={id}>
                 <th scope="row">{PLANS[id].name}</th>
-                <td>{priceLabel(id, "month")}</td>
+                <td className="nowrap">{priceLabel(id, "month")}</td>
                 <td>{priceLabel(id, "year")}</td>
               </tr>
             ))}

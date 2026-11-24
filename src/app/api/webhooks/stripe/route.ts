@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 
 import { log } from "@/lib/log";
+import { track } from "@/lib/server/site";
 import { applyStripeEvent, IgnoredEvent, type BillingStore } from "@/lib/server/stripe";
 import type { Database } from "@/lib/supabase/types";
 
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
     async recordPurchase(org, plan, session, customer, amount) {
       const { error } = await db.rpc("billing_record_purchase", { p_key: key, p_org: org, p_plan: plan, p_session: session, p_customer: customer, p_amount: amount });
       if (error) throw new Error(error.message);
+      await track("purchase_completed", { plan });
     },
     async upsertSubscription(s) {
       const { error } = await db.rpc("billing_upsert_subscription", {
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
         p_interval: s.interval, p_price: s.priceId,
       });
       if (error) throw new Error(error.message);
+      if (event.type === "checkout.session.completed") await track("subscription_completed", { plan: s.plan, interval: s.interval });
     },
   };
 

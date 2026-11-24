@@ -20,9 +20,8 @@ export default async function ActivityPage() {
 
   return (
     <>
-      <div className="eyebrow">A clear record</div>
-      <h1 className="h1">See what has happened.</h1>
-      <p className="sub">A transparent history of analyses, approvals, agent runs, and completed work.</p>
+      <h1 className="h1">History</h1>
+      <p className="sub">Checks, drafts, approvals and finished work.</p>
       {error ? (
         <p className="notice error" role="alert">
           We couldn&apos;t load your activity right now. Refresh the page to try again.
