@@ -12,7 +12,7 @@ export function ApprovalActions({ approvalId, children }: { approvalId: string; 
   const [asking, setAsking] = useState(false);
   if (state.ok) return <FormMessage state={state} />;
   return (
-    <form action={action}>
+    <form data-clarity-mask="true" action={action}>
       <FormMessage state={state} />
       <input type="hidden" name="id" value={approvalId} />
       {asking ? (

@@ -222,3 +222,26 @@ Only the Resend records above. No other DNS change is needed.
 `/privacy` and `/terms` are **drafts for attorney review** and say so on the page. Have your attorney review and
 approve them, fill the [bracketed] items, then remove the draft banner. Keep `FREE_PREVIEW_ENABLED` unset until the
 Privacy Policy is published.
+
+
+## Analytics events (GA4, Clarity, Supabase)
+IDs come only from `NEXT_PUBLIC_GA_MEASUREMENT_ID` and `NEXT_PUBLIC_CLARITY_PROJECT_ID` (build-time; unset = nothing loads, no banner). One `ConsentBanner` lives in the root layout. GA4/Clarity events fire only after "Yes" (events raised earlier are held in memory and dropped on "No"). `TrackEvent` fires once per browser session per name; page views carry the path only. Supabase `funnel_events` counts are server-side (or `/api/track` for four browser-side steps) and hold no personal data.
+
+| Step | GA4 / Clarity (after consent) | Supabase count |
+|---|---|---|
+| Landing visit | `landing_visit` (home) | `homepage_visit` |
+| Website submitted | `website_submitted` (results/working page) | `website_submitted` |
+| First result | `first_result_completed` | `first_result_completed` |
+| Account created | `account_created` (`/app?welcome=1`) | `signup_completed` |
+| Sign-in | `sign_in` (first app page per session) | `sign_in` |
+| Free use | not sent to GA | `free_use_consumed` |
+| Return visit | `return_visit` (>12h since last visit, consent only) | `return_visit` |
+| Limit reached | `limit_reached` | `limit_reached` |
+| Pricing viewed | `pricing_viewed` | `pricing_viewed` |
+| Checkout started | `checkout_started` (button) | `checkout_started` |
+| Subscription completed | `subscription_completed` (billing page, only once the webhook granted the plan) | `subscription_completed` |
+| Feedback | `feedback_submitted` | `feedback_submitted` |
+
+Clarity: every `<form>` and the workspace/results carry `data-clarity-mask`. In the Clarity dashboard also set masking to at least "Balanced" (Settings, Setup, Masking).
+
+Create the IDs: GA4 → Admin → Create property → Web stream → copy the Measurement ID (`G-…`). Clarity → New project → copy the project id from the install URL. Add both to Vercel Preview (and later Production), redeploy, accept the banner on the site, and watch GA4 Realtime / Clarity Live.

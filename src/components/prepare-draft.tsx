@@ -9,7 +9,7 @@ import type { FormState } from "@/lib/validation";
 export function PrepareDraftForm({ cardId, label, defaultNotes = "" }: { cardId: string; label: string; defaultNotes?: string }) {
   const [state, action] = useActionState(prepareDraft, {} as FormState);
   return (
-    <form action={action}>
+    <form data-clarity-mask="true" action={action}>
       <FormMessage state={state} />
       {state.ok ? null : (
         <>

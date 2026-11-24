@@ -30,7 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       right={<span className="pill coral">Admin · every view is logged</span>}
       sideFooter={
         <>
-          <form action={signOut}>
+          <form data-clarity-mask="true" action={signOut}>
             <button className="nav" type="submit" style={{ border: 0, background: "none", font: "inherit", cursor: "pointer" }}>
               Sign out
             </button>

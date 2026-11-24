@@ -11,7 +11,7 @@ export function StartForm({ ticket, cta = "Check my website" }: { ticket: string
   const [state, action] = useActionState(startFirstUse, {} as FormState);
   const err = state.fieldErrors ?? {};
   return (
-    <form className="start-form" action={action} noValidate aria-label="Check your website">
+    <form data-clarity-mask="true" className="start-form" action={action} noValidate aria-label="Check your website">
       <div className="form-msg" style={state.error ? undefined : { display: "none" }}>
         <FormMessage state={state} />
       </div>

@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { TrackEvent } from "@/components/track-event";
 import { SaveThis, Thumbs, WorkingSteps } from "@/components/preview-parts";
 import { AutoRefresh } from "@/components/run-analysis";
 import { getPreview, type Preview, type PreviewCard, type PreviewEvidence } from "@/lib/server/preview";
@@ -69,6 +70,7 @@ function Card({ card, evidence }: { card: PreviewCard; evidence: PreviewEvidence
 function Working({ p }: { p: Preview }) {
   return (
     <div className="working narrow" role="status" aria-live="polite">
+      <TrackEvent name="website_submitted" id="preview" />
       <AutoRefresh active everyMs={3000} />
       <Image src="/brand/clicky-3d.png" alt="" width={720} height={502} priority />
       <h1 className="h1">Checking {p.domain}</h1>
@@ -85,6 +87,7 @@ function Results({ p }: { p: Preview }) {
   const speed = p.coverage?.pagespeed;
   return (
     <div className="stack narrow">
+      <TrackEvent name="first_result_completed" id="preview" />
       <div>
         <div className="eyebrow">{p.domain}</div>
         <h1 className="h1">{cards.length === 0 ? "Nice work. Nothing big to fix." : `${cards.length} ${cards.length === 1 ? "thing" : "things"} worth fixing`}</h1>

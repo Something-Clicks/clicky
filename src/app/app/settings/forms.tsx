@@ -10,7 +10,7 @@ import type { FormState } from "@/lib/validation";
 export function ProfileForm({ fullName, email }: { fullName: string; email: string }) {
   const [state, action] = useActionState(updateProfile, {} as FormState);
   return (
-    <form className="card" action={action} noValidate>
+    <form data-clarity-mask="true" className="card" action={action} noValidate>
       <h3>Personal profile</h3>
       <FormMessage state={state} />
       <Field label="Name" name="fullName" placeholder="Your name" autoComplete="name" defaultValue={fullName} state={state} required />
@@ -33,7 +33,7 @@ export function BusinessForm({
 }) {
   const [state, action] = useActionState(updateBusiness, {} as FormState);
   return (
-    <form className="card" action={action} noValidate>
+    <form data-clarity-mask="true" className="card" action={action} noValidate>
       <h3>Business profile</h3>
       <FormMessage state={state} />
       {!canEdit ? <p className="notice">Only the account owner can change the business profile.</p> : null}
@@ -57,7 +57,7 @@ function Check({ name, label, defaultChecked, disabled }: { name: string; label:
 export function NotificationsForm({ draftReady, analysisComplete, isOwner, emailReady }: { draftReady: boolean; analysisComplete: boolean; isOwner: boolean; emailReady: boolean }) {
   const [state, action] = useActionState(updateNotifications, {} as FormState);
   return (
-    <form className="card" action={action}>
+    <form data-clarity-mask="true" className="card" action={action}>
       <h3>Notifications</h3>
       <p className="muted">Choose when to receive updates.</p>
       <FormMessage state={state} />

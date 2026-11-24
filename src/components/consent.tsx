@@ -39,6 +39,7 @@ declare global {
     gtag?: (...args: unknown[]) => void;
     clarity?: ((...args: unknown[]) => void) & { q?: unknown[] };
     __scAnalytics?: boolean;
+    __scQueue?: [string, Record<string, string | number | boolean>][];
   }
 }
 
@@ -76,6 +77,10 @@ function loadAnalytics() {
     document.head.appendChild(s);
     window.clarity("consent");
   }
+  // Events raised before analytics finished loading (a page can fire one before the choice is read).
+  const queued = window.__scQueue ?? [];
+  window.__scQueue = [];
+  for (const [name, params] of queued) trackEvent(name, params);
 }
 
 /** Sends a GA4 page view (path only) when analytics is on. */
@@ -87,7 +92,31 @@ export function trackPageView() {
 
 /** A GA4 funnel event. Only labels: never emails, names, website text or drafts. */
 export function trackEvent(name: string, params: Record<string, string | number | boolean> = {}) {
-  if (window.__scAnalytics && window.gtag) window.gtag("event", name, { ...params, page_location: safeLocation() });
+  if (!analyticsConfigured) return;
+  if (!window.__scAnalytics) {
+    // Not loaded yet. Held in memory only; dropped if the visitor says No.
+    (window.__scQueue = window.__scQueue ?? []).push([name, params]);
+    return;
+  }
+  if (GA && window.gtag) window.gtag("event", name, { ...params, page_location: safeLocation() });
+  if (CLARITY && window.clarity) window.clarity("event", name);
+}
+
+const RETURN_KEY = "sc_last_visit";
+const RETURN_AFTER_MS = 12 * 60 * 60 * 1000;
+/** After consent: a visit more than 12 hours after the last one in this browser counts as a return visit. */
+function checkReturnVisit() {
+  try {
+    const last = Number(window.localStorage.getItem(RETURN_KEY) ?? 0);
+    const now = Date.now();
+    if (last && now - last > RETURN_AFTER_MS) {
+      trackEvent("return_visit");
+      void fetch("/api/track", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event: "return_visit" }), keepalive: true });
+    }
+    if (!last || now - last > RETURN_AFTER_MS) window.localStorage.setItem(RETURN_KEY, String(now));
+  } catch {
+    // Storage blocked: no return-visit count.
+  }
 }
 
 export const OPEN_CONSENT = "sc:open-consent";
@@ -112,6 +141,7 @@ export function ConsentBanner() {
     if (choice === "yes") {
       loadAnalytics();
       trackPageView();
+      checkReturnVisit();
     } else if (choice === null) {
       // Defer the state update out of the effect body.
       queueMicrotask(() => setOpen(true));
@@ -128,6 +158,7 @@ export function ConsentBanner() {
     if (v === "yes") {
       loadAnalytics();
       trackPageView();
+      checkReturnVisit();
     } else if (before === "yes" && window.__scAnalytics) {
       // Already loaded: reload so nothing keeps running.
       window.location.reload();

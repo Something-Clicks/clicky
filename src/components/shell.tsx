@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { ConsentBanner } from "./consent";
 import { NavLink, TabLink } from "./nav-link";
 
 export interface NavGroup {
@@ -77,7 +76,6 @@ export function Shell({
           </TabLink>
         ))}
       </nav>
-      <ConsentBanner />
     </div>
   );
 }

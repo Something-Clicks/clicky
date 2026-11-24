@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { ConsentBanner, ConsentSettingsButton } from "./consent";
+import { ConsentSettingsButton } from "./consent";
 
 /** Public pages: logo, two links, content, footer. Fits a 390px phone without a menu. */
 export function SiteChrome({ signedIn, children }: { signedIn: boolean; children: React.ReactNode }) {
@@ -34,7 +34,6 @@ export function SiteChrome({ signedIn, children }: { signedIn: boolean; children
           <ConsentSettingsButton />
         </nav>
       </footer>
-      <ConsentBanner />
     </div>
   );
 }

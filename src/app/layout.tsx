@@ -3,6 +3,8 @@ import "./globals.css";
 
 import type { Metadata, Viewport } from "next";
 
+import { ConsentBanner } from "@/components/consent";
+
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
 export const metadata: Metadata = {
@@ -18,7 +20,10 @@ export const viewport: Viewport = { themeColor: "#fff9ef" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-US">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ConsentBanner />
+      </body>
     </html>
   );
 }

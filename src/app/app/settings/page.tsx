@@ -28,7 +28,7 @@ export default async function SettingsPage() {
           <Link className="btn small light" href="/app/analysis">Website check</Link>
           <Link className="btn small light" href="/app/settings/members">Members</Link>
         </div>
-        <form action={signOut}>
+        <form data-clarity-mask="true" action={signOut}>
           <button className="btn small ghost" type="submit">Sign out</button>
         </form>
       </div>

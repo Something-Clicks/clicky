@@ -10,7 +10,8 @@
  *  - Sign-in: users are created in clicky-dev with a known password, so no email is sent.
  *  - Webhooks: Stripe cannot reach localhost, so Stripe's own stored events are re-sent to the local
  *    route, signed with the TEST endpoint's signing secret.
- *  - Draft text: no Anthropic key, so the draft is saved through the real complete_agent_run function.
+ *  - Drafts are switched off for customers (FEATURES.drafts), so no journey creates or approves one.
+ *  - Stripe TEST checkout and subscription tests run only with E2E_STRIPE=1.
  */
 import { createHash, createHmac, randomBytes } from "node:crypto";
 
@@ -21,6 +22,8 @@ import { expect, test, type Browser, type BrowserContext, type Page, type TestIn
 import fixture from "./fixtures/analysis.json";
 
 const FULL = process.env.E2E_FULL === "1";
+const STRIPE_ON = process.env.E2E_STRIPE === "1"; // Stripe TEST checkout and subscription tests: opt-in
+const NEED_STRIPE = "Stripe TEST checkout tests run only with E2E_STRIPE=1.";
 const URL_ = process.env.E2E_SUPABASE_URL ?? "";
 const KEY = process.env.E2E_SUPABASE_KEY ?? "";
 const SITE_KEY = process.env.SITE_SERVER_KEY ?? "";
@@ -144,7 +147,7 @@ test.describe("anonymous first result", () => {
     await page.waitForURL(/\/start$/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/things? worth fixing/);
     await expect(page.getByText("Observed").first()).toBeVisible();
-    await expect(page.getByText("We can draft this").first()).toBeVisible();
+    expect(await page.locator("main").innerText()).not.toMatch(/draft/i); // drafts are not offered
     expect(await page.locator("main").innerText()).not.toMatch(BANNED);
     await noSideScroll(page);
     await axe(page);
@@ -260,11 +263,18 @@ test.describe("claim and free uses", () => {
     expect(c2).toBeNull();
     expect((await uses()).used).toBe(2);
 
-    // Use 3: a draft.
-    const { data: card } = await pat.from("action_cards").select("id").eq("status", "new").eq("ai_capable", true).order("created_at", { ascending: false }).limit(1).single();
-    const { data: run, error: e3 } = await pat.rpc("start_agent_run", { p_card: card!.id, p_instructions: "" });
+    // With a free use left, the upgrade page does not ask "What stopped you?" yet.
+    const early = await ctx(browser, info);
+    const earlyPage = await early.newPage();
+    await login(earlyPage, email("pat", info), "/app/upgrade");
+    await expect(earlyPage.getByRole("heading", { name: "1 free use left" })).toBeVisible();
+    await expect(earlyPage.getByText("What stopped you?")).toHaveCount(0);
+    await early.close();
+
+    // Use 3: another website check.
+    const { data: a3, error: e3 } = await pat.rpc("start_analysis", { p_org: org });
     expect(e3).toBeNull();
-    const { error: c3 } = await pat.rpc("complete_agent_run", { p_run: run as string, p_output: { fields: [{ key: "title", label: "Page title", text: "Emergency Plumbing in Dallas | Sunrise Plumbing" }] }, p_model: "e2e-stand-in", p_usage: {} });
+    const { error: c3 } = await pat.rpc("complete_analysis", { p_analysis: a3 as string, p_evidence: fixture.evidence, p_cards: fixture.cards, p_coverage: fixture.coverage, p_summary: fixture.summary, p_wording: "template" });
     expect(c3).toBeNull();
     expect(await uses()).toEqual({ used: 3, remaining: 0, limit: 3 });
 
@@ -280,35 +290,34 @@ test.describe("claim and free uses", () => {
     await expect(page.getByRole("heading", { name: "Keep the momentum going" })).toBeVisible();
     await expect(page.getByText("You've used your 3 free uses.")).toBeVisible();
     const main = page.locator("main");
-    await expect(main.getByRole("button", { name: "Get my plan" })).toBeVisible();
-    await expect(main.getByRole("button", { name: "Choose monthly" })).toBeVisible();
-    await expect(main.getByRole("button", { name: "Choose yearly" })).toBeVisible();
+    if (STRIPE_ON) {
+      await expect(main.getByRole("button", { name: "Get my plan" })).toBeVisible();
+      await expect(main.getByRole("button", { name: "Choose monthly" })).toBeVisible();
+      await expect(main.getByRole("button", { name: "Choose yearly" })).toBeVisible();
+      // Marketing Plan, Single Site monthly, Single Site yearly: the only things that can be bought.
+      await expect(main.locator("form input[name=plan]")).toHaveCount(3);
+    } else {
+      // No Stripe key on this server: nothing can be bought, and the page says so plainly.
+      await expect(main.getByText("Checkout opens soon.")).toBeVisible();
+      await expect(main.locator("form input[name=plan]")).toHaveCount(0);
+    }
     await expect(main.getByRole("table").getByRole("row", { name: /Business Plus/ })).toBeVisible();
     await expect(main.getByRole("table").getByRole("row", { name: /Multi-Site/ })).toBeVisible();
-    // Marketing Plan, Single Site monthly, Single Site yearly: the only things that can be bought.
-    await expect(main.locator("form input[name=plan]")).toHaveCount(3);
     expect(await main.innerText()).not.toMatch(BANNED);
     await noSideScroll(page);
     await axe(page);
 
     // "What stopped you?" with a follow-up permission.
-    await page.getByLabel("Your answer").fill("I want to see the draft first");
+    await page.getByLabel("Your answer").fill("I want to compare plans first");
     await page.getByLabel("Okay to email me one follow-up.").check();
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText("Thanks! That helps.")).toBeVisible();
 
-    // The draft waits for the owner's approval.
+    // Drafts and approvals are not offered: no tab, and the old address is gone.
+    await expect(page.getByRole("link", { name: /Drafts|Approvals/ })).toHaveCount(0);
     await page.goto("/app/approvals");
-    await expect(page.getByText("Waiting for approval")).toBeVisible();
-    await expect(page.getByText("Emergency Plumbing in Dallas | Sunrise Plumbing")).toBeVisible();
-    await axe(page);
-    await page.getByRole("button", { name: "Approve" }).click();
-    // The draft leaves the queue and shows up under recent decisions as approved.
-    await expect(page.getByText("Nothing is waiting for you.")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Recent decisions" })).toBeVisible();
-    await expect(page.getByText("Approved", { exact: true }).first()).toBeVisible();
-    const { data: decided } = await pat.from("approvals").select("decision").eq("organization_id", org);
-    expect(decided).toEqual([{ decision: "approved" }]);
+    await expect(page.getByRole("heading", { name: "We couldn't find that." })).toBeVisible();
+    await expect(page.getByText("Waiting for approval")).toHaveCount(0);
     await c.close();
   });
 });
@@ -334,6 +343,7 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
     ["Choose yearly", "single_site", "year", "subscription"],
   ] as const) {
     test(`${button}: opens Stripe Checkout with the right TEST price`, async ({ browser }, info) => {
+      test.skip(!STRIPE_ON, NEED_STRIPE);
       const s = await startCheckout(browser, info, button);
       const price = TEST[plan]!.prices[interval]!;
       expect(s.mode).toBe(mode);
@@ -348,6 +358,7 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
   }
 
   test("Stripe's real subscription events grant Single Site; replays are harmless; forged events are refused", async ({ browser }, info) => {
+    test.skip(!STRIPE_ON, NEED_STRIPE);
     const org = st(info).patOrg!;
     const custId = await testCustomer(email("pat", info));
     st(info).cust = custId;
@@ -391,7 +402,7 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
     await c.close();
   });
 
-  test("onboarding creates the business and starts the first check; an annual subscription is shown as billed yearly", async ({ browser }, info) => {
+  test("onboarding creates the business and starts the first check (with E2E_STRIPE=1: an annual subscription is shown as billed yearly)", async ({ browser }, info) => {
     const c = await ctx(browser, info);
     const page = await c.newPage();
     await login(page, email("buyer", info), "/app");
@@ -409,24 +420,27 @@ test.describe("checkout and billing (Stripe TEST mode)", () => {
     const { data: bp } = await buyer.from("business_profiles").select("business_name,website,zip_code").eq("organization_id", org).single();
     expect(bp).toEqual({ business_name: "Buyer Plumbing", website: `https://buyer-${sfxOf(info)}.example/`, zip_code: "75201" });
 
-    const buyerCust = await testCustomer(email("buyer", info));
-    const sub = await stripe("/v1/subscriptions", { form: { customer: buyerCust, "items[0][price]": TEST.single_site!.prices.year!, "metadata[organization_id]": org, "metadata[plan_id]": "single_site", "metadata[interval]": "year" } });
-    let event: { id: string } | undefined;
-    for (let i = 0; i < 20 && !event; i++) {
-      const list = await stripe("/v1/events?type=customer.subscription.created&limit=20");
-      event = list.data.find((e: { data: { object: { id: string } } }) => e.data.object.id === sub.id);
-      if (!event) await new Promise((r) => setTimeout(r, 1500));
+    if (STRIPE_ON) {
+      const buyerCust = await testCustomer(email("buyer", info));
+      const sub = await stripe("/v1/subscriptions", { form: { customer: buyerCust, "items[0][price]": TEST.single_site!.prices.year!, "metadata[organization_id]": org, "metadata[plan_id]": "single_site", "metadata[interval]": "year" } });
+      let event: { id: string } | undefined;
+      for (let i = 0; i < 20 && !event; i++) {
+        const list = await stripe("/v1/events?type=customer.subscription.created&limit=20");
+        event = list.data.find((e: { data: { object: { id: string } } }) => e.data.object.id === sub.id);
+        if (!event) await new Promise((r) => setTimeout(r, 1500));
+      }
+      expect((await deliver(event!)).status).toBe(200);
+      await page.goto("/app/billing");
+      await expect(page.getByRole("heading", { name: "Single Site" })).toBeVisible();
+      await expect(page.getByText("$756 billed yearly")).toBeVisible();
+      await stripe(`/v1/subscriptions/${sub.id}`, { method: "DELETE" });
+      await stripe(`/v1/customers/${buyerCust}`, { method: "DELETE" });
     }
-    expect((await deliver(event!)).status).toBe(200);
-    await page.goto("/app/billing");
-    await expect(page.getByRole("heading", { name: "Single Site" })).toBeVisible();
-    await expect(page.getByText("$756 billed yearly")).toBeVisible();
-    await stripe(`/v1/subscriptions/${sub.id}`, { method: "DELETE" });
-    await stripe(`/v1/customers/${buyerCust}`, { method: "DELETE" });
     await c.close();
   });
 
   test("a Marketing Plan purchase allows exactly one paid check", async ({ browser }, info) => {
+    test.skip(!STRIPE_ON, NEED_STRIPE);
     const c = await ctx(browser, info);
     const page = await c.newPage();
     await login(page, email("mpbuyer", info), "/app");
@@ -484,7 +498,7 @@ test.describe("admin, access control and signed-in screens", () => {
     await expect(ap.getByRole("heading", { name: "Funnel and feedback" })).toBeVisible();
     await expect(ap.getByRole("row", { name: /Homepage visits/ })).toBeVisible();
     await expect(ap.getByText("What stopped you").first()).toBeVisible();
-    await expect(ap.getByText("I want to see the draft first").first()).toBeVisible();
+    await expect(ap.getByText("I want to compare plans first").first()).toBeVisible();
     await expect(ap.getByText("One follow-up OK:").first()).toBeVisible();
     await noSideScroll(ap);
     await axe(ap);
@@ -504,7 +518,7 @@ test.describe("admin, access control and signed-in screens", () => {
     const c = await ctx(browser, info);
     const page = await c.newPage();
     await login(page, email("pat", info), "/app");
-    for (const path of ["/app", "/app/actions", "/app/approvals", "/app/analysis", "/app/activity", "/app/billing", "/app/upgrade", "/app/settings", "/app/connections"]) {
+    for (const path of ["/app", "/app/actions", "/app/analysis", "/app/activity", "/app/billing", "/app/upgrade", "/app/settings", "/app/connections"]) {
       await page.goto(path);
       await noSideScroll(page);
       await axe(page);

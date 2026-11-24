@@ -29,7 +29,7 @@ export function LoginForm({ next, linkError }: { next: string; linkError: boolea
         </p>
       ) : null}
       {mode === "password" ? (
-        <form action={action} noValidate>
+        <form data-clarity-mask="true" action={action} noValidate>
           <FormMessage state={state} />
           <input type="hidden" name="next" value={next} />
           <Field label="Email" name="email" type="email" placeholder="you@example.com" autoComplete="email" state={state} required />
@@ -42,7 +42,7 @@ export function LoginForm({ next, linkError }: { next: string; linkError: boolea
           </p>
         </form>
       ) : (
-        <form action={linkAction} noValidate>
+        <form data-clarity-mask="true" action={linkAction} noValidate>
           <FormMessage state={linkState} />
           <input type="hidden" name="next" value={next} />
           <Field label="Email" name="email" type="email" placeholder="you@example.com" autoComplete="email" state={linkState} required />

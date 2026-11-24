@@ -44,6 +44,7 @@ export async function startFirstUse(_prev: FormState, form: FormData): Promise<F
   }
   const parsed = startSchema.safeParse(values);
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
+  await track("website_submitted");
   const website = parsed.data.website!;
   const zipCode = parsed.data.zipCode;
 

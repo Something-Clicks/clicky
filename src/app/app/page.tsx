@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { ActionCardItem } from "@/components/intelligence";
 import { AutoRefresh, RunAnalysisButton } from "@/components/run-analysis";
+import { TrackEvent } from "@/components/track-event";
 import { Clicky } from "@/components/shell";
 import { requireOrganization } from "@/lib/auth";
 import {
@@ -45,6 +46,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   return (
     <div className="stack">
       <AutoRefresh active={running} />
+      {welcome ? <TrackEvent name="account_created" /> : null}
       {welcome ? (
         <p className="notice green" role="status">
           Your results are saved.{" "}

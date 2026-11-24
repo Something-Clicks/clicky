@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 
 import { savePreview, sendFeedback } from "@/app/actions/start";
 import { FormMessage, SubmitButton } from "@/components/form";
+import { TrackEvent } from "@/components/track-event";
 import type { FormState } from "@/lib/validation";
 
 /** Steps shown while the analysis runs. Advances on a timer; the page refreshes for the real status. */
@@ -37,7 +38,7 @@ export function SaveThis({ domain }: { domain: string }) {
     );
   }
   return (
-    <form className="card" action={action} noValidate aria-labelledby="save-title" data-clarity-mask="true">
+    <form data-clarity-mask="true" className="card" action={action} noValidate aria-labelledby="save-title">
       <h2 id="save-title">Save this</h2>
       <p className="muted">Get your results in your own account, plus two more free uses.</p>
       <FormMessage state={state} />
@@ -76,13 +77,16 @@ export function Thumbs() {
   const [rating, setRating] = useState<"" | "up" | "down">("");
   if (state.ok) {
     return (
-      <p className="notice success" role="status">
-        {state.message}
-      </p>
+      <>
+        <TrackEvent name="feedback_submitted" id="first_result" params={{ kind: "first_result" }} />
+        <p className="notice success" role="status">
+          {state.message}
+        </p>
+      </>
     );
   }
   return (
-    <form className="card quiet" action={action} aria-labelledby="thumbs-title">
+    <form data-clarity-mask="true" className="card quiet" action={action} aria-labelledby="thumbs-title">
       <input type="hidden" name="kind" value="first_result" />
       <input type="hidden" name="rating" value={rating} />
       <div className="trap" aria-hidden="true">

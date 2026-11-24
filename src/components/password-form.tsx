@@ -11,7 +11,7 @@ import type { FormState } from "@/lib/validation";
 export function PasswordForm({ title, afterSuccess }: { title?: string; afterSuccess?: { href: string; label: string } }) {
   const [state, action] = useActionState(updatePassword, {} as FormState);
   return (
-    <form className="card" style={title ? undefined : { maxWidth: 480 }} action={action} noValidate>
+    <form data-clarity-mask="true" className="card" style={title ? undefined : { maxWidth: 480 }} action={action} noValidate>
       {title ? <h3>{title}</h3> : null}
       <FormMessage state={state} />
       {state.ok && afterSuccess ? (

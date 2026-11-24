@@ -17,7 +17,7 @@ export function BusinessSetupForm({
 }) {
   const [state, action] = useActionState(saveBusinessSetup, {} as FormState);
   return (
-    <form className="card" action={action} noValidate>
+    <form data-clarity-mask="true" className="card" action={action} noValidate>
       <FormMessage state={state} />
       {!canEdit ? <p className="notice">Only the account owner can change these details.</p> : null}
       <Field label="Business name" name="businessName" placeholder="Sunrise Plumbing" autoComplete="organization" defaultValue={defaults.businessName} state={state} disabled={!canEdit} required />

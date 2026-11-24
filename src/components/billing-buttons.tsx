@@ -3,13 +3,14 @@
 import { useActionState } from "react";
 
 import { openBillingPortal, startCheckout } from "@/app/actions/billing";
+import { trackEvent } from "@/components/consent";
 import { FormMessage, SubmitButton } from "@/components/form";
 import type { FormState } from "@/lib/validation";
 
 export function CheckoutButton({ plan, interval, label, variant }: { plan: string; interval: string; label: string; variant?: "light" }) {
   const [state, action] = useActionState(startCheckout, {} as FormState);
   return (
-    <form action={action}>
+    <form data-clarity-mask="true" action={action} onSubmit={() => trackEvent("checkout_started", { plan, interval })}>
       <FormMessage state={state} />
       <input type="hidden" name="plan" value={plan} />
       <input type="hidden" name="interval" value={interval} />
@@ -27,7 +28,7 @@ export function CheckoutButton({ plan, interval, label, variant }: { plan: strin
 export function PortalButton() {
   const [state, action] = useActionState(openBillingPortal, {} as FormState);
   return (
-    <form action={action}>
+    <form data-clarity-mask="true" action={action}>
       <FormMessage state={state} />
       <button className="btn outline" type="submit">
         Manage billing

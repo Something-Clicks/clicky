@@ -23,7 +23,7 @@ export const maxDuration = 120;
 
 function StatusButton({ id, status, label, variant }: { id: string; status: string; label: string; variant?: string }) {
   return (
-    <form action={setCardStatus}>
+    <form data-clarity-mask="true" action={setCardStatus}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="status" value={status} />
       <button className={variant ? `btn ${variant}` : "btn"} type="submit">

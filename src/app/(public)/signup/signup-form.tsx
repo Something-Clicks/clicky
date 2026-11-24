@@ -18,7 +18,7 @@ export function SignupForm({ email = "" }: { email?: string }) {
     );
   }
   return (
-    <form className="card" action={action} noValidate data-clarity-mask="true">
+    <form data-clarity-mask="true" className="card" action={action} noValidate>
       <FormMessage state={state} />
       <Field label="Name" name="fullName" placeholder="Your name" autoComplete="name" state={state} required />
       <Field label="Email" name="email" type="email" placeholder="you@example.com" autoComplete="email" defaultValue={email} state={state} required />

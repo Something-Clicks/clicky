@@ -40,7 +40,7 @@ export type FunnelEvent =
   | "homepage_visit" | "first_use_started" | "first_result_completed" | "save_this_clicked" | "signup_started"
   | "signup_completed" | "free_use_consumed" | "upgrade_viewed" | "checkout_started" | "subscription_completed"
   | "purchase_completed" | "draft_created" | "draft_approved" | "work_completed" | "reanalysis_completed"
-  | "feedback_submitted";
+  | "feedback_submitted" | "website_submitted" | "sign_in" | "return_visit" | "limit_reached" | "pricing_viewed";
 
 /**
  * Counts one funnel step. No personal data: props hold only small labels such as a plan id.

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { signOut } from "@/app/actions/auth";
 import { Shell } from "@/components/shell";
+import { TrackEvent } from "@/components/track-event";
 import { getWorkspace } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -42,13 +43,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </Link>
       }
       sideFooter={
-        <form action={signOut}>
+        <form data-clarity-mask="true" action={signOut}>
           <button className="nav" type="submit" style={{ border: 0, background: "none", font: "inherit", cursor: "pointer", width: "100%", textAlign: "left" }}>
             Sign out
           </button>
         </form>
       }
     >
+      <TrackEvent name="sign_in" />
       {children}
     </Shell>
   );

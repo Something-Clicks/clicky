@@ -13,7 +13,7 @@ export default function ForgotPasswordPage() {
     <>
       <h1 className="h1">Reset your password</h1>
       <p className="sub">Enter your email and we&apos;ll send you a link to choose a new password.</p>
-      <form className="card" action={action} noValidate data-clarity-mask="true">
+      <form data-clarity-mask="true" className="card" action={action} noValidate>
         <FormMessage state={state} />
         {state.ok ? null : (
           <>

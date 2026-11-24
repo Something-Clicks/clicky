@@ -26,7 +26,7 @@ export function RunAnalysisButton({
     );
   }
   return (
-    <form action={action}>
+    <form data-clarity-mask="true" action={action}>
       <FormMessage state={state} />
       {disabled ? (
         <button className="btn" type="button" disabled aria-disabled="true">

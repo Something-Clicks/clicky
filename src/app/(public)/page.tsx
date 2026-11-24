@@ -1,5 +1,6 @@
 import Image from "next/image";
 
+import { TrackEvent } from "@/components/track-event";
 import { StartForm } from "@/components/start-form";
 import { HOME_HEADLINE, HOME_SUBHEAD } from "@/config/site";
 import { formTicket, isPreviewEnabled, track } from "@/lib/server/site";
@@ -15,6 +16,7 @@ export default async function HomePage() {
   const preview = isPreviewEnabled();
   return (
     <>
+      <TrackEvent name="landing_visit" />
       <section className="home-hero" aria-labelledby="home-title">
         <Image className="art" src="/brand/clicky-3d.png" alt="Clicky, the Something Clicks character" width={720} height={502} priority />
         <h1 id="home-title">{HOME_HEADLINE}</h1>

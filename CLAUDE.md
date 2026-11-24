@@ -42,5 +42,9 @@ Marketing help for small businesses: check the website, show what's worth fixing
 ## Checks before every commit
 `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`, plus `pnpm e2e` when the customer journey changed (see the checklist for the local stack).
 
+## AI provider and drafts
+- Anthropic is not our AI provider and is not a dependency. Never request an Anthropic key. The existing code (`src/lib/server/ai.ts`, `drafts.ts`) stays dormant and unconfigured; do not delete it.
+- `FEATURES.drafts` (`src/config/features.ts`) is `false`: draft creation, approvals and their screens/routes are hidden from customers. Recommendations come from fixed checks; never describe them as AI analysis.
+
 ## Not now
 Customer-facing agents are planned in `docs/agents/AGENT_ROADMAP.md`. Do not build them without the owner's approval.

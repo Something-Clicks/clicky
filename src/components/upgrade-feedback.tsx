@@ -4,6 +4,7 @@ import { useActionState } from "react";
 
 import { sendFeedback } from "@/app/actions/start";
 import { FormMessage, SubmitButton } from "@/components/form";
+import { TrackEvent } from "@/components/track-event";
 import type { FormState } from "@/lib/validation";
 
 /** "What stopped you?" Optional, short, and the follow-up email is opt-in for one message only. */
@@ -11,13 +12,16 @@ export function UpgradeFeedback() {
   const [state, action] = useActionState(sendFeedback, {} as FormState);
   if (state.ok) {
     return (
-      <p className="notice success" role="status">
-        {state.message}
-      </p>
+      <>
+        <TrackEvent name="feedback_submitted" id="upgrade" params={{ kind: "upgrade" }} />
+        <p className="notice success" role="status">
+          {state.message}
+        </p>
+      </>
     );
   }
   return (
-    <form className="card quiet" action={action} aria-labelledby="stop-title">
+    <form data-clarity-mask="true" className="card quiet" action={action} aria-labelledby="stop-title">
       <h2 id="stop-title" style={{ fontSize: 18 }}>
         What stopped you?
       </h2>

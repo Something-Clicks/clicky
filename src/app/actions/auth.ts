@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { log } from "@/lib/log";
 import { confirmUrl } from "@/lib/email-links";
 import { safeNextPath } from "@/lib/redirect";
+import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
 import {
   emailSchema,
@@ -42,6 +43,7 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
         : "That email and password don't match. Try again.";
     return { error: message, values: keep };
   }
+  await track("sign_in");
   const next = safeNextPath(form.get("next"));
   // The claim link is handled by a route that signs the visitor onward; a client-side hop would leave
   // the one-time code in the address bar. Ask the browser for a full page load instead.

@@ -6,7 +6,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 const PUBLIC_PAGES = ["/", "/pricing", "/how-it-works", "/about", "/faq", "/login", "/signup", "/forgot-password", "/privacy", "/terms"];
-const BANNED = /\b(AI|agents?|prompts?|campaigns?)\b/;
+const BANNED = /\b(AI|agents?|prompts?|campaigns?|drafts?|approvals?)\b/i; // drafts are not offered yet; only /privacy and /terms (which are themselves drafts) may say it
 const ANALYTICS = /googletagmanager\.com|google-analytics\.com|clarity\.ms/;
 
 async function noHorizontalScroll(page: Page) {
@@ -143,6 +143,39 @@ test.describe("consent and analytics", () => {
     expect(sent).not.toMatch(/@/);
   });
 
+  test("Yes: one page view and one event per step, no repeats on reload, labels only", async ({ page }) => {
+    await page.route(ANALYTICS, (route) => route.abort());
+    await page.addInitScript(() => {
+      try {
+        window.localStorage.setItem("sc_consent", "yes");
+      } catch {}
+    });
+    await page.goto("/pricing?ref=secret-token");
+    const events = async () =>
+      page.evaluate(() =>
+        ((window as unknown as { dataLayer?: ArrayLike<unknown>[] }).dataLayer ?? []).map((a) => Array.from(a as ArrayLike<unknown>)).filter((a) => a[0] === "event"),
+      );
+    await expect.poll(async () => (await events()).filter((e) => e[1] === "pricing_viewed").length).toBe(1);
+    expect((await events()).filter((e) => e[1] === "page_view")).toHaveLength(1);
+    await page.reload();
+    await expect.poll(async () => (await events()).filter((e) => e[1] === "page_view").length).toBe(1);
+    expect((await events()).filter((e) => e[1] === "pricing_viewed"), "same session: not counted twice").toHaveLength(0);
+    const all = JSON.stringify(await events());
+    expect(all).not.toContain("secret-token");
+    expect(all).not.toMatch(/@/);
+  });
+
+  test("No: no events are queued or sent, and the funnel route refuses strangers and unknown steps", async ({ page, request }) => {
+    await decline(page);
+    await page.goto("/pricing");
+    await page.waitForTimeout(400);
+    expect(await page.evaluate(() => (window as unknown as { dataLayer?: unknown[] }).dataLayer?.length ?? 0)).toBe(0);
+    const origin = new URL(page.url()).origin;
+    expect((await request.post("/api/track", { headers: { origin: "https://evil.example" }, data: { event: "pricing_viewed" } })).status()).toBe(403);
+    expect((await request.post("/api/track", { headers: { origin }, data: { event: "made_up" } })).status()).toBe(400);
+    expect((await request.post("/api/track", { headers: { origin }, data: { event: "signup_completed" } })).status(), "server-only steps can't be posted").toBe(400);
+  });
+
   test("forms and the workspace are masked in recordings", async ({ page }) => {
     await decline(page);
     await page.goto("/login");
@@ -158,10 +191,12 @@ test("legal pages are marked as drafts and name every service that handles data"
   }
   await page.goto("/privacy");
   const text = await page.locator("main").innerText();
-  for (const name of ["Supabase", "Stripe", "Anthropic", "Resend", "Vercel", "Google Analytics", "Microsoft Clarity"]) {
+  for (const name of ["Supabase", "Stripe", "Resend", "Vercel", "Google PageSpeed", "Google Analytics", "Microsoft Clarity"]) {
     expect(text).toContain(name);
   }
-  expect(text).toContain("AI service");
+  // Recommendations come from fixed checks: the policy says so and names no AI provider.
+  expect(text).not.toContain("Anthropic");
+  expect(text).toContain("do not currently use an artificial-intelligence");
 });
 
 test.describe("access control", () => {
