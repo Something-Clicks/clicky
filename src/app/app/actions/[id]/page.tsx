@@ -7,6 +7,7 @@ import { DRAFT_LABEL, DraftPreview, DraftUseButtons, draftAsText, draftFields } 
 import { EvidenceLine, StatusPill, VerificationPill } from "@/components/intelligence";
 import { PrepareDraftForm } from "@/components/prepare-draft";
 import { AutoRefresh } from "@/components/run-analysis";
+import { FEATURES } from "@/config/features";
 import { requireOrganization } from "@/lib/auth";
 import { getCard, getEntitlements, getFreeUses, getSpeedComparison } from "@/lib/queries";
 import Link from "next/link";
@@ -40,7 +41,8 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
   const evidence = card.action_card_evidence.map((x) => x.analysis_evidence).filter((e) => e !== null);
   const closed = card.status === "done" || card.status === "dismissed";
   const isOwner = ws.organization.role === "owner";
-  const draftable = card.ai_capable && SUPPORTED_DRAFTS.includes(card.execution_type as never);
+  // Drafts are switched off for customers (see src/config/features.ts); every item is a task to do on the site.
+  const draftable = FEATURES.drafts && card.ai_capable && SUPPORTED_DRAFTS.includes(card.execution_type as never);
 
   const supabase = await createClient();
   const [{ data: run }, { data: approval }] = await Promise.all([
@@ -84,12 +86,12 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           <div className="row">
             <StatusPill status={card.status} />
             <VerificationPill verification={card.verification} />
-            {card.approval_required ? <span className="pill yellow">Needs your approval</span> : <span className="pill">No approval needed</span>}
+            {FEATURES.drafts ? (card.approval_required ? <span className="pill yellow">Needs your approval</span> : <span className="pill">No approval needed</span>) : null}
           </div>
           {!draftable ? (
             <>
-              <h3 style={{ marginTop: 12 }}>A task for you or your web designer</h3>
-              <p className="muted">This needs a change on your website that we can&apos;t draft for you. Mark it done once it&apos;s fixed.</p>
+              <h3 style={{ marginTop: 12 }}>Do this on your website</h3>
+              <p className="muted">Make this change yourself, or ask your web designer. Mark it done when it&apos;s fixed, then check your website again to see it confirmed.</p>
             </>
           ) : running ? (
             <>

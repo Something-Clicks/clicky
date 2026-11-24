@@ -45,8 +45,8 @@ export default function PrivacyPage() {
         <li>Your name (if you give it), email address, and password. Passwords are handled by our authentication provider and stored only in hashed form.</li>
         <li>Your business name, website, ZIP code, and any service area or goal you add.</li>
         <li>The people you add to your account and their roles.</li>
-        <li>Your website checks, findings, drafts you create, your notes, and your approval decisions.</li>
-        <li>A history of important actions in your account (for example, a check started or a draft approved).</li>
+        <li>Your website checks, the findings, and the items you mark done.</li>
+        <li>A history of important actions in your account (for example, a check started or an item marked done).</li>
         <li>Your notification preferences and a record of notification emails we tried to send.</li>
       </ul>
       <h3>Feedback</h3>
@@ -69,7 +69,7 @@ export default function PrivacyPage() {
         <li>
           If you choose Yes in the cookie banner, we load Google Analytics 4 (pages visited, device and browser type,
           approximate location) and Microsoft Clarity (clicks, scrolling, and session recordings). Forms, your results,
-          drafts, and everything inside your account are masked in recordings. We send page addresses without the part
+          and everything inside your account are masked in recordings. We send page addresses without the part
           after &quot;?&quot;, so sign-in codes are never shared. If you choose No, neither is loaded. You can change your choice
           any time with &quot;Cookie settings&quot; at the bottom of each page.
         </li>
@@ -91,19 +91,18 @@ export default function PrivacyPage() {
         that are publicly available; please check only websites you own or are authorized to manage.
       </p>
 
-      <h2>How drafts and wording are prepared</h2>
+      <h2>How recommendations are produced</h2>
       <p>
-        We use an AI service, Anthropic&apos;s Claude, to (1) rewrite the wording of findings in plain language and (2)
-        prepare drafts such as page titles, homepage copy, Google Business Profile posts, and blog posts. For this we
-        send Anthropic the findings, the evidence and short excerpts from your website, your business name, website,
-        service area and goal, and any notes you add. The AI is not allowed to add findings or change the evidence, and
-        drafts use placeholders instead of making up facts. You review every draft; we never publish anything for you.
-        [Attorney: confirm Anthropic&apos;s commercial terms on data retention and training, and describe them here.]
+        Recommendations come from fixed checks we run on the pages we read (for example: is there a page title, a
+        description, a tap-to-call phone link, a mobile setting). We do not currently use an artificial-intelligence
+        service to analyze your website or to write for you, and we do not send your website content to one. If that
+        changes, we will update this policy first and name the provider and what is shared. We never change anything on
+        your website. [Attorney: revisit this section if an AI service is added.]
       </p>
 
       <h2>Why we use information</h2>
       <ul>
-        <li>To provide the service: check websites, show results, prepare drafts, and keep your account.</li>
+        <li>To provide the service: check websites, show results, and keep your account.</li>
         <li>To sign you in and verify your email address.</li>
         <li>To process payments and give you the plan you paid for.</li>
         <li>To send emails you asked for: sign-in links, password resets, and notifications you have turned on.</li>
@@ -121,9 +120,8 @@ export default function PrivacyPage() {
           </tr>
         </thead>
         <tbody>
-          <tr><th scope="row">Supabase</th><td>Database and sign-in (accounts, results, drafts, sessions, sign-in emails).</td></tr>
+          <tr><th scope="row">Supabase</th><td>Database and sign-in (accounts, results, sessions, sign-in emails).</td></tr>
           <tr><th scope="row">Vercel</th><td>Hosting. Receives every web request, including network addresses, in its logs.</td></tr>
-          <tr><th scope="row">Anthropic</th><td>AI service that words findings and prepares drafts (see above).</td></tr>
           <tr><th scope="row">Google PageSpeed Insights</th><td>Measures the mobile speed of the website address you check.</td></tr>
           <tr><th scope="row">Stripe</th><td>Payments, subscriptions, invoices, and the billing portal.</td></tr>
           <tr><th scope="row">Resend</th><td>Sends our emails (sign-in links and notifications).</td></tr>
@@ -137,7 +135,7 @@ export default function PrivacyPage() {
       <ul>
         <li>Results from a check without an account: deleted after seven days (sooner if you save them to an account).</li>
         <li>Save this links: expire after 24 hours and work once.</li>
-        <li>Account information, checks, drafts, and history: kept while your account is open.</li>
+        <li>Account information, checks, and history: kept while your account is open.</li>
         <li>Feedback and usage counts: [decide a retention period].</li>
         <li>Payment records: kept as long as required for tax and accounting. [Attorney: confirm period.]</li>
         <li>Hosting logs: kept according to Vercel&apos;s retention settings. [Confirm.]</li>

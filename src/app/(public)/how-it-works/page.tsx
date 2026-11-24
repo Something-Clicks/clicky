@@ -22,8 +22,8 @@ export default function HowItWorksPage() {
         </li>
         <li className="step">
           <div>
-            <b>Get drafts.</b>
-            <div className="muted">Page titles, homepage copy, Google Business Profile posts and blog posts. You approve each one.</div>
+            <b>Make the fix.</b>
+            <div className="muted">Each item says what to change and why. Mark it done when you have.</div>
           </div>
         </li>
         <li className="step">

@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { draftAsText, draftFields } from "@/components/draft";
+import { FEATURES } from "@/config/features";
 import { getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 /** Downloads a prepared draft as a text file. RLS limits it to members of the business. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!FEATURES.drafts) return new NextResponse("Not found", { status: 404 });
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id) || !(await getUser())) return new NextResponse("Not found", { status: 404 });
   const supabase = await createClient();

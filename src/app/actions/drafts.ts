@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
+import { FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { isAiConfigured } from "@/lib/server/ai";
@@ -25,6 +26,7 @@ const START_ERRORS: Record<string, string> = {
 };
 
 export async function prepareDraft(_prev: FormState, form: FormData): Promise<FormState> {
+  if (!FEATURES.drafts) return { error: "Drafts aren't available yet." };
   const ws = await getWorkspace();
   const cardId = String(form.get("id") ?? "");
   const instructions = String(form.get("instructions") ?? "").trim().slice(0, 1000) || null;
@@ -92,6 +94,7 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
 const DECISIONS = ["approved", "rejected", "changes_requested"] as const;
 
 export async function decideApproval(_prev: FormState, form: FormData): Promise<FormState> {
+  if (!FEATURES.drafts) return { error: "Drafts aren't available yet." };
   const ws = await getWorkspace();
   const id = String(form.get("id") ?? "");
   const decision = String(form.get("decision") ?? "");

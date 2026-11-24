@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   title: { default: "Something Clicks", template: "%s | Something Clicks" },
   description:
-    "See what's worth fixing on your website, get the work drafted, and approve what you like.",
+    "See what's worth fixing on your website, why it matters, and what to do next.",
   applicationName: "Something Clicks",
 };
 

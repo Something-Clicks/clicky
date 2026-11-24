@@ -302,3 +302,35 @@ describe("feedback and funnel counts", () => {
     expect(f.previews.started).toBeGreaterThan(0);
   });
 });
+
+describe("local-testing keys and the added funnel steps (migration 20261125120000)", () => {
+  const LOCAL_SITE = randomBytes(32).toString("hex");
+  const LOCAL_BILL = randomBytes(32).toString("hex");
+
+  it("a *_local server key works beside the main one, and nothing else does", async () => {
+    await expect(q(null, "select public.site_track($1,'homepage_visit','{}')", [LOCAL_SITE])).rejects.toThrow(/Forbidden/);
+    await db.admin.query("insert into app_private.secrets (name, hash) values ('site_server_local', $1)", [createHash("sha256").update(LOCAL_SITE).digest()]);
+    await q(null, "select public.site_track($1,'homepage_visit','{}')", [LOCAL_SITE]);
+    await q(null, "select public.site_track($1,'homepage_visit','{}')", [KEY]); // the main key still works
+    await expect(q(null, "select public.site_track($1,'homepage_visit','{}')", [randomBytes(32).toString("hex")])).rejects.toThrow(/Forbidden/);
+    // a row with some other name grants nothing
+    const OTHER = randomBytes(32).toString("hex");
+    await db.admin.query("insert into app_private.secrets (name, hash) values ('site_server_other', $1)", [createHash("sha256").update(OTHER).digest()]);
+    await expect(q(null, "select public.site_track($1,'homepage_visit','{}')", [OTHER])).rejects.toThrow(/Forbidden/);
+  });
+
+  it("a billing_webhook_local key works for the webhook functions, the main key keeps working, strangers do not", async () => {
+    await expect(q(null, "select public.billing_record_event($1,'evt_local_1','x')", [LOCAL_BILL])).rejects.toThrow(/Forbidden/);
+    await db.admin.query("insert into app_private.secrets (name, hash) values ('billing_webhook_local', $1)", [createHash("sha256").update(LOCAL_BILL).digest()]);
+    expect((await q<{ r: string }>(null, "select public.billing_record_event($1,'evt_local_1','x') as r", [LOCAL_BILL]))[0].r).toBe("new");
+    await expect(q(null, "select public.billing_record_event($1,'evt_local_2','x')", [randomBytes(32).toString("hex")])).rejects.toThrow(/Forbidden/);
+  });
+
+  it("accepts the five added funnel steps and still refuses unknown ones", async () => {
+    for (const e of ["website_submitted", "sign_in", "return_visit", "limit_reached", "pricing_viewed"]) {
+      await q(null, "select public.site_track($1,$2,'{}')", [KEY, e]);
+    }
+    await expect(q(null, "select public.site_track($1,'made_up_step','{}')", [KEY])).rejects.toThrow(/check constraint/);
+    await expect(q(null, "select public.site_track($1,'sign_in','{\"e\":\"a@b.c\"}')", [KEY])).rejects.toThrow(/check constraint/);
+  });
+});

@@ -16,6 +16,7 @@ import {
   openCards,
   relativeDay,
 } from "@/lib/queries";
+import { FEATURES } from "@/config/features";
 import { planName } from "@/config/pricing";
 
 import { Greeting } from "./greeting";
@@ -63,7 +64,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               {free.remaining > 0 ? `${free.remaining} of ${free.limit} free uses left` : "Free uses used up"}
             </Link>
           )}
-          {approvalsWaiting > 0 ? (
+          {FEATURES.drafts && approvalsWaiting > 0 ? (
             <Link href="/app/approvals" className="pill yellow" style={{ textDecoration: "none" }}>
               {approvalsWaiting} {approvalsWaiting === 1 ? "draft" : "drafts"} to review
             </Link>

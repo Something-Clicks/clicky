@@ -14,15 +14,14 @@ export default function TermsPage() {
 
       <h2>1. The service</h2>
       <p>
-        Something Clicks checks the public pages of a website you choose, explains what may be worth improving, and can
-        prepare drafts (such as page titles, homepage copy, Google Business Profile posts, and blog posts) using an AI
-        service. You decide what to use. We never publish or send anything on your behalf.
+        Something Clicks checks the public pages of a website you choose and explains what may be worth improving. You
+        decide what to change. We never change anything on your website or publish or send anything on your behalf.
       </p>
 
       <h2>2. Accounts</h2>
       <p>
         You need an account to save results and use more than one free check. Keep your sign-in details secure; you are
-        responsible for activity in your account. The account owner controls billing and approves drafts.
+        responsible for activity in your account. The account owner controls billing.
       </p>
 
       <h2>3. Websites you check</h2>
@@ -34,7 +33,7 @@ export default function TermsPage() {
       <h2>4. Free uses</h2>
       <p>
         You get three free uses: one check without an account and two more after you save it. A use is one completed
-        check or one completed draft. We may change free uses in the future; changes do not affect uses already completed.
+        check. We may change free uses in the future; changes do not affect uses already completed.
       </p>
 
       <h2>5. Plans and payment</h2>
@@ -49,10 +48,10 @@ export default function TermsPage() {
         <li>We will give notice before changing the price of an existing subscription. [Attorney: notice period.]</li>
       </ul>
 
-      <h2>6. Drafts and AI</h2>
+      <h2>6. Recommendations</h2>
       <p>
-        Drafts are suggestions prepared by AI from your business details, the evidence from your website, and your notes.
-        They can contain mistakes. Review and edit every draft before using it. You are responsible for what you publish.
+        Recommendations come from fixed checks of the public pages we read. They are suggestions, not professional advice,
+        and can be incomplete or wrong. You are responsible for any change you make to your website.
       </p>
 
       <h2>7. No guarantees</h2>
@@ -63,7 +62,7 @@ export default function TermsPage() {
 
       <h2>8. Your content</h2>
       <p>
-        You keep ownership of your business information, your notes, and the drafts you approve. You give us permission to
+        You keep ownership of your business information, and the items you mark done. You give us permission to
         process that content only to provide the service, as described in the Privacy Policy.
       </p>
 

@@ -22,7 +22,6 @@ const IMPACT: Record<string, { label: string; cls: string }> = {
   medium: { label: "Medium impact", cls: "pill yellow" },
   low: { label: "Low impact", cls: "pill green" },
 };
-const DRAFTABLE = new Set(["meta", "page_copy", "gbp_post", "blog_draft"]);
 
 function where(url: string | null) {
   if (!url) return null;
@@ -42,7 +41,6 @@ function Card({ card, evidence }: { card: PreviewCard; evidence: PreviewEvidence
       <div className="row">
         <span className={impact.cls}>{impact.label}</span>
         {ev[0] ? <span className={KIND[ev[0].kind]?.cls ?? "pill"}>{KIND[ev[0].kind]?.label ?? ev[0].kind}</span> : null}
-        {DRAFTABLE.has(card.execution_type) && card.ai_capable ? <span className="pill lavender">We can draft this</span> : null}
       </div>
       <h3>{card.title}</h3>
       <p>{card.explanation}</p>
@@ -85,7 +83,6 @@ function Results({ p }: { p: Preview }) {
   const evidence = p.evidence ?? [];
   const pages = p.coverage?.website?.pages_reviewed ?? 1;
   const speed = p.coverage?.pagespeed;
-  const draftable = cards.filter((c) => c.ai_capable && DRAFTABLE.has(c.execution_type)).length;
   return (
     <div className="stack narrow">
       <div>
@@ -94,7 +91,6 @@ function Results({ p }: { p: Preview }) {
         <p className="sub">
           We reviewed {pages} {pages === 1 ? "page" : "pages"}
           {speed?.status === "measured" ? ` and measured mobile speed (${speed.score}/100)` : ""}.
-          {draftable > 0 ? ` We can draft ${draftable} of these for you.` : ""}
         </p>
         {speed?.status === "missing" ? (
           <p className="notice yellow small">Google&apos;s speed test was busy, so mobile speed is missing this time.</p>

@@ -11,7 +11,6 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 const NAV = [
   { href: "/app", label: "Home", exact: true },
   { href: "/app/actions", label: "To do" },
-  { href: "/app/approvals", label: "Drafts" },
   { href: "/app/analysis", label: "Website check" },
   { href: "/app/activity", label: "History" },
   { href: "/app/billing", label: "Plan" },
@@ -20,7 +19,7 @@ const NAV = [
 const TABS = [
   { href: "/app", label: "Home", icon: "⌂", exact: true },
   { href: "/app/actions", label: "To do", icon: "✓" },
-  { href: "/app/approvals", label: "Drafts", icon: "✎" },
+  { href: "/app/analysis", label: "Check", icon: "◎" },
   { href: "/app/settings", label: "Account", icon: "☺" },
 ];
 

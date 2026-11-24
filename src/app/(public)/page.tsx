@@ -37,16 +37,16 @@ export default async function HomePage() {
             <b>Observed</b> · your homepage
           </div>
         </div>
-        <div className="card">
+        <div className="card action">
           <div className="row">
-            <span className="pill lavender">Draft ready</span>
+            <span className="pill yellow">Medium impact</span>
             <span className="pill">Example</span>
           </div>
-          <h3>New page title</h3>
-          <div className="mock">Emergency Plumbing in Dallas | Sunrise Plumbing</div>
-          <p className="muted small" style={{ marginTop: 8 }}>
-            Review it, change it, approve it.
-          </p>
+          <h3>Add a short description for search results</h3>
+          <p className="muted small">Your homepage has no description, so search engines pick their own text.</p>
+          <div className="evidence">
+            <b>Missing</b> · your homepage
+          </div>
         </div>
         <div className="card">
           <div className="row">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { ApprovalActions } from "@/components/approval-actions";
 import { DRAFT_LABEL, DraftPreview, DraftUseButtons, draftAsText, draftFields } from "@/components/draft";
@@ -7,6 +8,7 @@ import { AutoRefresh } from "@/components/run-analysis";
 import { Clicky } from "@/components/shell";
 import { CopyButton } from "@/app/app/actions/[id]/copy-button";
 import { formatWhen } from "@/lib/activity";
+import { FEATURES } from "@/config/features";
 import { requireOrganization } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,6 +21,7 @@ const DECISION: Record<string, { label: string; cls: string }> = {
 };
 
 export default async function ApprovalsPage() {
+  if (!FEATURES.drafts) notFound(); // drafts are switched off (src/config/features.ts)
   const ws = await requireOrganization();
   const isOwner = ws.organization.role === "owner";
   const supabase = await createClient();

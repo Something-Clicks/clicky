@@ -11,9 +11,9 @@ export const INCLUDES: Partial<Record<PlanId, string[]>> = {
   marketing_plan: ["A full check of your website", "A clear, ranked list of what to fix", "The evidence behind every item"],
   single_site: [
     "Everything in Marketing Plan",
-    "Drafts: page titles, homepage copy, Google Business Profile posts, blog posts",
-    "You review and approve every draft",
-    "Your website checked again every week",
+    "Check your website again any time",
+    "Mark things done and see what's fixed",
+    "A history of your checks",
   ],
 };
 

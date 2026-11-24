@@ -4,6 +4,7 @@ import { useActionState } from "react";
 
 import { updateBusiness, updateNotifications, updateProfile } from "@/app/actions/workspace";
 import { Field, FormMessage, SubmitButton } from "@/components/form";
+import { FEATURES } from "@/config/features";
 import type { FormState } from "@/lib/validation";
 
 export function ProfileForm({ fullName, email }: { fullName: string; email: string }) {
@@ -58,10 +59,10 @@ export function NotificationsForm({ draftReady, analysisComplete, isOwner, email
   return (
     <form className="card" action={action}>
       <h3>Notifications</h3>
-      <p className="muted">Choose when to receive updates about actions and approvals.</p>
+      <p className="muted">Choose when to receive updates.</p>
       <FormMessage state={state} />
-      {isOwner ? <Check name="draft_ready" label="Email me when a draft is ready for my approval" defaultChecked={draftReady} /> : null}
-      <Check name="analysis_complete" label="Email me when a website analysis is ready" defaultChecked={analysisComplete} />
+      {FEATURES.drafts && isOwner ? <Check name="draft_ready" label="Email me when a draft is ready for my approval" defaultChecked={draftReady} /> : null}
+      <Check name="analysis_complete" label="Email me when a website check is ready" defaultChecked={analysisComplete} />
       {emailReady ? null : <p className="small muted">Email sending is being set up. Your choices are saved now and used once it&apos;s on.</p>}
       <SubmitButton pending="Saving…">Save preferences</SubmitButton>
     </form>

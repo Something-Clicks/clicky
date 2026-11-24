@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 
+import { FEATURES } from "@/config/features";
 import { getWorkspace, requireUser } from "@/lib/auth";
 import { clearStartFlow, getStartFlow } from "@/lib/start-flow";
 import { log } from "@/lib/log";
@@ -154,7 +155,11 @@ export async function updateBusiness(_prev: FormState, form: FormData): Promise<
 export async function updateNotifications(_prev: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
   const supabase = await createClient();
-  const prefs = { draft_ready: form.get("draft_ready") === "on", analysis_complete: form.get("analysis_complete") === "on" };
+  // While drafts are switched off the checkbox is not shown: leave that saved preference alone.
+  const prefs = {
+    ...(FEATURES.drafts ? { draft_ready: form.get("draft_ready") === "on" } : {}),
+    analysis_complete: form.get("analysis_complete") === "on",
+  };
   // Update first; create the row only if this person has none yet. (Only the two
   // preference columns are updatable, so a plain upsert is not allowed.)
   const { data: updated, error: updateError } = await supabase

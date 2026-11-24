@@ -15,11 +15,11 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Can you do the work for me?",
-    a: "We can draft page titles and descriptions, homepage copy, Google Business Profile posts and blog posts from your details. You review, edit and approve every draft, then copy or download it. We never publish anything for you.",
+    a: "Not yet. For each finding we show exactly what to change and why. You (or your web designer) make the change, mark it done, and check again to see it fixed. We never change anything on your website.",
   },
   {
     q: "Is it really free to start?",
-    a: "Yes. You get three free uses: your first result, plus two more after you save it. Each completed check or draft is one use.",
+    a: "Yes. You get three free uses: your first result, plus two more after you save it. Each completed website check is one use.",
   },
   {
     q: "How much does it cost after that?",

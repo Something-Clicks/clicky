@@ -38,7 +38,9 @@ export const PLANS = {
   single_site: {
     id: "single_site",
     name: "Single Site",
-    stripeDescription: "Get marketing recommendations and ready-to-use content for your business.",
+    // The approved text was "Get marketing recommendations and ready-to-use content for your business."; "ready-to-use
+    // content" is not delivered (drafts are switched off), so TEST now carries the honest text below. Check what LIVE says.
+    stripeDescription: "Get clear recommendations for your website, and check it again any time to see what's fixed.",
     amounts: { month: 7900, year: 75600 },
     available: true,
   },
