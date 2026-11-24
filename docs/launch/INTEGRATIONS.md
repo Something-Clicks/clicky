@@ -79,11 +79,77 @@ The secure prompt stores a secret where the network proxy can use it; it never g
 4. Redeploy the branch's latest preview (Deployments → latest `claude/ecstatic-curie-9shvjf` → ⋯ → Redeploy).
 Without `STRIPE_SECRET_KEY`, the preview says "Checkout isn't switched on yet" and cannot re-read subscriptions.
 
-## Vercel Deployment Protection and the Stripe webhook
-Protection is **on** for previews (`all_except_custom_domains`), so Stripe's webhook request gets Vercel's login page, not the app. Stripe test events to the preview URL will fail until you allow them. Two options:
-- **Easiest (testing only): use your own Stripe CLI** — `stripe listen --forward-to localhost:3100/api/webhooks/stripe` on your computer; no Vercel change.
-- **Automation bypass on the preview:** Vercel → `something-clicks` → Settings → Deployment Protection → **Protection Bypass for Automation** → Add (this creates a secret and exposes `VERCEL_AUTOMATION_BYPASS_SECRET` to the project, including Production, so only do it if you accept that). Then in Stripe → Developers → Webhooks → edit endpoint `we_1Uf9ApFnFMCbDhHEbQoz3sYP` → set the URL to `…/api/webhooks/stripe?x-vercel-protection-bypass=<that secret>`.
-Do not turn protection off for the whole project.
+## Webhook testing: local Stripe CLI (no Vercel changes)
+Deployment Protection stays **on**; no bypass secret is added anywhere (adding one would also expose `VERCEL_AUTOMATION_BYPASS_SECRET` to Production). Stripe cannot reach a protected preview, so webhooks are tested **on your computer**: the Stripe CLI receives TEST events from Stripe and forwards them to the app running locally against **clicky-dev**.
+
+**Safety guard.** Always start forwarding with `scripts/stripe-local-webhook.sh`. It refuses to run if: a live Stripe key is in your shell (`STRIPE_API_KEY`/`STRIPE_SECRET_KEY` starting `sk_live_`/`rk_live_`), `STRIPE_ALLOW_LIVE` is set, any extra flag (such as `--live` or `--api-key`) is passed, `NEXT_PUBLIC_SUPABASE_URL` is not clicky-dev (production is named and refused), or the logged-in CLI does not answer `livemode: false`. (The guard logic was exercised with a stand-in `stripe` command, not the real CLI.) The app adds its own refusal: live-mode events are rejected unless `STRIPE_ALLOW_LIVE=true`.
+
+**Before you start**
+- Install the [Stripe CLI](https://docs.stripe.com/stripe-cli), Node 22 and pnpm; clone the repo on `claude/ecstatic-curie-9shvjf`; `pnpm install`.
+- You need your own Stripe **test** secret key (`sk_test_…` or `rk_test_…`, Dashboard → Developers → API keys, **Test mode**).
+- Keys that must match clicky-dev: the app's `SITE_SERVER_KEY` and `BILLING_WEBHOOK_KEY` are checked against hashes in clicky-dev's `app_private.secrets`, and the Vercel Preview values are write-only, so generate fresh local ones and store their hashes (the table holds **one** row per name, so this replaces the hashes the Preview deployment uses; either put the same new values into the Vercel Preview variables afterwards, or expect the preview's billing/preview functions to fail until you do):
+  ```bash
+  export SITE_SERVER_KEY=$(openssl rand -hex 32) BILLING_WEBHOOK_KEY=$(openssl rand -hex 32)
+  printf "%s\n%s\n" "$(printf %s "$SITE_SERVER_KEY" | sha256sum | cut -d' ' -f1)" "$(printf %s "$BILLING_WEBHOOK_KEY" | sha256sum | cut -d' ' -f1)"   # site_server hash, then billing_webhook hash
+  ```
+  In the clicky-dev SQL editor (check the project name says **clicky-dev**), replace the two hashes: `insert into app_private.secrets (name, hash) values ('site_server', decode('<first hash>','hex')), ('billing_webhook', decode('<second hash>','hex')) on conflict (name) do update set hash = excluded.hash;`
+
+**1. Log in to the CLI (test mode)**
+```bash
+stripe login          # choose the Something Clicks account; the CLI uses TEST mode unless you pass --live (the guard refuses that)
+```
+
+**2. Start forwarding** (terminal 1)
+```bash
+export NEXT_PUBLIC_SUPABASE_URL=https://ofstvbgaoznipsiqbjjp.supabase.co
+./scripts/stripe-local-webhook.sh
+```
+The banner prints `Your webhook signing secret is whsec_…`. That secret is **temporary and local only**: use it in step 3 and never put it in Vercel, Git, a chat or a ticket.
+
+**3. Run the app locally against clicky-dev** (terminal 2, same repo)
+```bash
+export NEXT_PUBLIC_SUPABASE_URL=https://ofstvbgaoznipsiqbjjp.supabase.co
+export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<clicky-dev publishable key>
+export NEXT_PUBLIC_SITE_URL=http://localhost:3100
+export STRIPE_SECRET_KEY=<your sk_test_ key>
+export STRIPE_WEBHOOK_SECRET=<the whsec_ from the step 2 banner>
+# SITE_SERVER_KEY and BILLING_WEBHOOK_KEY are already exported from "Before you start"
+pnpm build && pnpm exec next start -p 3100
+```
+Sign in at `http://localhost:3100` with a clicky-dev test account (re-enable the e2e accounts only if you choose to; see the checklist) and note its business's id (`select organization_id from public.organization_members where user_id = '<user id>'`).
+
+**4. Trigger the events we handle.** Stripe sends events to *every* registered endpoint as well as the CLI (see the warning below).
+
+| Event | How to trigger | What you should see |
+|---|---|---|
+| `checkout.session.completed` (+ `customer.subscription.created`, `invoice.paid`) | In the local app: Plan → **Choose monthly**, pay with `4242 4242 4242 4242` (any future date and CVC) on the real Stripe Checkout page | CLI lines `--> … [200]`; app log `stripe.webhook_processed`; Plan page says **Single Site, Active, $79/month** |
+| `customer.subscription.created` (manual) | `stripe customers create -d email=you@example.com` → `stripe payment_methods attach pm_card_visa --customer cus_…` → `stripe customers update cus_… -d "invoice_settings[default_payment_method]=<pm id>"` → `stripe subscriptions create --customer cus_… -d "items[0][price]=price_1Uf9AQFnFMCbDhHEdFmjNCCM"` ... use the **TEST price ids in `src/config/pricing.ts`**, plus `-d "metadata[organization_id]=<org uuid>" -d "metadata[plan_id]=single_site" -d "metadata[interval]=month"` | `[200]`; row appears in `public.subscriptions` |
+| `customer.subscription.updated` | `stripe subscriptions update sub_… -d "items[0][id]=si_…" -d "items[0][price]=<single_site yearly TEST price id>"` | `[200]`; plan stays Single Site, interval becomes **year**; page shows **$756 billed yearly** |
+| `invoice.payment_failed` | Attach `pm_card_chargeCustomerFail` as the customer's default method, then create a subscription as above | `[200]`; subscription status **incomplete** (no access granted) |
+| `customer.subscription.deleted` | `stripe subscriptions cancel sub_…` | `[200]`; status **canceled**; access ends |
+| Smoke test only | `stripe trigger customer.subscription.created` (or `invoice.paid`, `invoice.payment_failed`, `checkout.session.completed`) | Fixture objects are *not ours* (no business id, other prices): signature is verified, then the event is **ignored** (200) or **refused** (500 "not in the test catalog"). That is correct behaviour. |
+
+**5. What to check afterwards** (clicky-dev SQL editor)
+```sql
+select received_at, type, status, left(coalesce(error, ''), 80) as note
+from public.integration_events order by received_at desc limit 10;   -- processed / ignored / failed, once per event id
+
+select plan_id, status, billing_interval, cancel_at_period_end
+from public.subscriptions order by updated_at desc limit 5;
+```
+- Access comes **only** from the delivered event: the success redirect alone changes nothing (the Plan page shows "Confirming your payment…" until the event is processed).
+- Replay: `stripe events resend evt_…` → the app answers 200 `duplicate` and nothing changes.
+- Forged: `curl -i -X POST localhost:3100/api/webhooks/stripe -H 'stripe-signature: t=1,v1=bad' -d '{}'` → **400**.
+- Wrong amount or an unknown price is refused (`failed`, no access).
+
+**6. Clean up**
+```bash
+stripe subscriptions cancel sub_…   # any you created
+stripe customers delete cus_…       # any you created
+```
+Stop `stripe listen` (Ctrl-C) and the app, and close the shells (the whsec, keys and test key were only in their environments).
+
+**Warning: events also reach the registered endpoints.** `stripe trigger` and real test subscriptions create real TEST events that Stripe delivers to *all* endpoints in the account, not just your CLI. The TEST account has two endpoints pointing at `https://somethingclicks.com/api/webhooks/stripe` (production) and one for the protected preview URL. On Nov 24 (02:25–02:33 UTC) the clicky-dev journey tests created test subscriptions, and production's webhook recorded **24 failed deliveries** in its `integration_events` table (`Stripe is not configured`: production has no `STRIPE_SECRET_KEY`, and none of those businesses exist there, so nothing was granted). Stripe retries failed deliveries for up to three days, so more rows can appear. To keep testing off production, disable or delete those TEST endpoints in Stripe (Test mode → Developers → Webhooks) before testing; this is your decision.
 
 ## clicky-dev Auth (Supabase → clicky-dev → Authentication)
 The Supabase connector cannot change these. Click by click:
@@ -139,7 +205,7 @@ Create a project for `somethingclicks.com` → Settings → Masking → **Strict
 ## Vercel
 - **Plan:** commercial use requires **Pro** (Hobby is personal, non-commercial only).
 - **Production branch:** Settings → Git → Production Branch = `main`. Do not change it. The current production deployment was made from `claude/fervent-knuth-0fo94q` by hand (LAUNCH.md); production builds come from `main` after a merge.
-- **Previews:** every push to a `claude/*` branch makes a preview deployment behind Vercel login. Preview deployments use the **Preview** environment variables — today those point at the production Supabase project. Either keep previews private (current setting) or point Preview at a separate Supabase project.
+- **Previews:** every push to a `claude/*` branch makes a preview deployment behind Vercel login. Since Nov 24 the six variables that used to be shared with all Preview branches (production Supabase URL and keys, site URL, billing key, cron secret, webhook secret) are scoped to **Production only**, so other branches' previews no longer inherit production values; `claude/ecstatic-curie-9shvjf` has its own branch-scoped overrides pointing at clicky-dev and Stripe TEST. A new branch's preview needs its own variables to run.
 - **Cron:** `vercel.json` schedules `/api/cron/weekly-analysis` daily at 14:17 UTC.
 
 ## DNS

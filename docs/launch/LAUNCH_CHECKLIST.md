@@ -23,7 +23,7 @@ Commits: `c6da947` foundation · `1cef428` homepage, consent, legal · `489fa38`
 | Real iPhone WebKit | not run: the WebKit download is blocked in this sandbox |
 | clicky-dev: all migrations applied in order, rollback → re-apply cycle | pass; all 52 function bodies match the repo files |
 | Production Supabase | **untouched** (launch migration not applied) |
-| Production Vercel variables | **unchanged** (7 rows before and after, same ids and update times) |
+| Production Vercel variables | **values unchanged**; 7 Production rows intact. Six rows that used to be shared with every Preview branch were scoped to **Production only** (Option B, approved Nov 24); their values and Production targets are untouched |
 
 ### What the journey tests cover (real: Supabase Auth/REST/RLS, Stripe TEST, the app)
 Anonymous first result (cached path, unreachable site, spam trap, minimum fill time) · Save this stores the email against the result · a link opened in a **different browser** claims the saved result for the same verified email · replay refused · wrong email refused · signed-out visitor sent to sign in · three free uses, then the database refuses the fourth · upgrade page offers only Marketing Plan and Single Site (Business Plus and Multi-Site under "Coming soon") · "What stopped you?" + follow-up permission stored apart from feedback · draft approval · checkout for Marketing Plan, Single Site monthly and yearly (real TEST sessions: price id, product, mode, org, metadata) · real Stripe subscription events grant access, replays are no-ops, forged events refused, wrong amount refused · "$756 billed yearly" · Marketing Plan allows exactly one paid check · onboarding saves business name, website and ZIP · admin funnel page for admins only (others get 404) · cross-customer isolation and anonymous access · axe and 390px layout on every signed-in screen.
@@ -48,8 +48,18 @@ Anonymous first result (cached path, unreachable site, spam trap, minimum fill t
 - [~] **P0.9 Final testing** — see Status. Remaining: WebKit, real devices, real scan/email/AI.
 - [~] **P0.10 Launch readiness** — see report; **not ready for customers yet** (see "Needs the owner").
 
+## Production state (investigated Nov 24, read-only; nothing changed)
+- **What is live:** deployment `dpl_ph62pF1pwkzicecUCHdEz79UFHcT`, a Vercel **redeploy** created Nov 24 01:34 UTC by Vercel user `hiyamattie-3986` (the account owner). It redeployed the original production deployment `dpl_9x3WmjWztUq7y1FpCTte71P3hnWu` (Nov 19 03:56 UTC, same user, not a git push). Both were built from branch `claude/fervent-knuth-0fo94q` at `063cca4`. `RESEND_API_KEY` was added to Production at 01:33 UTC, one minute before the redeploy.
+- **`main`:** still the single "Initial commit" `9b14f91` (`README.md`, `.gitignore`). `063cca4` is 19 commits ahead of it (146 files added, 2 modified, ~15,260 lines). Production is **not** running `main`.
+- **Intended for Preview only?** No. `063cca4` is the finished Phase 7 app that docs/LAUNCH.md says was deployed to production from the branch on purpose. None of the launch-redesign features exist in it (no free first result, claim flow, `FREE_PREVIEW_ENABLED`, new pricing): it still shows Diagnostic Audit $39, Starter AI $49, Growth AI $149, Scale & Automation $399.
+- **Database match:** production Supabase has exactly the 7 migrations that `063cca4` expects and none of the launch objects; 0 users, businesses and subscriptions. No mismatch today. **The mismatch risk is in the future:** merging this branch into `main` (which auto-deploys Production) would ship code that calls launch-migration functions, so the migration must be applied first (go-live runbook step 1).
+- **Production variables the code reads but are not set:** `STRIPE_SECRET_KEY` (checkout says "isn't switched on yet"), `ANTHROPIC_API_KEY` (template wording, drafts off), `PAGESPEED_API_KEY`, `SUPABASE_SECRET_KEY` (the daily cron answers 503 "Worker not configured"), `EMAIL_FROM` (with it unset, `RESEND_API_KEY` alone sends nothing), `EMAIL_REPLY_TO`, `STRIPE_ALLOW_LIVE`.
+- **Production webhook log:** `integration_events` holds 32 rows. 8 are from the Nov 19 verification (3 processed, 5 failed). **24 failed rows were recorded Nov 24 02:25–02:33 UTC, caused by the journey tests**: the TEST Stripe account has two endpoints that point at production, so Stripe delivered my test subscriptions' events there. They failed safely (`Stripe is not configured`; no such businesses exist in production; nothing granted) but they are production rows that testing caused, and Stripe may keep retrying for up to three days.
+- **Risks:** a push or merge to `main` deploys to Production; the production-branch setting and what is live disagree; the old TEST endpoints keep sending test events to production.
+- **Recommendation (no action taken):** leave Production as is (no rollback needed); disable the two production-pointing TEST webhook endpoints in Stripe; set `EMAIL_FROM`; before any merge, get approval to apply the launch migration to production, set the Production variables, then merge. Optionally make `main` match what is live first (a fast-forward of `main` to `063cca4`), which triggers a production build of identical code and needs your approval.
+
 ## Preview environment (branch `claude/ecstatic-curie-9shvjf`, target Preview only)
-Branch-scoped Preview variables override the shared Preview rows without editing them. Preview URL: `https://something-clicks-git-claude-94123f-matt-hills-projects-54d303a1.vercel.app` (read from Vercel).
+Branch-scoped Preview variables for this branch point at clicky-dev and Stripe TEST. Since Nov 24 the six formerly shared variables are **Production-only**, so other branches' previews no longer inherit production values (verified with Vercel's resolver: another branch resolves none of them). Preview URL: `https://something-clicks-git-claude-94123f-matt-hills-projects-54d303a1.vercel.app` (read from Vercel).
 
 | Variable | Source |
 |---|---|
@@ -61,7 +71,7 @@ Branch-scoped Preview variables override the shared Preview rows without editing
 | `BILLING_WEBHOOK_KEY` (sensitive) | generated new for dev; only its hash is in clicky-dev |
 | `STRIPE_WEBHOOK_SECRET` (sensitive) | signing secret of TEST endpoint `we_1Uf9ApFnFMCbDhHEbQoz3sYP` (preview URL) |
 
-**Not added (needs you; I never see secret values):** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` (clicky-dev) — see INTEGRATIONS "Preview: two values only you can add". Not added on purpose: GA4, Clarity, Resend, cron, Anthropic, PageSpeed, any live Stripe value. The shared Preview rows `CRON_SECRET` (production's value) and the old production TEST `STRIPE_WEBHOOK_SECRET`/`BILLING_WEBHOOK_KEY` still exist for other branches; this branch overrides the latter two.
+**Not added (needs you; I never see secret values):** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` (clicky-dev) — see INTEGRATIONS "Preview: two values only you can add". Not added on purpose: GA4, Clarity, Resend, cron, Anthropic, PageSpeed, any live Stripe value. This branch no longer has a `CRON_SECRET` (it only existed as a shared Production row).
 
 ## Journey tests (clicky-dev + Stripe TEST)
 1. clicky-dev has all migrations. Seed users: SQL editor, `set app.allow_e2e_seed = 'on';` then run `tests/e2e/dev-seed.sql`. Reset between runs: same guard, `tests/e2e/dev-reset.sql`. The 12 e2e accounts are **disabled** after each session (known throwaway password, one is an admin): re-enable with `update auth.users set banned_until = null where email like '%@e2e.test';` and disable again afterwards. Keep the GitHub repository private.
@@ -132,7 +142,7 @@ Old plan rows stay in the database (production has 0 customers). No monthly draf
 
 ## Needs the owner
 - [ ] **Add two Preview secrets** (`STRIPE_SECRET_KEY` test, `SUPABASE_SECRET_KEY` clicky-dev) — see INTEGRATIONS.
-- [ ] **Vercel Deployment Protection:** Stripe's webhook cannot reach the preview while the login wall is on — bypass steps in INTEGRATIONS.
+- [ ] **Webhook testing without changing Vercel:** Deployment Protection stays on and no bypass secret is added. Use the local Stripe CLI procedure in INTEGRATIONS ("Webhook testing: local Stripe CLI", guarded by `scripts/stripe-local-webhook.sh`). Decide whether to disable the TEST webhook endpoints that point at production and at the preview (same section, warning).
 - [ ] **clicky-dev Auth URLs and email settings** (the Supabase connector cannot change Auth settings) — INTEGRATIONS "clicky-dev Auth".
 - [ ] Approve and apply the launch migration to production (runbook step 1).
 - [ ] Attorney review of `/privacy` and `/terms`; fill the [bracketed] items.
