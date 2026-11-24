@@ -1,6 +1,8 @@
 -- E2E test users for the clicky-dev Supabase project (ref ofstvbgaoznipsiqbjjp) ONLY.
 -- NEVER run on production: it creates accounts with a known password and one platform admin.
 -- Guard: you must opt in for the session first:   set app.allow_e2e_seed = 'on';
+-- After testing, the accounts are disabled (banned_until). To re-enable before a run:
+--   update auth.users set banned_until = null where email like '%@e2e.test';
 -- Creates 12 confirmed users: {pat,other,buyer,mpbuyer,admin,nobody}-{m,d}@e2e.test (m = phone run, d = desktop run).
 do $$
 declare
