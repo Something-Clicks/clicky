@@ -1,9 +1,10 @@
 -- Launch redesign: free first result, Save this, three free uses, new plans,
 -- feedback and funnel counts.
 --
--- Additive only: new tables, new columns with defaults, new rows, new functions,
--- and replacements of four existing functions (same signatures, same checks, plus
--- the new free-use rule). No existing row is changed or deleted.
+-- Additive: new tables, new columns with defaults, new rows, new functions, and
+-- replacements of three existing functions (same signatures and checks, plus the new
+-- free-use rule) and one widened CHECK constraint. No existing row is deleted; the only
+-- write to an existing row sets the new one_time column on the old diagnostic_audit plan.
 -- Rollback: supabase/rollback/20261124120000_launch_redesign_down.sql
 --
 -- * Anonymous visitors never touch tables directly. The web server calls the
