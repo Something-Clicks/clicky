@@ -3,6 +3,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
 
+import { DEFAULT_MAX_OUTPUT_TOKENS } from "../pricing";
 import type { ModelProvider, ModelRawResponse } from "../provider";
 
 /**
@@ -29,7 +30,7 @@ export function anthropicDevProvider(env: Record<string, string | undefined> = p
       const format = jsonSchemaOutputFormat(req.jsonSchema as { type: "object" } & Record<string, unknown>);
       const response = await client.messages.create({
         model: DEV_MODEL,
-        max_tokens: req.maxOutputTokens ?? 16000,
+        max_tokens: req.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         system: req.system,
         messages: [{ role: "user", content: typeof req.input === "string" ? req.input : JSON.stringify(req.input) }],
         output_config: { format: { type: "json_schema", schema: format.schema }, ...(effort ? { effort } : {}) },

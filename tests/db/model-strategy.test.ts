@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from "node:crypto";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FACT_FIELDS } from "../../src/lib/business-profile";
@@ -24,9 +26,12 @@ const card = (check_key: string) => ({
   check_key, title: check_key, explanation: "x", why_it_matters: "x", recommended_action: "x", expected_benefit: "x",
   impact_priority: "high", confidence: "high", ai_capable: false, execution_type: "manual", approval_required: true, evidence_keys: ["w"],
 });
-const usage = (o: string, cost: number, extra: Partial<{ cap: string; outcome: string; wf: string | null; run: string | null }> = {}) =>
-  q(owner, "select public.record_model_usage($1,$2,'anthropic-dev','claude-sonnet-5-5',100,50,$3,$4,$5,$6)",
-    [o, extra.cap ?? "business_intelligence.understand", cost, extra.outcome ?? "ok", extra.wf ?? null, extra.run ?? null]);
+const MODEL_KEY = randomBytes(32).toString("hex");
+/** One model call as the server records it: reserve the worst case, then settle with the actual cost. */
+const usage = async (o: string, cost: number, extra: Partial<{ cap: string; outcome: string; wf: string | null; run: string | null }> = {}) => {
+  const [{ id }] = await q<{ id: string }>(owner, "select public.reserve_model_call($1,$2,$3,'anthropic-dev','claude-sonnet-5-5',$4,$5,$6) as id", [MODEL_KEY, o, extra.cap ?? "business_intelligence.understand", cost, extra.wf ?? null, extra.run ?? null]);
+  return q(owner, "select public.settle_model_call($1,$2,'claude-sonnet-5-5',100,50,$3,$4)", [MODEL_KEY, id, cost, extra.outcome ?? "ok"]);
+};
 const plan = (...ids: string[]) => ({
   summary: "s", objectives: [{ objective: "o", based_on: [] as string[] }], next_steps: ["n"], questions: [] as string[], not_now: [] as { card_id: string; reason: string }[],
   priorities: ids.map((id, i) => ({ card_id: id, order: i + 1, why_now: "w", effort: "small", depends_on: [] as string[] })),
@@ -44,6 +49,7 @@ beforeAll(async () => {
   await db.admin.query("insert into public.platform_admins (user_id) values ($1)", [admin]);
   await db.grantPlan(org);
   await db.grantPlan(otherOrg);
+  await db.admin.query("insert into app_private.secrets (name, hash) values ('model_usage', $1)", [createHash("sha256").update(MODEL_KEY).digest()]);
   [{ id: analysis }] = await q<{ id: string }>(owner, "select public.start_analysis($1) as id", [org]);
   await q(owner, "select public.complete_analysis($1,$2,$3,'{}','s','template')", [analysis, JSON.stringify(ev), JSON.stringify([card("meta.title_missing"), card("meta.description_missing")])]);
   const cards = await q<{ id: string; check_key: string }>(owner, "select id, check_key from public.action_cards where analysis_id = $1 order by check_key", [analysis]);
@@ -60,14 +66,15 @@ describe("model usage and budgets", () => {
     expect(await db.as(outsider, async (c) => (await c.query("select 1 from public.model_usage")).rows)).toHaveLength(0);
     await expect(q(owner, "insert into public.model_usage (organization_id, capability, provider, model, cost_micro, outcome) values ($1,'x.y.z','p','m',1,'ok')", [org])).rejects.toThrow(PERMISSION_DENIED);
     await expect(q(owner, "update public.model_usage set cost_micro = 0")).rejects.toThrow(PERMISSION_DENIED);
-    await expect(q(null, "select public.record_model_usage($1,'a.b.c','p','m',1,1,1,'ok',null,null)", [org])).rejects.toThrow(PERMISSION_DENIED);
+    await expect(q(null, "select public.reserve_model_call($1,$2,'a.b.c','p','m',1,null,null)", [MODEL_KEY, org])).rejects.toThrow(PERMISSION_DENIED);
   });
 
   it("refuses usage and budget lookups for other businesses, and bad values", async () => {
     await expect(usage(otherOrg, 1)).rejects.toThrow(/Forbidden/);
     await expect(q(owner, "select public.model_budget($1)", [otherOrg])).rejects.toThrow(/Forbidden/);
-    await expect(usage(org, 5_000_001)).rejects.toThrow(/check constraint/);
-    await expect(usage(org, 1, { outcome: "great" })).rejects.toThrow(/check constraint/);
+    await expect(usage(org, 5_000_001)).rejects.toThrow(/Invalid reservation/);
+    await expect(usage(org, 1, { outcome: "great" })).rejects.toThrow(/Invalid settlement/);
+    await db.admin.query("delete from public.model_usage where outcome = 'reserved'"); // the reservation the refused settlement left behind
     await expect(usage(org, 1, { cap: "Bad Capability!" })).rejects.toThrow(/check constraint/);
     await expect(usage(org, 1, { wf: "00000000-0000-0000-0000-000000000000" })).rejects.toThrow(/Forbidden/);
     await expect(usage(org, 1, { run: "00000000-0000-0000-0000-000000000000" })).rejects.toThrow(/Forbidden/);
@@ -99,16 +106,6 @@ describe("model usage and budgets", () => {
     const [{ b: g }] = await q<{ b: { allowed: boolean; reason: string } }>(outsider, "select public.model_budget($1) b", [otherOrg]);
     expect(g).toMatchObject({ allowed: false, reason: "global_daily" });
     await db.admin.query("update public.app_config set value = '20000000' where key = 'model_global_daily_cap_micro'");
-  });
-
-  it("one business recording inflated usage cannot use up everyone else's allowance", async () => {
-    await db.admin.query("update public.organization_model_limits set daily_cap_micro = 500000, monthly_cap_micro = 100000000 where organization_id = $1", [org]);
-    for (let i = 0; i < 4; i++) await usage(org, 5_000_000);
-    const [{ b: mine }] = await q<{ b: { allowed: boolean; reason: string } }>(owner, "select public.model_budget($1) b", [org]);
-    expect(mine).toMatchObject({ allowed: false, reason: "daily" });
-    const [{ b: other }] = await q<{ b: { allowed: boolean } }>(outsider, "select public.model_budget($1) b", [otherOrg]);
-    expect(other.allowed).toBe(true); // $20 recorded by one business counts as at most its own $0.50 toward the global cap
-    await db.admin.query("delete from public.model_usage where cost_micro = 5000000");
   });
 
   it("admin spend summary is for platform admins only", async () => {

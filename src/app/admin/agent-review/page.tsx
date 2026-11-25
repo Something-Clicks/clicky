@@ -18,7 +18,7 @@ interface Row {
   steps: { step: string; status: string; detail: string }[] | null; evidence_classes: Record<string, number> | null; error: string | null;
   facts: ReviewFact[]; findings: ReviewFinding[]; plan: ReviewPlan | null;
 }
-interface Spend { organization: string; calls: number; input_tokens: number; output_tokens: number; cost_micro: number; failed_calls: number }
+interface Spend { organization: string; calls: number; input_tokens: number; output_tokens: number; cost_micro: number; failed_calls: number; unsettled_calls: number }
 
 const LABEL: Record<Dimension, string> = {
   factual_accuracy: "Supported by evidence", evidence: "Has evidence", business_relevance: "Fits this business",
@@ -62,11 +62,11 @@ export default async function AgentReviewPage() {
         {spend.length ? (
           <div style={{ overflowX: "auto" }}>
             <table className="table">
-              <thead><tr><th>Business</th><th>Calls</th><th>Failed</th><th>Tokens in / out</th><th>Cost</th></tr></thead>
+              <thead><tr><th>Business</th><th>Calls</th><th>Failed</th><th>Unsettled</th><th>Tokens in / out</th><th>Cost</th></tr></thead>
               <tbody>
                 {spend.map((s) => (
                   <tr key={s.organization}>
-                    <td>{s.organization}</td><td>{s.calls}</td><td>{s.failed_calls}</td>
+                    <td>{s.organization}</td><td>{s.calls}</td><td>{s.failed_calls}</td><td>{s.unsettled_calls}</td>
                     <td>{s.input_tokens} / {s.output_tokens}</td><td>{formatMicro(s.cost_micro)}</td>
                   </tr>
                 ))}

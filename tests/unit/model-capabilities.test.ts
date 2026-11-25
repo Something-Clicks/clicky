@@ -206,6 +206,7 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
     vi.doUnmock("@/lib/server/agent/provider");
     vi.resetModules();
     delete process.env.FEATURE_MODEL_FINDINGS;
+    delete process.env.MODEL_USAGE_KEY;
   });
 
   it("saves grounded model findings only when the modelFindings switch is on, and records model usage", async () => {
@@ -217,10 +218,11 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
       vi.resetModules();
       const outs = answers();
       vi.doMock("@/lib/server/agent/provider", async (orig) => ({ ...(await orig<object>()), getModelProvider: () => pricedDouble(...outs) }));
+      process.env.MODEL_USAGE_KEY = "k".repeat(40);
       if (on) process.env.FEATURE_MODEL_FINDINGS = "1";
       else delete process.env.FEATURE_MODEL_FINDINGS;
       const { runWebsiteReview } = await import("@/lib/server/agent/orchestrator");
-      const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf" : name === "model_budget" ? { allowed: true } : name === "add_model_findings" ? 1 : 0, error: null }));
+      const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf" : name === "reserve_model_call" ? "reservation-1" : name === "add_model_findings" ? 1 : 0, error: null }));
       const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business: { businessName: "Sunrise Plumbing", serviceArea: null, primaryGoal: null, website: "https://sunrise.example/" } }, {
         fetchPage: async (u) => ({ url: u, status: 200, contentType: "text/html", body: HOME, truncated: false, redirects: [] }),
         pageSpeed: async () => ({ ok: false as const, reason: "busy" }),
@@ -229,7 +231,8 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
       expect(names.includes("add_model_findings"), `switch ${on}`).toBe(on);
       const finish = rpc.mock.calls.find((c) => c[0] === "finish_marketing_workflow")![1] as Record<string, unknown>;
       expect(finish).toMatchObject({ p_status: "prepared", p_provider: "anthropic-dev", p_model: "claude-sonnet-5-5" });
-      expect(names.filter((n) => n === "record_model_usage").length, "one usage record per model call").toBe(on ? 2 : 1);
+      expect(names.filter((n) => n === "reserve_model_call").length, "one reservation per model call").toBe(on ? 2 : 1);
+      expect(names.filter((n) => n === "settle_model_call").length, "each reservation settled").toBe(on ? 2 : 1);
       if (on) expect(out.steps.find((s) => s.step === "analyze_marketing_model")).toMatchObject({ status: "done" });
     }
   });

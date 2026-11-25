@@ -20,3 +20,6 @@ export function costMicro(provider: string, model: string, inputTokens: number, 
 export const hasPrice = (provider: string, model: string) => costMicro(provider, model, 0, 0) !== null;
 
 export const formatMicro = (micro: number) => `$${(micro / 1_000_000).toFixed(micro < 10_000 ? 4 : 2)}`;
+
+/** Output allowance used when a request names none (adapters and metering must agree, so it lives here, free of imports). */
+export const DEFAULT_MAX_OUTPUT_TOKENS = 16000;
