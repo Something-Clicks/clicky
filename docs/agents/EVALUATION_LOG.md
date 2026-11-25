@@ -10,4 +10,4 @@ One section per round. Fill from the read-only SQL in `EVALUATION.md`. Never pas
 - Verdict: round met every line? Consecutive clean rounds so far: N.
 
 ## Rounds
-None yet. No real-model run has happened (no `ANTHROPIC_API_KEY` on Preview as of Nov 25).
+None yet. No real-model run has happened (no `ANTHROPIC_API_KEY` on Preview as of Nov 25, re-checked after the final-review fixes). Consecutive clean rounds: 0.

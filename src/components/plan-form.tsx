@@ -19,7 +19,7 @@ export function PlanForm({ revising }: { revising: boolean }) {
         </label>
       ) : null}
       <div>
-        <SubmitButton pending="Preparing your plan…">{revising ? "Revise the plan" : "Prepare my plan"}</SubmitButton>
+        <SubmitButton pending="Preparing your plan… this can take up to a minute">{revising ? "Revise the plan" : "Prepare my plan"}</SubmitButton>
       </div>
     </form>
   );

@@ -51,6 +51,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const open = openCards(cards);
   const stages = stageCounts(open);
   const running = latest?.status === "running";
+  // The newest check ended without results: say so on Home, in plain words (a failed check does not use a free use).
+  const failedCheck = latest?.status === "failed" && (!lastComplete || new Date(latest.started_at) > new Date(lastComplete.completed_at ?? 0)) ? latest : null;
   const next = open.find((c) => c.status === "new") ?? open[0];
   const more = open.filter((c) => c.id !== next?.id).slice(0, 2);
   const canRun = ent.analyses || free.remaining > 0;
@@ -79,9 +81,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               {free.remaining > 0 ? `${free.remaining} of ${free.limit} free uses left` : "Free uses used up"}
             </Link>
           )}
-          {FEATURES.businessProfile && ws.organization.role === "owner" && (detailsToCheck ?? 0) > 0 ? (
-            <Link href="/app/business" className="pill yellow" style={{ textDecoration: "none" }}>
-              {detailsToCheck} {detailsToCheck === 1 ? "detail" : "details"} about your business to check
+          {FEATURES.businessProfile && ws.organization.role === "owner" ? (
+            <Link href="/app/business" className={(detailsToCheck ?? 0) > 0 ? "pill yellow" : "pill"} style={{ textDecoration: "none" }}>
+              {(detailsToCheck ?? 0) > 0 ? `${detailsToCheck} ${detailsToCheck === 1 ? "detail" : "details"} about your business to check` : "Business details"}
             </Link>
           ) : null}
           {FEATURES.strategy && lastComplete && (open.length > 0 || planRow) ? (
@@ -96,6 +98,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           ) : null}
         </div>
       </div>
+
+      {failedCheck && !running ? (
+        <p className="notice error" role="alert">
+          The last check didn&apos;t finish. {failedCheck.failure_reason ?? "Please try again."} It didn&apos;t use one of your free uses.
+        </p>
+      ) : null}
 
       {running ? (
         <div className="card empty working" role="status">

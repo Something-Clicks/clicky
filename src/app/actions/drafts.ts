@@ -59,16 +59,24 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
 
   const b = ws.business!;
   const profile = { businessName: b.businessName, website: b.website ?? "", serviceArea: b.serviceArea, primaryGoal: b.primaryGoal };
-  const { understanding } = await loadUnderstanding(supabase, ws.organization.id, profile);
-  const input = {
-    kind: card.execution_type as DraftKind,
-    businessName: b.businessName,
-    known: understanding.known,
-    deadlineAt,
-    card: { title: card.title, explanation: card.explanation, recommendedAction: card.recommended_action },
-    evidence: card.action_card_evidence.map((x) => x.analysis_evidence).filter((e) => e !== null),
-    ownerNotes: instructions,
-  };
+  let input;
+  try {
+    const { understanding } = await loadUnderstanding(supabase, ws.organization.id, profile);
+    input = {
+      kind: card.execution_type as DraftKind,
+      businessName: b.businessName,
+      known: understanding.known,
+      deadlineAt,
+      card: { title: card.title, explanation: card.explanation, recommendedAction: card.recommended_action },
+      evidence: card.action_card_evidence.map((x) => x.analysis_evidence).filter((e) => e !== null),
+      ownerNotes: instructions,
+    };
+  } catch (e) {
+    // The run already exists: close it so the card is not stuck "being prepared".
+    log.error("agent_run.setup_failed", { runId, error: e });
+    await supabase.rpc("fail_agent_run", { p_run: runId as string, p_reason: "We couldn't prepare the draft. Please try again." });
+    return { error: "We couldn't prepare the draft. Please try again." };
+  }
   log.info("agent_run.started", { organizationId: ws.organization.id, runId, draftType: input.kind, free, provider: provider.id });
   if (free) await track("free_use_consumed", { kind: "draft" });
 

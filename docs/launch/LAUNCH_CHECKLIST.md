@@ -11,7 +11,7 @@ Commits: `c6da947` foundation · `1cef428` homepage, consent, legal · `489fa38`
 3. Checks before every commit: `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`.
 4. Journey tests (see "Journey tests") only ever run against **clicky-dev** (`ofstvbgaoznipsiqbjjp`), never production (`ysmwnxvyjougetdlpnba`).
 
-## LAUNCH STATUS (the one list; updated Nov 25; detailed notes and history are below it)
+## LAUNCH STATUS (the one list; updated Nov 25, final-review pass; detailed notes and history are below it)
 Branch `claude/ecstatic-curie-9shvjf`; nothing is merged, deployed to Production, or applied to the Production database; Stripe untouched. Production has migrations 1–7 only (through `relink_billing_customer`).
 
 **Two launch scopes (your decision):**
@@ -25,10 +25,14 @@ Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
 - **Auth, claim flow, isolation, funnel counts, consent gating, entitlements from real Stripe objects, Stripe TEST checkout configuration, environment separation, public pages at 390 px and desktop (axe 0 violations):** see "Item status" below.
 - **Server key through the real stack (clicky-dev API, Nov 25):** a signed-in customer calling the model-storing function with no header or a wrong header gets 403 `agent_key`; the server's real key works; reserving without the key and writing usage rows directly are refused.
 - **Agent screens in a real browser** (app running locally against clicky-dev, fixtures written by SQL, no model): Your plan, Business details, internal agent review, owner vs member vs admin, hidden in Production mode, 390 px and desktop, axe 0. `tests/e2e/agent-screens.spec.ts`.
-- **Local checks:** lint, types, 233 unit tests, 182 database tests, build.
+- **Local checks (re-run Nov 25 after the final-review fixes):** lint, types, 237 unit tests, 182 database tests (local Postgres), production build. The build needs the three `NEXT_PUBLIC_*` variables; without them it stops on `/app` prerender ("Supabase is not configured"), which is the environment, not a code fault (built here with clearly fake placeholder values).
+- **Final-review fixes (this pass):** the weekly worker now isolates one business crashing (that analysis is failed, the next still runs) and starts no new business after 150 s of its 300 s limit (4 unit tests, `tests/unit/cron.test.ts`; overlapping runs were already safe: `start_analysis` locks the business and refuses a second running check); a draft whose setup fails after it starts now closes its run instead of leaving the action "being prepared" for 10 minutes; Home now shows why a check failed (it used to look like a fresh start), always links to Business details for owners (it was unreachable on a phone once everything was confirmed), and the plan button says it can take up to a minute.
+- **Test accounts are disabled (clicky-dev, read-only check Nov 25):** all 12 `@e2e.test` users have `banned_until` set 100 years ahead, none active.
 - **Cost control and admission limits by simulation:** metering unit tests (reserve before the call, settle after, fail closed), deadline test.
 
 ### 2. Implemented but not verified
+- **That a disabled test account is refused by Supabase Auth.** The database state is verified (above), but no sign-in attempt was made (needs a test password and re-enabling nothing). A ban stops new sign-ins and token refresh; an access token already issued stays valid until it expires (about an hour). **[A]**
+- **Customer screens in a real browser after this pass's Home changes** (typed and unit-checked; the browser tests need the e2e accounts re-enabled in clicky-dev, which was not done). The nine-step walk was a code and copy review, not a browser run. **[B]**
 - **The real model's output (everything model-written: business understanding, findings, drafts, plans).** Never run; no Anthropic key on Preview and the sandbox cannot reach public sites. Verified only with test doubles and hand-written examples, which prove the checking rules, not usefulness. **[B]**
 - Home-page pointers to "details to check" and "your plan" (added Nov 25; unit/type checked, not yet in a browser run). **[B]**
 - Real website scan (only fixture HTML so far), plain-words scan failure messages against real failing sites. **[A]**
@@ -39,6 +43,11 @@ Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
 - Drafts, edits and approving a version in a browser (database-tested; browser fixtures cover plan and details only). **[B]**
 
 ### 3. Waiting for your action (I never ask for secrets in chat)
+**Preview variables, branch `claude/ecstatic-curie-9shvjf` (names only, checked through the Vercel API Nov 25; values never read):**
+- *Already configured:* `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `BILLING_WEBHOOK_KEY`, `SITE_SERVER_KEY`, `STRIPE_WEBHOOK_SECRET`, `MODEL_USAGE_KEY`, `MARKETING_MODEL_PROVIDER`, `FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY`, `FREE_PREVIEW_ENABLED`.
+- *Missing, needs you:* **`ANTHROPIC_API_KEY`** (blocks all real-model work), `STRIPE_SECRET_KEY` (test), `SUPABASE_SECRET_KEY`.
+- *Missing, optional:* `PAGESPEED_API_KEY`, `RESEND_API_KEY` + `EMAIL_FROM`, GA4/Clarity ids. `CRON_SECRET` is Production-only by design (Vercel runs crons only in Production).
+- Production holds only the Scope A names (no `ANTHROPIC_*`, `MARKETING_*`, `FEATURE_*`, `MODEL_USAGE_KEY`), as intended. Nothing was changed.
 1. **`ANTHROPIC_API_KEY`**: Vercel → `something-clicks` → Settings → Environment Variables → Add New; Sensitive; Environment: Preview; Git branch `claude/ecstatic-curie-9shvjf`; set a monthly spend limit in the Anthropic console first. Then redeploy the branch. (Already set by me: `MARKETING_MODEL_PROVIDER`, `MODEL_USAGE_KEY`, the four `FEATURE_*`.) **[B]**
 2. **Choose and run 3–5 real small-business sites** (yours or with permission) through Preview following `docs/agents/EVALUATION.md` section 3; tell me the business names. I then read the results from clicky-dev, compare them with the live sites, fix, and repeat until the written standard is met. **[B]**
 3. **`STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY`** on the same Preview branch (INTEGRATIONS: "Preview: two values only you can add"); plus optionally `PAGESPEED_API_KEY`. **[A]**
