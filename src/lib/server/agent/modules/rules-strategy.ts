@@ -42,7 +42,7 @@ export const effortOf = (checkKey: string | null): Effort => (checkKey ? EFFORT[
 
 /** Checks that most directly serve each of the owner's goals. */
 const GOAL: Record<string, { label: string; checks: RegExp }> = {
-  more_calls: { label: "get more calls and enquiries", checks: /^(contact\.|local\.|content\.(h1|thin))/ },
+  more_calls: { label: "get more calls and enquiries", checks: /^(contact\.|local\.)/ },
   get_found: { label: "get found by more customers", checks: /^(meta\.|local\.|content\.h1|pagespeed\.|site\.no_https)/ },
 };
 

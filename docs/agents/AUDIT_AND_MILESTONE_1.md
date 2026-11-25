@@ -1,3 +1,5 @@
+> **Historical (written before the Nov 25 2026 independence decision).** It describes an Anthropic-based plan that is no longer used; `ai.ts`, `drafts.ts` and the Anthropic adapter it discusses were removed. Current direction: `docs/agents/OWN_MODEL_PLAN.md`.
+
 # Marketing Agent: specification audit and Milestone 1 scope
 
 Specification: `AI_MARKETING_AGENT.docx` (Nov 2026; same content as the earlier PDF).

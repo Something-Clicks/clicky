@@ -23,9 +23,13 @@ function safeLink(url: string | null): { href: string; path: string } | null {
   }
 }
 
+/** Details where the website is describing itself: we can show that it says so, never that it is true. */
+const SELF_DESCRIBED: readonly string[] = ["trust_signal", "competitive_advantage", "pricing", "value_proposition", "key_message"];
+
 function sourceLine(f: StoredFact): string {
   if (f.source === "owner") return "You added this";
   if (f.status === "confirmed") return "You confirmed this";
+  if (f.source === "website" && SELF_DESCRIBED.includes(f.field)) return "A claim on your website. We haven't checked that it's true";
   return f.evidence_class === "verified" ? "Found on your website" : "Suggested from your website";
 }
 

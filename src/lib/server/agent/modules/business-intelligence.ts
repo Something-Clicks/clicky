@@ -158,7 +158,10 @@ export function trustStatements(pages: PageFacts[]): ProposedFact[] {
   const seen = new Set<string>();
   const counts = { trust_signal: 0, competitive_advantage: 0 };
   for (const p of pages) {
-    const sentences = p.text.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x.length >= 15 && x.length <= 220);
+    // One block at a time (a paragraph, list item or heading), so a quote never joins navigation or a heading to a sentence.
+    // A sentence is only used if it is word for word in the page text we keep.
+    const sources = p.blocks.length ? p.blocks : [p.text];
+    const sentences = sources.flatMap((b) => b.split(/(?<=[.!?])\s+/)).map((x) => x.trim()).filter((x) => x.length >= 15 && x.length <= 220 && p.text.includes(x));
     for (const sentence of sentences) {
       for (const { re, field } of TRUST_PATTERNS) {
         if (!re.test(sentence) || seen.has(sentence.toLowerCase())) continue;

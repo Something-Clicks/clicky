@@ -51,7 +51,7 @@ const MESSAGES: Record<NotificationKind, (business: string) => { subject: string
   }),
   draft_ready: (b) => ({
     subject: `A draft for ${b} is ready for your review`,
-    text: `AI prepared a draft for one of ${b}'s actions. Nothing is used until you approve it.`,
+    text: `A draft is ready for one of ${b}'s actions. Nothing is used until you approve it.`,
     path: "/app/approvals",
   }),
 };

@@ -100,7 +100,9 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
             <VerificationPill verification={card.verification} />
             {FEATURES.drafts ? (card.approval_required ? <span className="pill yellow">Needs your approval</span> : <span className="pill">No approval needed</span>) : null}
           </div>
-          {!draftable ? (
+          {closed ? (
+            <h3 style={{ marginTop: 12 }}>{card.status === "done" ? "Done" : "Dismissed"}</h3>
+          ) : !draftable ? (
             <>
               <h3 style={{ marginTop: 12 }}>Do this on your website</h3>
               <p className="muted">
@@ -158,8 +160,6 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
               </div>
               <p className="small muted">Nothing is published automatically. Use the text on your website or profile, then mark this action done.</p>
             </>
-          ) : closed ? (
-            <h3 style={{ marginTop: 12 }}>{card.status === "done" ? "Done" : "Dismissed"}</h3>
           ) : !canDraft ? (
             <>
               <h3 style={{ marginTop: 12 }}>We can draft this for you</h3>

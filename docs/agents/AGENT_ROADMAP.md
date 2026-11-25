@@ -1,42 +1,44 @@
-# Agent roadmap
+# Agent roadmap (rewritten Nov 25 2026 after the independence decision)
 
-**Status:** the foundation is built (owner-approved Nov 24 2026): see `MARKETING_AGENT.md`. The orchestrator, workflow records and Prepared / Approved / Completed stages exist; every model-dependent capability is blocked until the provider decision.
+No external AI provider, ever (Anthropic, OpenAI, Gemini or any hosted AI API). Something Clicks owns the agent; any language model is an open-weight model we host ourselves (`OWN_MODEL_PLAN.md`). Status of what exists: `MARKETING_AGENT.md`. What is verified and what is not: `FOUNDATION_REVIEW.md`.
 
-## Principle
-The customer never picks or manages an agent. They see one flow:
+The customer sees one flow and never manages an agent: **Website Intelligence → Business understanding → Strategy → Work prepared → Owner approval → Results**.
 
-**Website Intelligence → Marketing Strategy → Content Creation → Customer Approval → Marketing Measurement**
+Four tracks, in the order we build them. Each later track depends on the earlier ones being real, not on the later ones being finished.
 
-Each step is a server-side job with typed input and output, built on what already exists.
+## Track 1. Deterministic marketing intelligence we can build and own (now; needs no model, no GPU, no new spend)
+Software that reads evidence and applies rules we can inspect, test and explain. Every output carries its source, an evidence class and a confidence.
 
-## The six agents
+| Item | Status |
+|---|---|
+| Safe website scan, SEO and conversion checks, speed measurement, ranking, Action Cards, evidence classes | Built, tested; real sites **not yet** |
+| Structured business profile from the site's own data (schema.org, contact links, services from navigation) and quoted claims; site claims labelled "not checked" | Built, tested on fixtures; real sites **not yet** |
+| Rules-based plan (impact, goal, evidence, effort) | Built, tested |
+| Outcome tracking: verified fixed / still found, before-after speed | Built |
+| Richer extraction: opening hours, social profiles, reviews page, calls to action, contact form, sitemap and page inventory, name/address/phone consistency across pages | Next |
+| Local presence checks (service-area pages, address and phone on every page, map link) | Next |
+| Performance history and trends across checks; "what changed since last time" | Next |
+| Owner-supplied research import (competitor list, keyword exports) with provenance, never scraped data presented as fact | After a data decision |
+| Content *inventory* (what pages exist, what is missing for each service) | Next |
+**Gate to call Track 1 done:** run on 3–5 permissioned real sites (`pnpm sitecheck`), every line checked by a person, defects fixed, rerun clean. Needs a machine with internet and the owner's site list.
 
-| # | Agent | Input | Output | Reuses |
-|---|---|---|---|---|
-| 1 | Website Intelligence | website URL, business profile | evidence + findings | `analyzeWebsite` (safe fetch, scan, checks, PageSpeed) |
-| 2 | Marketing Strategy | findings, goals, ZIP | ranked plan (Action Cards) with reasons | `checks.ts` priorities, `ai.ts` wording guard |
-| 3 | Content Creation | one card + evidence + owner notes | draft (structured fields) | `drafts.ts`, `agent_runs`, `approvals` |
-| 4 | Marketing Research | business category, ZIP, owner-supplied research (e.g. Semrush exports) | opportunities labeled verified / estimate / unknown | new; no external data source is connected today |
-| 5 | Marketing Measurement | previous vs. new analysis | verified fixed / still found, before/after scores | `verify_outcomes`, PageSpeed comparison |
-| 6 | Recurring Marketing Work | schedule + plan entitlements | queued drafts for approval | weekly cron worker, `worker_*` functions |
+## Track 2. Our own agent orchestration and reasoning workflows (now, in parallel; mostly software)
+The "reasoning" that does not need a language model: planning, prioritisation, dependency handling, memory, evaluation, quality control.
+- **Built:** orchestrator and workflow records, capability registry, grounding and quality screening, per-business limits, deadlines, approval stages.
+- **Next:** dependency rules between actions (title before description, speed before mobile polish) so plans have real `depends_on`; goal-weighted ranking with the owner's confirmed details; workflow memory (what was proposed, accepted, rejected and why, used to stop repeating rejected advice); background job queue and status screen (also required before any slow model); an evaluation harness for plans and extractions with frozen expected results.
+- **Not claimed as AI:** none of this is described to customers as AI. The Privacy Policy stays true ("no AI service") until a model is actually used.
 
-Internal business agents (onboarding notes, lead research, reporting, knowledge search; see the owner's "AI Agents" brief) are a separate track and never touch customer-facing flows.
+## Track 3. Self-hosted open-weight model evaluation (needs your approval for any spend)
+Starts only after Tracks 1 and 2 show where language ability is truly needed (understanding a site's positioning, writing drafts in a business's voice).
+1. Self-hosted adapter against an OpenAI-compatible endpoint **we host** (not OpenAI), with auth, health check and a protocol test against a local stub.
+2. Candidate shortlist by licence and fit; run on **our** evaluation set (20–30 permissioned sites) under the written quality standard (`EVALUATION.md`).
+3. Measure quality, invented facts, latency, tokens, real cost; pick one or conclude none qualifies (the deterministic product then ships without model features).
+**Needs your approval:** rented GPU budget, candidate rules. Nothing is bought or started until then.
 
-## Architecture
-- **Execution:** server-side only (route handlers / Vercel functions / cron). Keys stay on the server.
-- **Records:** extend `agent_runs` (already: type, permission, input notes, model, output, usage, status, timing) with `workflow_id`, `step`, `attempt`, `cost_cents`.
-- **Orchestration:** a small state machine per workflow (`pending → running → needs_approval → done | failed`), one step at a time, resumable from the database. No external automation platform.
-- **Retries:** bounded (e.g. 2) with backoff; failures recorded with a plain reason; never silently skipped.
-- **Limits and cost:** per-business daily caps in the database (as today: 10 analyses, 20 drafts), plus a monthly cost ceiling per plan and a global daily spend cap; usage tokens recorded per run.
-- **Permissions:** each agent gets a narrow capability (`draft_only` today). No agent can publish, send messages, change billing, or read another business. All data access goes through existing RLS / `SECURITY DEFINER` functions.
-- **Provider:** keep a thin model interface (as in `ai.ts` / `drafts.ts`) so the provider can change.
-- **Approval:** anything consequential stops at `needs_approval`; only the owner approves (as `decide_approval` does today).
-- **Tests:** every agent ships with mocked model responses and database tests for its limits and permissions before any paid API call.
+## Track 4. Fine-tuning and eventual proprietary model (long term; not started)
+- Adapt a chosen open-weight base on owner-approved examples (confirmed details, approved edits). **Needs explicit customer consent terms first;** no customer data is used for training under the current terms.
+- Product wording: "adapted from <base model>"; "our own model" only for weights we trained from scratch.
+- Decision gate after adaptation results: continued pre-training, distillation or from-scratch, each with a data, cost and benefit case. Default: keep adapting open-weight bases.
 
 ## Never allowed
-Inventing business facts; auto-publishing; sending consequential messages without approval; changing billing; accessing other customers' data; bypassing RLS; unlimited model calls.
-
-## Suggested order (after approval)
-1. Workflow records + orchestration around the existing analysis → draft → approval path (no new capability, just one flow).
-2. Recurring Marketing Work (needs a paid plan that includes it; today it would be "Coming soon").
-3. Marketing Research, once a real data source is chosen.
+Inventing business facts; presenting a site's claim as verified; auto-publishing; sending consequential messages without approval; changing billing; accessing other customers' data; bypassing RLS; unlimited model calls; canned text presented as reasoning; any hosted AI API.

@@ -13,6 +13,8 @@ export interface PageFacts {
   h1s: string[];
   headings: string[];
   text: string;
+  /** The page's paragraphs, list items and headings, one entry each (so a quote never joins navigation or headings to a sentence). */
+  blocks: string[];
   wordCount: number;
   hasViewport: boolean;
   telLinks: string[];
@@ -50,6 +52,7 @@ export function extractFacts(page: FetchedPage): PageFacts {
   const body = root.querySelector("body") ?? root;
   body.querySelectorAll("script,style,noscript,svg").forEach((el: HTMLElement) => el.remove());
   const text = clean(body.textContent);
+  const blocks = [...new Set(body.querySelectorAll("p,li,h1,h2,h3,h4,h5,blockquote,td,dd,figcaption").map((el) => clean(el.textContent)).filter((b) => b.length >= 15 && b.length <= 1500))].slice(0, 150);
 
   const anchors = root.querySelectorAll("a[href]");
   const links = anchors.map((a) => a.getAttribute("href") ?? "");
@@ -80,6 +83,7 @@ export function extractFacts(page: FetchedPage): PageFacts {
     h1s: root.querySelectorAll("h1").map((h) => clean(h.textContent)).filter(Boolean),
     headings: root.querySelectorAll("h2,h3").map((h) => clean(h.textContent)).filter(Boolean).slice(0, 20),
     text: text.slice(0, 6000),
+    blocks,
     wordCount: text ? text.split(" ").length : 0,
     hasViewport: Boolean(root.querySelector('meta[name="viewport"]')),
     telLinks: links.filter((h) => h.toLowerCase().startsWith("tel:")),

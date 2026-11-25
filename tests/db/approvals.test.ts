@@ -75,7 +75,7 @@ describe("preparing drafts", () => {
   });
 
   it("completing a run queues an approval and logs it", async () => {
-    await q(member, "select public.complete_agent_run($1, $2, 'claude-opus-5-5', '{\"output_tokens\": 120}')", [run, JSON.stringify(draft)]);
+    await q(member, "select public.complete_agent_run($1, $2, 'test-model', '{\"output_tokens\": 120}')", [run, JSON.stringify(draft)]);
     const [ap] = await q<{ decision: string }>(owner, "select decision from public.approvals where agent_run_id = $1", [run]);
     expect(ap!.decision).toBe("pending");
     await expect(q(owner, "select public.start_agent_run($1, null)", [aiCard])).rejects.toThrow(/waiting for approval/);

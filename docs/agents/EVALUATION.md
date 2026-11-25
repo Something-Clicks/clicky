@@ -4,6 +4,9 @@ Purpose: find out whether the agent's business understanding, findings, drafts a
 
 **Status (Nov 25): NOT RUN.** No external AI provider is used (owner decision) and no self-hosted model exists yet, so there is no real-model result. This standard and procedure apply unchanged to **any** model Something Clicks runs (`OWN_MODEL_PLAN.md`, phase 2) and, for the parts that need no model (structured profile, rules-based plan, checks), to the deterministic agent on real sites today. The sandbox also cannot reach public websites, so a real-site run happens on Preview.
 
+## 0. Deterministic agent on real sites (no model, no key; do this first)
+`SITECHECK_URLS="https://a.example,https://b.example" pnpm sitecheck` on a machine with internet, for sites you own or have permission to scan. It runs the scan, structured-data extraction, business details, findings, ranking and rules-based plan, and writes `eval-results/sitecheck-<time>.md` with source quotes and a "Correct?" column. A person checks every line against the live site. The same lines of the quality standard that need no model (invented facts, evidence, owner experience, cost = $0) apply. Defects become a fix plus a fixture test, then rerun. `tests/unit/site-fixtures.test.ts` is the fixture version of this check.
+
 ## 1. One-time setup (you; Claude never sees the secret)
 Vercel → `something-clicks` → Settings → Environment Variables → Add, **Preview only, branch `claude/ecstatic-curie-9shvjf`**:
 - None for the deterministic agent. (No provider key exists or is wanted. A self-hosted model endpoint secret is added only in phase 1 of `OWN_MODEL_PLAN.md`.)

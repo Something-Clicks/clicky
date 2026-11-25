@@ -153,6 +153,12 @@ describe("Marketing Strategy by fixed rules", () => {
     expect(plan.questions).toEqual(["Who is your ideal customer?", "Which areas do you serve?"]);
   });
 
+  it("only says an action supports a goal when the link is direct (calls: contact and local checks, not a thin homepage)", () => {
+    const plan = buildRulesPlan({ businessName: "Sunrise", primaryGoal: "more_calls", cards: [card("thin", "content.thin_homepage", "high"), card("call", "contact.no_click_to_call", "high")], missing: [] })!;
+    expect(plan.priorities.find((p) => p.card_id === "thin")!.why_now).not.toMatch(/your goal/);
+    expect(plan.priorities.find((p) => p.card_id === "call")!.why_now).toMatch(/your goal/);
+  });
+
   it("fits the database's plan shape: sizes, at most 8 priorities, 5 later items, dependencies empty, only given card ids", () => {
     const cards = Array.from({ length: 20 }, (_, i) => card(`c${i}`, i % 2 ? "meta.title_missing" : "pagespeed.performance", i % 3 ? "high" : "low", { title: "T".repeat(300), why_it_matters: "W".repeat(900) + ".", recommended_action: "R".repeat(900) + "." }));
     const plan = buildRulesPlan({ businessName: "N".repeat(200), primaryGoal: "get_found", cards, missing: ["what_it_does", "service", "audience", "service_area", "value_proposition", "contact_phone"] })!;

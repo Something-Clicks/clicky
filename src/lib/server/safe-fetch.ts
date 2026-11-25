@@ -174,7 +174,7 @@ export function createSafeFetcher(options: SafeFetchOptions = {}) {
           lookup: lookup as never,
           timeout: remaining,
           headers: {
-            "user-agent": "SomethingClicksBot/1.0 (+website analysis requested by the site owner)",
+            "user-agent": "SomethingClicksBot/1.0 (+https://somethingclicks.com; website analysis requested by a Something Clicks account holder)",
             accept: "text/html,application/xhtml+xml",
             "accept-encoding": "gzip, deflate, br",
           },

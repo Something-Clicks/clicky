@@ -36,7 +36,7 @@ export default async function AgentRunsPage() {
     <>
       <div className="eyebrow">Platform admin</div>
       <h1 className="h1">Agent runs</h1>
-      <p className="sub">Every AI preparation, its outcome and cost. Draft content is not shown here.</p>
+      <p className="sub">Every draft preparation, its outcome and cost. Draft content is not shown here.</p>
       {error || !r ? (
         <p className="notice error" role="alert">Agent runs could not be loaded.</p>
       ) : (
