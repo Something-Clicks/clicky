@@ -88,6 +88,15 @@ describe("usage cannot be forged", () => {
   });
 });
 
+describe("what customers can see", () => {
+  it("model_budget shows a business its own figures only, and the internal full version is out of reach", async () => {
+    const b = await budget(owner, org);
+    expect(Object.keys(b).sort()).toEqual(["allowed", "daily_cap_micro", "monthly_cap_micro", "reason", "spent_month_micro", "spent_today_micro"]);
+    await expect(q(owner, "select app_private.model_budget_full($1)", [org])).rejects.toThrow(PERMISSION_DENIED);
+    await expect(q(owner, "select app_private.model_usage_key_ok($1)", [KEY])).rejects.toThrow(PERMISSION_DENIED);
+  });
+});
+
 describe("caps hold at the moment of reservation", () => {
   it("a reservation counts as spent straight away and is refused if it would pass a cap", async () => {
     await db.admin.query("delete from public.model_usage");
@@ -163,6 +172,9 @@ describe("rollback", () => {
     expect((await db.admin.query("select to_regprocedure('public.reserve_model_call(text,uuid,text,text,text,bigint,uuid,uuid)') f, to_regprocedure('public.record_model_usage(uuid,text,text,text,integer,integer,bigint,text,uuid,uuid)') g")).rows[0]).toMatchObject({ f: null });
     expect((await db.admin.query("select count(*)::int n, coalesce(sum(cost_micro),0)::int c from public.model_usage")).rows[0]).toEqual({ n: 1, c: 700 });
     expect((await db.admin.query("select count(*)::int n from app_private.secrets where name = 'model_usage'")).rows[0].n).toBe(0);
+    // model_budget is back to the 20261129 body and the internal helper is gone
+    expect((await db.admin.query("select to_regprocedure('app_private.model_budget_full(uuid)') f")).rows[0].f).toBeNull();
+    expect((await db.admin.query("select pg_get_functiondef('public.model_budget(uuid)'::regprocedure) d")).rows[0].d).toContain("v_default_daily");
     await reapplyFrom(db.admin, "20261130120000_model_reservations");
     expect((await db.admin.query("select to_regprocedure('public.reserve_model_call(text,uuid,text,text,text,bigint,uuid,uuid)') f")).rows[0].f).not.toBeNull();
   });

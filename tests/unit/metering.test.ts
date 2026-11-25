@@ -89,8 +89,8 @@ describe("meteredProvider", () => {
   });
 
   it("the input estimate cannot be pushed under by unusual text (CJK, emoji, accents)", () => {
-    const ascii = estimateInputTokens("a".repeat(3000));
-    expect(ascii).toBeLessThan(1600);
+    expect(estimateInputTokens("a".repeat(3000))).toBeGreaterThanOrEqual(1500 + 500); // 1 token per 2 characters, even for plain text
+    expect(estimateInputTokens("https://x.example/a1b2c3d4e5f6/9f8e7d6c5b4a/".repeat(100))).toBeGreaterThanOrEqual(2000); // dense ids and URLs
     expect(estimateInputTokens("日本語".repeat(1000))).toBeGreaterThanOrEqual(9000); // 3,000 characters: up to 3 tokens each
     expect(estimateInputTokens("😀".repeat(1000))).toBeGreaterThanOrEqual(6000); // two UTF-16 units each
   });

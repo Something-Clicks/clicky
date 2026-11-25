@@ -10,7 +10,7 @@
 --     parallel calls cannot together exceed a cap. settle_model_call replaces the reservation with the
 --     actual tokens and cost. A call that never settles (the server died mid-call) stays counted at its
 --     reserved cost, which errs on the side of spending less.
--- model_budget (read-only) now also reports the global figures. Additive plus replaced functions; rollback:
+-- model_budget (read-only, customer-callable) reports only the business's own figures; the platform-wide ones are internal (app_private.model_budget_full). Additive plus replaced functions; rollback:
 -- supabase/rollback/20261130120000_model_reservations_down.sql.
 
 create function app_private.model_usage_key_ok(p_key text) returns boolean

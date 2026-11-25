@@ -42,13 +42,14 @@ export function worstCaseCostMicro(provider: string, model: string, req: { syste
 }
 
 /**
- * Upper bound for the input tokens of a text: plain ASCII costs about 1 token per 3 characters, and every other
- * UTF-16 unit (accents, CJK, emoji) is counted as 3 tokens, because such text can cost 1-3 tokens per character.
+ * Upper bound for the input tokens of a text: ordinary ASCII text costs about 1 token per 4 characters, but URLs, ids and
+ * digits cost more, so ASCII is counted at 1 token per 2 characters; every other UTF-16 unit (accents, CJK, emoji) is
+ * counted as 3 tokens, because such text can cost 1-3 tokens per character.
  */
 export function estimateInputTokens(text: string): number {
   let ascii = 0;
   for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) < 128) ascii++;
-  return Math.ceil(ascii / 3) + (text.length - ascii) * 3 + 500;
+  return Math.ceil(ascii / 2) + (text.length - ascii) * 3 + 500;
 }
 
 export const MAX_CALL_COST_MICRO = 5_000_000;

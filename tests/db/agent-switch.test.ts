@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { setupTestDb, type TestDb } from "./harness";
@@ -30,10 +33,9 @@ beforeAll(async () => {
 afterAll(async () => db?.teardown());
 
 describe("agent functions switch", () => {
-  it("is off in a fresh database by default (the migration's own value)", async () => {
+  it("is off by default: the migration's own value, read straight after running it (not through the test helper that switches it on)", async () => {
     await rollbackFrom(db.admin, "20261201120000_agent_functions_switch");
-    await reapplyFrom(db.admin, "20261201120000_agent_functions_switch");
-    await setSwitch("0");
+    await db.admin.query(readFileSync(join(__dirname, "..", "..", "supabase", "migrations", "20261201120000_agent_functions_switch.sql"), "utf8"));
     expect((await db.admin.query("select value from public.app_config where key = 'agent_functions_enabled'")).rows[0].value).toBe(0);
   });
 
