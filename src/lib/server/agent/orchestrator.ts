@@ -8,7 +8,11 @@ import type { Json } from "@/lib/supabase/types";
 import { runAnalysis, type AnalysisDeps, type Db } from "../analysis";
 import type { BusinessContext } from "../checks";
 import { CAPABILITIES, type CapabilityId } from "./capabilities";
+import { FEATURES } from "@/config/features";
+
 import { MODULES } from "./modules";
+import { sourcePages } from "./modules/business-understanding";
+import { analyzeWithModel } from "./modules/marketing-analysis-model";
 import { expectDone } from "./modules/types";
 import { getModelProvider } from "./provider";
 import type { RankedNeed } from "./rank";
@@ -90,12 +94,19 @@ async function openRecord(db: WorkflowDb, orgId: string, kind: WorkflowKind, req
   }
 }
 
-async function closeRecord(db: WorkflowDb, id: string | null, status: "prepared" | "blocked" | "failed", steps: StepRecord[], result: unknown, reason: string | null) {
+interface ModelRecord {
+  provider: string;
+  model: string;
+  usage: { inputTokens: number; outputTokens: number };
+}
+
+async function closeRecord(db: WorkflowDb, id: string | null, status: "prepared" | "blocked" | "failed", steps: StepRecord[], result: unknown, reason: string | null, model: ModelRecord | null = null) {
   if (!id) return;
   try {
     const { error } = await db.rpc("finish_marketing_workflow", {
       p_workflow: id, p_status: status, p_steps: steps as unknown as Json, p_result: (result ?? null) as Json | null,
-      p_error: reason, p_provider: null, p_model: null, p_usage: null,
+      p_error: reason, p_provider: model?.provider ?? null, p_model: model?.model ?? null,
+      p_usage: model ? ({ input_tokens: model.usage.inputTokens, output_tokens: model.usage.outputTokens } as Json) : null,
     });
     if (error) log.error("workflow.record_finish_failed", { workflowId: id, error: error.message });
   } catch (error) {
@@ -151,12 +162,44 @@ export async function runWebsiteReview(
   });
 
   // 6. Business Intelligence from the website: propose details for the owner to confirm.
-  const bi = expectDone(await MODULES.business_intelligence.run({ profile, scan: r.scan }), "business_intelligence");
+  const provider = getModelProvider();
+  const bi = expectDone(await MODULES.business_intelligence.run({ profile, scan: r.scan, provider }), "business_intelligence");
+  const modelRun = bi.output.model && !("failed" in bi.output.model) ? bi.output.model : null;
   const proposed = await proposeFacts(db, input.orgId, input.analysisId, bi.output.proposals);
   step({
     step: "learn_business", capability: "business_intelligence", status: proposed === null ? "failed" : "done",
     detail: proposed === null ? `${bi.output.proposals.length} details found on the website could not be saved.` : `${bi.detail} ${proposed} new detail${proposed === 1 ? "" : "s"} saved for the owner to confirm.`,
   });
+
+  // 6b. Model-assisted Marketing Analysis (messaging, conversion, content), only where the
+  //     modelFindings switch is on (never in Production). Findings follow the evidence rules.
+  const usage = { inputTokens: modelRun?.usage.inputTokens ?? 0, outputTokens: modelRun?.usage.outputTokens ?? 0 };
+  let modelName = modelRun?.model ?? null;
+  if (provider && FEATURES.modelFindings) {
+    try {
+      const mf = await analyzeWithModel(provider, {
+        pages: sourcePages(r.scan),
+        businessName,
+        known: bi.output.understanding.known,
+        alreadyFound: r.findings.map((f) => f.title),
+      });
+      usage.inputTokens += mf.usage.inputTokens;
+      usage.outputTokens += mf.usage.outputTokens;
+      modelName = mf.model;
+      let saved = 0;
+      if (mf.cards.length) {
+        const { data, error } = await db.rpc("add_model_findings", { p_analysis: input.analysisId, p_evidence: mf.evidence as unknown as Json, p_cards: mf.cards as unknown as Json });
+        if (error) throw new Error(`add_model_findings: ${error.message}`);
+        saved = typeof data === "number" ? data : 0;
+      }
+      step({
+        step: "analyze_marketing_model", capability: "marketing_analysis", status: "done",
+        detail: `${saved} finding${saved === 1 ? "" : "s"} on messaging, conversion and content saved (${mf.rejected.length} dropped for failing evidence checks).`,
+      });
+    } catch (error) {
+      step({ step: "analyze_marketing_model", capability: "marketing_analysis", status: "failed", detail: error instanceof Error ? error.message.slice(0, 300) : "failed" });
+    }
+  }
 
   // 7. Identify and rank needs (Marketing Analysis).
   step({
@@ -171,10 +214,13 @@ export async function runWebsiteReview(
     detail: `${r.ranked.length} recommendation${r.ranked.length === 1 ? "" : "s"} prepared from website checks, each with evidence, why it matters and what to do.`,
   });
   if (draftsPossible) {
-    const content = await MODULES.content_creation.run(undefined as never);
+    // Drafts are prepared when the owner asks for one on an Action Card (Content Creation), not automatically.
+    const ready = provider !== null && FEATURES.drafts;
     step({
-      step: "prepare_drafts", capability: "content_creation", status: "blocked",
-      detail: `${draftsPossible} could get a prepared draft. ${content.status === "blocked" ? content.reason : ""}`.trim(),
+      step: "prepare_drafts", capability: "content_creation", status: ready ? "waiting" : "blocked",
+      detail: ready
+        ? `${draftsPossible} can get a prepared draft when the owner asks for one.`
+        : `${draftsPossible} could get a prepared draft. ${provider ? "Drafts are switched off here." : "No model provider is configured."}`,
     });
   }
 
@@ -192,7 +238,7 @@ export async function runWebsiteReview(
     coverage: r.coverage,
     drafts_possible: draftsPossible,
   };
-  await closeRecord(db, workflowId, "prepared", steps, result, null);
+  await closeRecord(db, workflowId, "prepared", steps, result, null, provider && modelName ? { provider: provider.id, model: modelName, usage } : null);
   log.info("workflow.prepared", { workflowId, kind: "website_review", needs: r.ranked.length, proposed });
   return { status: "prepared", workflowId, result, steps };
 }

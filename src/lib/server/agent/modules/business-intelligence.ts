@@ -2,6 +2,8 @@ import { FACT_FIELDS, FACT_LABEL, STALE_AFTER_DAYS, type FactField, type FactSou
 import type { EvidenceClass } from "@/lib/evidence";
 
 import type { PageFacts, SiteScan } from "../../site-scan";
+import type { ModelProvider, ModelUsage } from "../provider";
+import { learnWithModel } from "./business-understanding";
 import type { CapabilityModule } from "./types";
 
 /**
@@ -141,26 +143,50 @@ export interface BusinessIntelligenceInput {
   facts?: StoredFact[];
   /** A fresh website scan to propose facts from, when one was just made. */
   scan?: SiteScan | null;
+  /** When given (development and Preview only), the model reads the scan too. */
+  provider?: ModelProvider | null;
   now?: Date;
+}
+
+export interface ModelRun {
+  provider: string;
+  model: string;
+  usage: ModelUsage;
+  accepted: number;
+  rejected: { field: string; value: string; reason: string }[];
 }
 
 export interface BusinessIntelligence {
   understanding: BusinessUnderstanding;
   proposals: ProposedFact[];
+  /** Present when the model ran; null when it did not; "failed" with a reason when it was tried and failed. */
+  model: ModelRun | null | { failed: string };
 }
 
 export const businessIntelligence: CapabilityModule<BusinessIntelligenceInput, BusinessIntelligence> = {
   id: "business_intelligence",
-  async run({ profile, facts = [], scan = null, now = new Date() }) {
+  async run({ profile, facts = [], scan = null, provider = null, now = new Date() }) {
     const proposals = scan ? propose(scan) : [];
+    let model: BusinessIntelligence["model"] = null;
+    if (scan && provider) {
+      try {
+        const m = await learnWithModel(provider, scan, profile);
+        const have = new Set(proposals.map((p) => `${p.field}|${(p.value ?? "").toLowerCase()}`));
+        for (const f of m.accepted) if (!have.has(`${f.field}|${(f.value ?? "").toLowerCase()}`)) proposals.push(f);
+        model = { provider: m.provider, model: m.model, usage: m.usage, accepted: m.accepted.length, rejected: m.rejected };
+      } catch (error) {
+        model = { failed: error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 300) : "unknown error" };
+      }
+    }
     // Proposals from this scan count as current knowledge until the owner reviews them.
     const pending: StoredFact[] = proposals.map((p, i) => ({ ...p, id: `new-${i}`, status: "proposed", observed_at: now.toISOString(), confirmed_at: null }));
     const understanding = understand(profile, [...facts, ...pending], now);
     const fieldsKnown = new Set(understanding.known.map((k) => k.field)).size;
+    const modelNote = model === null ? "" : "failed" in model ? ` Reading the website with the model failed: ${model.failed}.` : ` The model proposed ${model.accepted} detail${model.accepted === 1 ? "" : "s"} (${model.rejected.length} dropped for failing evidence checks).`;
     return {
       status: "done",
-      output: { understanding, proposals },
-      detail: `${fieldsKnown} of ${Object.values(FACT_FIELDS).flat().length} profile details known${proposals.length ? ` (${proposals.length} proposed from the website, awaiting the owner)` : ""}; missing: ${understanding.missing.map((f) => FACT_LABEL[f].toLowerCase()).join(", ") || "none"}.`,
+      output: { understanding, proposals, model },
+      detail: `${fieldsKnown} of ${Object.values(FACT_FIELDS).flat().length} profile details known${proposals.length ? ` (${proposals.length} proposed from the website, awaiting the owner)` : ""}; missing: ${understanding.missing.map((f) => FACT_LABEL[f].toLowerCase()).join(", ") || "none"}.${modelNote}`,
     };
   },
 };

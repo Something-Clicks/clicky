@@ -7,6 +7,8 @@ import { requireOrganization } from "@/lib/auth";
 import { isEmailConfigured } from "@/lib/server/notify";
 import { createClient } from "@/lib/supabase/server";
 
+import { FEATURES } from "@/config/features";
+
 import { BusinessForm, NotificationsForm, ProfileForm } from "./forms";
 
 export const metadata: Metadata = { title: "Account" };
@@ -49,6 +51,7 @@ export default async function SettingsPage() {
         </div>
         <NotificationsForm
           draftReady={prefs?.draft_ready ?? true}
+          showDrafts={FEATURES.drafts}
           analysisComplete={prefs?.analysis_complete ?? true}
           isOwner={ws.organization.role === "owner"}
           emailReady={isEmailConfigured()}

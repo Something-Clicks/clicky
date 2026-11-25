@@ -14,12 +14,12 @@ import { wordingProblem } from "./text-guard";
 export const AI_MODEL = "claude-opus-5-5";
 
 /**
- * Model features in the app turn on only when a provider is registered and selected in
- * src/lib/server/agent/provider.ts (the registry is empty until the owner approves a provider).
- * An API key in the environment alone, such as ANTHROPIC_API_KEY set for an evaluation, never
- * activates anything. This older Anthropic-specific code stays dormant until it is ported.
+ * LEGACY (dormant). This older Anthropic-specific wording and draft code predates the Marketing Agent's
+ * capability modules and is not used by them. It runs only if a provider is enabled (provider.ts) AND
+ * MARKETING_LEGACY_WORDING=1 is set, which no environment sets. An API key alone never activates it.
+ * Content Creation (agent/modules/content-creation.ts) replaces drafts.ts; card wording stays template.
  */
-export const isAiConfigured = () => getModelProvider() !== null;
+export const isAiConfigured = () => getModelProvider() !== null && process.env.MARKETING_LEGACY_WORDING === "1";
 
 let client: Anthropic | null = null;
 export function getClient(): Anthropic {

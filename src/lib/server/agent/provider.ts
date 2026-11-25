@@ -4,14 +4,16 @@ import { z } from "zod";
 
 import { log } from "@/lib/log";
 
+import { anthropicDevProvider } from "./providers/anthropic-dev";
+
 /**
  * Provider-neutral interface for language-model calls made by the marketing agent.
  *
- * STATUS: no provider is registered. The provider decision is pending, so `getModelProvider()`
- * returns null and every model-dependent capability reports itself as blocked. Nothing here
- * calls a model, and there is no mock model: adding a provider means adding one adapter file
- * that implements `ModelProvider` and one entry in `PROVIDERS`, then setting
- * MARKETING_MODEL_PROVIDER on the server.
+ * STATUS: one temporary development adapter is registered ("anthropic-dev", Claude Sonnet 5.5).
+ * It runs only when MARKETING_MODEL_PROVIDER=anthropic-dev and ANTHROPIC_API_KEY are set, and never
+ * in Production. Otherwise `getModelProvider()` returns null and model-dependent capabilities report
+ * themselves as blocked. There is no mock model. Replacing the provider means one new adapter file
+ * and one entry in `PROVIDERS`.
  *
  * (The older Anthropic-specific code in ../ai.ts and ../drafts.ts stays dormant and unconfigured;
  * it is ported onto this interface once a provider is chosen.)
@@ -75,21 +77,35 @@ export class ModelOutputInvalid extends Error {
   }
 }
 
-/** Registered adapters. Empty on purpose until the provider decision is made. */
-const PROVIDERS: Record<string, () => ModelProvider> = {};
+/**
+ * Registered adapters. One temporary development adapter (see providers/anthropic-dev.ts); the
+ * product's provider for customers is an owner decision and is not registered here.
+ */
+const PROVIDERS: Record<string, (env: Record<string, string | undefined>) => ModelProvider | null> = {
+  "anthropic-dev": (env) => anthropicDevProvider(env),
+};
 
 export const registeredProviders = () => Object.keys(PROVIDERS);
 
-/** The configured provider, or null. Never falls back to a default or a stand-in. */
+/**
+ * The configured provider, or null. Never falls back to a default or a stand-in.
+ * Requires MARKETING_MODEL_PROVIDER to name a registered adapter, and that adapter's key.
+ * Always null in Production (VERCEL_ENV=production): enabling a model for customers is an owner
+ * decision and a code change, never just an environment variable.
+ */
 export function getModelProvider(env: Record<string, string | undefined> = process.env): ModelProvider | null {
   const id = env.MARKETING_MODEL_PROVIDER?.trim();
   if (!id) return null;
+  if (env.VERCEL_ENV === "production") {
+    log.warn("model.provider_refused_in_production", { provider: id });
+    return null;
+  }
   const make = PROVIDERS[id];
   if (!make) {
     log.warn("model.provider_unknown", { provider: id });
     return null;
   }
-  return make();
+  return make(env);
 }
 
 /**

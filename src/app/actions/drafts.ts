@@ -6,8 +6,10 @@ import { after } from "next/server";
 import { FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
-import { isAiConfigured } from "@/lib/server/ai";
-import { draftFailureMessage, generateDraft, SUPPORTED_DRAFTS, type DraftType } from "@/lib/server/drafts";
+import { loadUnderstanding } from "@/lib/server/agent/context";
+import { ContentRejected, createContent, isDraftKind, type DraftKind } from "@/lib/server/agent/modules/content-creation";
+import { getModelProvider, ModelOutputInvalid } from "@/lib/server/agent/provider";
+import { draftFailureMessage } from "@/lib/server/drafts";
 import { notify } from "@/lib/server/notify";
 import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
@@ -31,7 +33,8 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
   const cardId = String(form.get("id") ?? "");
   const instructions = String(form.get("instructions") ?? "").trim().slice(0, 1000) || null;
   if (!ws.organization || !UUID.test(cardId)) return { error: "That action could not be found." };
-  if (!isAiConfigured()) return { error: "Drafts aren't switched on yet." };
+  const provider = getModelProvider();
+  if (!provider) return { error: "Drafts aren't switched on yet." };
 
   const supabase = await createClient();
   const { data: card } = await supabase
@@ -40,9 +43,7 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
     .eq("id", cardId)
     .maybeSingle();
   if (!card) return { error: "That action could not be found." };
-  if (!SUPPORTED_DRAFTS.includes(card.execution_type as DraftType)) {
-    return { error: "This kind of draft isn't available yet." };
-  }
+  if (!isDraftKind(card.execution_type)) return { error: "This kind of draft isn't available yet." };
 
   const { data: ent } = await supabase.rpc("current_entitlements", { p_org: ws.organization.id });
   const drafts = (ent as { drafts?: string } | null)?.drafts ?? "none";
@@ -55,33 +56,36 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
   }
 
   const b = ws.business!;
-  const ctx = {
-    draftType: card.execution_type as DraftType,
-    business: { name: b.businessName, serviceArea: b.serviceArea, goal: b.primaryGoal, website: b.website },
+  const profile = { businessName: b.businessName, website: b.website ?? "", serviceArea: b.serviceArea, primaryGoal: b.primaryGoal };
+  const { understanding } = await loadUnderstanding(supabase, ws.organization.id, profile);
+  const input = {
+    kind: card.execution_type as DraftKind,
+    businessName: b.businessName,
+    known: understanding.known,
     card: { title: card.title, explanation: card.explanation, recommendedAction: card.recommended_action },
     evidence: card.action_card_evidence.map((x) => x.analysis_evidence).filter((e) => e !== null),
-    instructions,
+    ownerNotes: instructions,
   };
-  log.info("agent_run.started", { organizationId: ws.organization.id, runId, draftType: ctx.draftType, free });
+  log.info("agent_run.started", { organizationId: ws.organization.id, runId, draftType: input.kind, free, provider: provider.id });
   if (free) await track("free_use_consumed", { kind: "draft" });
 
   after(async () => {
     const started = Date.now();
     try {
-      const draft = await generateDraft(ctx);
+      const draft = await createContent(provider, input);
       const { error: saveError } = await supabase.rpc("complete_agent_run", {
         p_run: runId,
         p_output: { fields: draft.fields } as unknown as Json,
         p_model: draft.model,
-        p_usage: draft.usage as unknown as Json,
+        p_usage: { input_tokens: draft.usage.inputTokens, output_tokens: draft.usage.outputTokens, provider: draft.provider } as unknown as Json,
       });
       if (saveError) throw new Error(saveError.message);
       log.info("agent_run.succeeded", { runId, ms: Date.now() - started, ...draft.usage });
-      await track("draft_created", { type: ctx.draftType });
+      await track("draft_created", { type: input.kind });
       await notify(supabase, ws.organization!.id, b.businessName, "draft_ready");
     } catch (e) {
       log.error("agent_run.failed", { runId, ms: Date.now() - started, error: e });
-      const reason = draftFailureMessage(e);
+      const reason = e instanceof ContentRejected ? e.message : e instanceof ModelOutputInvalid ? "We couldn't prepare a usable draft. Please try again." : draftFailureMessage(e);
       const { error: failError } = await supabase.rpc("fail_agent_run", { p_run: runId, p_reason: reason });
       if (failError) log.error("agent_run.fail_record_failed", { runId, error: failError.message });
     }
@@ -89,6 +93,42 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
 
   revalidatePath("/app", "layout");
   return { ok: true, message: "Preparing your draft. This usually takes under a minute." };
+}
+
+/** Saves an edit to a draft that is waiting for approval: a new version. Any member of the business. */
+export async function editDraft(_prev: FormState, form: FormData): Promise<FormState> {
+  if (!FEATURES.drafts) return { error: "Drafts aren't available yet." };
+  const ws = await getWorkspace();
+  const id = String(form.get("approval") ?? "");
+  if (!ws.organization || !UUID.test(id)) return { error: "That draft could not be found." };
+  const fields: { key: string; text: string }[] = [];
+  for (const [name, value] of form.entries()) {
+    if (name.startsWith("field:")) fields.push({ key: name.slice(6), text: String(value).slice(0, 8000) });
+  }
+  if (!fields.length || fields.some((f) => !f.text.trim())) return { error: "Every part of the draft needs some text." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("edit_draft", { p_approval: id, p_fields: fields as unknown as Json });
+  if (error) {
+    const hint = (error as { hint?: string }).hint;
+    if (hint !== "not_pending") log.error("draft.edit_failed", { id, error: error.message });
+    return { error: hint === "not_pending" ? "This draft was already decided." : "We couldn't save your changes. Please try again." };
+  }
+  revalidatePath("/app", "layout");
+  return { ok: true, message: "Saved as a new version." };
+}
+
+/** The owner approves one specific version. */
+export async function approveDraftVersion(form: FormData): Promise<void> {
+  if (!FEATURES.drafts) return;
+  const ws = await getWorkspace();
+  const approval = String(form.get("approval") ?? "");
+  const version = String(form.get("version") ?? "");
+  if (!ws.organization || ws.organization.role !== "owner" || !UUID.test(approval) || !UUID.test(version)) return;
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("approve_draft_version", { p_approval: approval, p_version: version });
+  if (error && !["already_decided", "owner_only"].includes((error as { hint?: string }).hint ?? "")) log.error("approval.version_failed", { approval, error: error.message });
+  else if (!error) await track("draft_approved");
+  revalidatePath("/app", "layout");
 }
 
 const DECISIONS = ["approved", "rejected", "changes_requested"] as const;

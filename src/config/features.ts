@@ -1,11 +1,30 @@
 /**
- * Customer-facing features that are built but switched off until the product is ready for them.
- * The code stays; only the screens, links and copy that expose it are hidden.
+ * Feature switches for Marketing Agent functionality that is built but not released to customers.
  *
- * drafts: preparing, reviewing and approving written drafts. Needs a writing engine that is not
- * connected yet (the dormant Anthropic code in src/lib/server/ai.ts and drafts.ts is NOT configured
- * and is not a dependency). Everything customers see today is produced by fixed checks.
+ * Each switch is OFF unless FEATURE_<NAME>=1 is set on the server, and it is ALWAYS off in Production
+ * (VERCEL_ENV=production), whatever the variables say. Releasing a feature to customers is an owner
+ * decision and a code change here, never just an environment variable.
+ *
+ *   drafts          - Content Creation: prepare a draft, edit it (each edit is a version), the owner
+ *                     approves a version.
+ *   businessProfile - the owner's "Business details" screen: review what the Marketing Agent learned.
+ *   modelFindings   - model-assisted Marketing Analysis findings shown as Action Cards.
+ *
+ * Server-only: read these in server components and server actions, and pass plain booleans to client
+ * components (client bundles never see these variables, so they would always read false).
  */
+export const releaseAllowed = () => process.env.VERCEL_ENV !== "production";
+
+const on = (name: string) => releaseAllowed() && process.env[`FEATURE_${name}`] === "1";
+
 export const FEATURES = {
-  drafts: false,
-} as const;
+  get drafts() {
+    return on("DRAFTS");
+  },
+  get businessProfile() {
+    return on("BUSINESS_PROFILE");
+  },
+  get modelFindings() {
+    return on("MODEL_FINDINGS");
+  },
+};

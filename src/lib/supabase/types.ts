@@ -175,6 +175,10 @@ export type Database = {
         },
         "organization_id" | "category" | "field" | "source" | "evidence_class"
       >;
+      draft_versions: Table<
+        { id: string; organization_id: string; approval_id: string; version: number; fields: Json; source: string; created_by: string | null; created_at: string },
+        "organization_id" | "approval_id" | "version" | "fields" | "source"
+      >;
       marketing_workflows: Table<
         {
           id: string;
@@ -256,6 +260,7 @@ export type Database = {
           decided_by: string | null;
           decided_at: string | null;
           created_at: string;
+          approved_version_id: string | null;
         },
         "organization_id" | "agent_run_id" | "action_card_id",
         [
@@ -373,6 +378,10 @@ export type Database = {
       propose_business_facts: { Args: { p_org: string; p_analysis: string | null; p_facts: Json }; Returns: number };
       review_business_fact: { Args: { p_fact: string; p_decision: string; p_value: string | null }; Returns: string };
       add_business_fact: { Args: { p_org: string; p_category: string; p_field: string; p_value: string }; Returns: string };
+      // ── model findings and draft versions (20261128120000) ──
+      add_model_findings: { Args: { p_analysis: string; p_evidence: Json; p_cards: Json }; Returns: number };
+      edit_draft: { Args: { p_approval: string; p_fields: Json }; Returns: string };
+      approve_draft_version: { Args: { p_approval: string; p_version: string }; Returns: undefined };
       // ── launch redesign (20261124120000) ──
       free_uses: { Args: { p_org: string }; Returns: Json };
       claim_preview: { Args: { p_claim: string }; Returns: Json };

@@ -32,7 +32,7 @@ export interface Capability {
 export const CAPABILITIES: Record<CapabilityId, Capability> = {
   business_intelligence: {
     id: "business_intelligence", label: "Business Intelligence", runsOn: "checks",
-    today: "Reads the business profile the owner entered (name, website, service area, main goal) and lists what is missing.",
+    today: "Business, Brand and Customer profile with evidence classes: contact details and services from fixed extraction; what the business does, audience, value proposition and voice from the model (development and Preview). The owner confirms.",
   },
   website_intelligence: {
     id: "website_intelligence", label: "Website Intelligence", runsOn: "checks",
@@ -44,7 +44,7 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
   },
   marketing_analysis: {
     id: "marketing_analysis", label: "Marketing Analysis", runsOn: "checks",
-    today: "Turns check results into evidence-backed findings and ranks them (impact, evidence strength, confidence).",
+    today: "Evidence-backed findings from fixed checks, ranked; plus model-assisted messaging, conversion and content findings with quoted evidence (behind a switch, development and Preview).",
   },
   performance_intelligence: {
     id: "performance_intelligence", label: "Performance Intelligence", runsOn: "checks",
@@ -60,7 +60,7 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
   },
   content_creation: {
     id: "content_creation", label: "Content Creation", runsOn: "model",
-    today: "Not available: needs a model provider (drafts are switched off).",
+    today: "Homepage copy and SEO titles/descriptions from the business understanding and the evidence; editable versions; owner approval (behind a switch, development and Preview).",
   },
   campaign_planning: {
     id: "campaign_planning", label: "Campaign Planning", runsOn: "model",

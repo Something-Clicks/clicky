@@ -38,7 +38,7 @@ export function StagePill({ card }: { card: { status: string; verification: stri
 
 /** Where a card came from. Every card today comes from a fixed website check, never from a model. */
 export function OriginPill({ origin }: { origin: string | null | undefined }) {
-  return origin === "model" ? <span className="pill">Prepared for you</span> : <span className="pill">From a website check</span>;
+  return origin === "model" ? <span className="pill">From a closer look at your website</span> : <span className="pill">From a website check</span>;
 }
 
 /** One Action Card in the reference's .card.action style. */

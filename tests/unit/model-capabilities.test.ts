@@ -1,0 +1,191 @@
+/**
+ * Model-assisted capabilities: grounding and validation that Something Clicks applies to model output.
+ *
+ * The "model" here is a hand-written TEST DOUBLE that returns fixed answers. These tests prove how the
+ * Marketing Agent checks, accepts and rejects model output. They say NOTHING about the quality of any
+ * real model's answers; that needs real calls (see docs/agents/MARKETING_AGENT.md, "Verification").
+ */
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { claimProblemIn, findQuote, unsupportedNumbers, type SourcePage } from "@/lib/server/agent/grounding";
+import { businessIntelligence } from "@/lib/server/agent/modules/business-intelligence";
+import { groundFacts, sourcePages, type ModelFactOutput } from "@/lib/server/agent/modules/business-understanding";
+import { checkDraft, ContentRejected, createContent } from "@/lib/server/agent/modules/content-creation";
+import { MODULES } from "@/lib/server/agent/modules";
+import { groundFindings, type ModelFindingOutput } from "@/lib/server/agent/modules/marketing-analysis-model";
+import { expectDone } from "@/lib/server/agent/modules/types";
+import type { ModelProvider } from "@/lib/server/agent/provider";
+import { extractFacts, type SiteScan } from "@/lib/server/site-scan";
+
+const HOME = `<html><head><title>Sunrise Plumbing | Salt Lake City</title></head><body>
+  <h1>Plumbing you can count on</h1><p>We clear drains and repair water heaters for homes across Salt Lake County.
+  Family owned since 2009. Call (801) 555-0123 to book.</p></body></html>`;
+const scan: SiteScan = { homepage: extractFacts({ url: "https://sunrise.example/", status: 200, contentType: "text/html", body: HOME, truncated: false, redirects: [] }), pages: [], failures: [] };
+const pages: SourcePage[] = sourcePages(scan);
+
+/** TEST DOUBLE: returns the given outputs in order. Not a model. */
+const double = (...outputs: unknown[]): ModelProvider => ({
+  id: "test-double",
+  generate: vi.fn(async () => ({ output: outputs.shift(), model: "test-double", usage: { inputTokens: 10, outputTokens: 5 } })),
+});
+
+const fact = (over: Partial<ModelFactOutput>): ModelFactOutput => ({
+  category: "business", field: "service", value: "Drain cleaning", evidence_class: "verified", basis: "",
+  quotes: [{ page_key: "page0", quote: "We clear drains" }], ...over,
+});
+
+describe("grounding", () => {
+  it("finds quotes only in the page they cite, ignoring case and spacing", () => {
+    expect(findQuote(pages, "page0", "we  CLEAR drains")?.url).toBe("https://sunrise.example/");
+    expect(findQuote(pages, "page1", "We clear drains")).toBeNull();
+    expect(findQuote(pages, "page0", "We fix roofs")).toBeNull();
+    expect(findQuote(pages, "page0", "We")).toBeNull();
+  });
+
+  it("flags figures that are not in the source and promises", () => {
+    expect(unsupportedNumbers("Since 2009, call (801) 555-0123", pages[0]!.text)).toEqual([]);
+    expect(unsupportedNumbers("Over 500 happy customers [your phone number]", pages[0]!.text)).toEqual(["500"]);
+    expect(claimProblemIn("We guarantee results")).toBe("promise");
+    expect(claimProblemIn("Rank #1 on Google")).toBe("promise");
+    expect(claimProblemIn("Fast, friendly drain cleaning")).toBeNull();
+  });
+});
+
+describe("Business Intelligence: grounding model facts", () => {
+  it("keeps grounded facts and drops facts whose quotes are not on the page, invented figures, promises and bad fields", () => {
+    const r = groundFacts([
+      fact({}),
+      fact({ field: "what_it_does", value: "Plumbing for homes in Salt Lake County", evidence_class: "inferred", basis: "Homepage text.", quotes: [{ page_key: "page0", quote: "for homes across Salt Lake County" }] }),
+      fact({ category: "customer", field: "audience", value: "Homeowners", evidence_class: "verified", basis: "They mention homes.", quotes: [{ page_key: "page0", quote: "homeowners love us" }] }),
+      fact({ field: "service", value: "Roof repair", quotes: [{ page_key: "page0", quote: "We repair roofs" }] }),
+      fact({ field: "competitive_advantage", value: "Family owned for 30 years", quotes: [{ page_key: "page0", quote: "Family owned since 2009" }] }),
+      fact({ field: "competitive_advantage", value: "Guaranteed same-day service", quotes: [{ page_key: "page0", quote: "Call (801) 555-0123" }] }),
+      fact({ category: "brand", field: "service", value: "x" }),
+      fact({ category: "brand", field: "value_proposition", value: "ignored", evidence_class: "unknown", quotes: [] }),
+      fact({ field: "pricing", value: "", evidence_class: "inferred", basis: "x" }),
+    ], pages);
+    expect(r.accepted.map((f) => [f.field, f.value, f.evidence_class])).toEqual([
+      ["service", "Drain cleaning", "verified"],
+      ["what_it_does", "Plumbing for homes in Salt Lake County", "inferred"],
+      ["value_proposition", null, "unknown"],
+    ]);
+    expect(r.accepted[0]!.evidence).toEqual([{ kind: "observed", url: "https://sunrise.example/", excerpt: "We clear drains" }]);
+    expect(r.accepted.every((f) => f.source === "model")).toBe(true);
+    expect(r.rejected.map((x) => x.reason)).toEqual(["quote_not_found", "quote_not_found", "figure_not_in_source", "promise", "wrong_category", "empty_value"]);
+  });
+
+  it("runs inside the Business Intelligence module and records model use; a failure is recorded, not hidden", async () => {
+    const ok = expectDone(await businessIntelligence.run({
+      profile: { businessName: "Sunrise Plumbing", website: "https://sunrise.example/", serviceArea: null, primaryGoal: null },
+      scan, provider: double({ facts: [fact({}), fact({ category: "customer", field: "audience", value: "Homeowners", evidence_class: "inferred", basis: "Mentions homes.", quotes: [{ page_key: "page0", quote: "for homes" }] })] }),
+    }), "bi").output;
+    expect(ok.proposals.map((p) => [p.field, p.source])).toEqual([["contact_phone", "website"], ["service", "model"], ["audience", "model"]]);
+    expect(ok.model).toMatchObject({ provider: "test-double", accepted: 2, rejected: [] });
+    expect(ok.understanding.missing).toEqual(["what_it_does", "service_area", "value_proposition"]);
+
+    const failed = expectDone(await businessIntelligence.run({
+      profile: { businessName: "Sunrise", website: "https://sunrise.example/", serviceArea: null, primaryGoal: null },
+      scan, provider: double({ wrong: true }, { still: "wrong" }),
+    }), "bi").output;
+    expect(failed.model).toMatchObject({ failed: expect.stringContaining("ModelOutputInvalid") });
+    expect(failed.proposals.map((p) => p.source)).toEqual(["website"]);
+  });
+});
+
+const finding = (over: Partial<ModelFindingOutput>): ModelFindingOutput => ({
+  slug: "headline_unclear", category: "messaging", title: "Say what you do in your headline",
+  what_was_observed: "The headline does not name a service.", quotes: [{ page_key: "page0", quote: "Plumbing you can count on" }],
+  evidence_class: "inferred", basis: "The main heading names no service or place.", why_it_matters: "Visitors decide quickly whether you can help them.",
+  recommended_action: "Name your main service and area in the headline.", expected_benefit: "Visitors understand what you do sooner.",
+  impact: "high", confidence: "medium", draftable: "homepage_copy", ...over,
+});
+
+describe("Marketing Analysis: grounding model findings", () => {
+  it("turns grounded findings into Action Card payloads with quoted evidence", () => {
+    const r = groundFindings([finding({})], pages, []);
+    expect(r.cards).toEqual([expect.objectContaining({
+      check_key: "model.headline_unclear", evidence_class: "inferred", evidence_basis: "The main heading names no service or place.",
+      ai_capable: true, execution_type: "page_copy", evidence_keys: ["headline_unclear_0"],
+    })]);
+    expect(r.evidence).toEqual([{ key: "headline_unclear_0", url: "https://sunrise.example/", excerpt: "Plumbing you can count on", observation: "The headline does not name a service." }]);
+  });
+
+  it("drops findings with invented figures, promises, missing quotes or basis, and repeats of fixed checks", () => {
+    const r = groundFindings([
+      finding({ slug: "f", evidence_class: "estimated", quotes: [], basis: "Assumes most visitors arrive on the homepage.", draftable: "none" }),
+      finding({ slug: "a", why_it_matters: "You lose 40% of visitors." }),
+      finding({ slug: "b", expected_benefit: "Guaranteed more calls." }),
+      finding({ slug: "c", quotes: [{ page_key: "page0", quote: "not on the page" }] }),
+      finding({ slug: "d", basis: "" }),
+    ], pages, []);
+    expect(r.rejected.map((x) => x.reason)).toEqual(["figure_not_in_source", "promise", "quote_not_found", "basis_missing"]);
+    expect(groundFindings([finding({ title: "Add a page title" })], pages, ["Add a page title"]).rejected.map((x) => x.reason)).toEqual(["duplicate_of_check"]);
+    expect(groundFindings(Array.from({ length: 7 }, (_, i) => finding({ slug: `s${i}` })), pages, []).cards).toHaveLength(5);
+    expect(r.cards).toEqual([expect.objectContaining({ check_key: "model.f", evidence_class: "estimated", execution_type: "manual", evidence_keys: [] })]);
+  });
+});
+
+describe("Content Creation", () => {
+  const input = {
+    kind: "meta" as const, businessName: "Sunrise Plumbing",
+    known: [{ field: "service" as const, label: "Service", value: "Drain cleaning", source: "owner" as const, evidence_class: "verified" as const, confirmed: true }],
+    card: { title: "Add a page title", explanation: "x", recommendedAction: "x" },
+    evidence: [{ url: "https://sunrise.example/", observation: "Your homepage has no title.", excerpt: null }],
+    ownerNotes: "Mention Salt Lake City",
+  };
+
+  it("keeps a draft that passes the content rules, with labels", async () => {
+    const d = await createContent(double({ page_title: "Drain Cleaning in Salt Lake City | Sunrise Plumbing", meta_description: "Drain cleaning from Sunrise Plumbing. Call [your phone number] to book." }), input);
+    expect(d.fields).toEqual([
+      { key: "page_title", label: "Page title", text: "Drain Cleaning in Salt Lake City | Sunrise Plumbing" },
+      { key: "meta_description", label: "Meta description", text: "Drain cleaning from Sunrise Plumbing. Call [your phone number] to book." },
+    ]);
+    expect(d.provider).toBe("test-double");
+  });
+
+  it("refuses invented figures, promises, empty parts and runaway length", () => {
+    const src = "Sunrise Plumbing\nDrain cleaning";
+    expect(() => checkDraft("meta", { page_title: "Serving 500 homes | Sunrise", meta_description: "x" }, src)).toThrow(ContentRejected);
+    expect(() => checkDraft("meta", { page_title: "Guaranteed results | Sunrise", meta_description: "x" }, src)).toThrow(/promise/);
+    expect(() => checkDraft("meta", { page_title: " ", meta_description: "x" }, src)).toThrow(/incomplete/);
+    expect(() => checkDraft("meta", { page_title: "x".repeat(200), meta_description: "x" }, src)).toThrow(/too long/);
+  });
+
+  it("is blocked, not faked, when no provider is configured", async () => {
+    const r = await MODULES.content_creation.run(input);
+    expect(r).toEqual({ status: "blocked", reason: expect.stringMatching(/No model provider/) });
+  });
+});
+
+describe("orchestrator with model-assisted findings (test double provider)", () => {
+  afterEach(() => {
+    vi.doUnmock("@/lib/server/agent/provider");
+    vi.resetModules();
+    delete process.env.FEATURE_MODEL_FINDINGS;
+  });
+
+  it("saves grounded model findings only when the modelFindings switch is on, and records model usage", async () => {
+    const answers = () => [
+      { facts: [fact({})] },
+      { findings: [finding({})] },
+    ];
+    for (const on of [true, false]) {
+      vi.resetModules();
+      const outs = answers();
+      vi.doMock("@/lib/server/agent/provider", async (orig) => ({ ...(await orig<object>()), getModelProvider: () => double(...outs) }));
+      if (on) process.env.FEATURE_MODEL_FINDINGS = "1";
+      else delete process.env.FEATURE_MODEL_FINDINGS;
+      const { runWebsiteReview } = await import("@/lib/server/agent/orchestrator");
+      const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf" : name === "add_model_findings" ? 1 : 0, error: null }));
+      const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business: { businessName: "Sunrise Plumbing", serviceArea: null, primaryGoal: null, website: "https://sunrise.example/" } }, {
+        fetchPage: async (u) => ({ url: u, status: 200, contentType: "text/html", body: HOME, truncated: false, redirects: [] }),
+        pageSpeed: async () => ({ ok: false as const, reason: "busy" }),
+      });
+      const names = rpc.mock.calls.map((c) => c[0]);
+      expect(names.includes("add_model_findings"), `switch ${on}`).toBe(on);
+      const finish = rpc.mock.calls.find((c) => c[0] === "finish_marketing_workflow")![1] as Record<string, unknown>;
+      expect(finish).toMatchObject({ p_status: "prepared", p_provider: "test-double", p_model: "test-double" });
+      if (on) expect(out.steps.find((s) => s.step === "analyze_marketing_model")).toMatchObject({ status: "done" });
+    }
+  });
+});

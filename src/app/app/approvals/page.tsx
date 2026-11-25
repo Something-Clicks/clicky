@@ -28,7 +28,7 @@ export default async function ApprovalsPage() {
   const [{ data: approvals }, { count: preparing }] = await Promise.all([
     supabase
       .from("approvals")
-      .select("id, decision, note, decided_at, created_at, action_card_id, agent_runs ( output, draft_type, model, instructions ), action_cards ( title )")
+      .select("id, decision, note, decided_at, created_at, action_card_id, approved_version_id, agent_runs ( output, draft_type, model, instructions ), action_cards ( title )")
       .eq("organization_id", ws.organization.id)
       .order("created_at", { ascending: false })
       .limit(40),
@@ -38,6 +38,14 @@ export default async function ApprovalsPage() {
       .eq("organization_id", ws.organization.id)
       .eq("status", "running"),
   ]);
+  // Show the approved version once approved, otherwise the latest edit (draft_versions), otherwise the prepared draft.
+  const { data: versions } = approvals?.length
+    ? await supabase.from("draft_versions").select("id, approval_id, version, fields").in("approval_id", approvals.map((a) => a.id)).order("version", { ascending: false })
+    : { data: [] };
+  const shown = (a: NonNullable<typeof approvals>[number]) => {
+    const vs = (versions ?? []).filter((v) => v.approval_id === a.id);
+    return (vs.find((v) => v.id === a.approved_version_id) ?? vs[0])?.fields ?? a.agent_runs?.output;
+  };
   const pending = (approvals ?? []).filter((a) => a.decision === "pending");
   const decided = (approvals ?? []).filter((a) => a.decision !== "pending");
 
@@ -63,7 +71,7 @@ export default async function ApprovalsPage() {
       ) : (
         <div className="list">
           {pending.map((a) => {
-            const fields = draftFields(a.agent_runs?.output);
+            const fields = draftFields(shown(a));
             return (
               <div className="card" key={a.id}>
                 <div className="row between">
@@ -98,7 +106,7 @@ export default async function ApprovalsPage() {
           <h3 style={{ margin: "26px 0 12px" }}>Recent decisions</h3>
           <div className="list">
             {decided.map((a) => {
-              const fields = draftFields(a.agent_runs?.output);
+              const fields = draftFields(shown(a));
               const d = DECISION[a.decision]!;
               return (
                 <div className="card" key={a.id}>

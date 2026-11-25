@@ -32,6 +32,7 @@ const reply = (parsed: unknown, stop_reason = "end_turn") => parse.mockResolvedV
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   providerEnabled.value = true;
+  process.env.MARKETING_LEGACY_WORDING = "1";
   parse.mockReset();
   warn = vi.spyOn(log, "warn").mockImplementation(() => {});
   vi.spyOn(log, "info").mockImplementation(() => {});

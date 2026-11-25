@@ -24,11 +24,16 @@ import { FetchBlockedError, type FetchedPage } from "@/lib/server/safe-fetch";
 import { cardStage, completionBasis, stageCounts } from "@/lib/stages";
 
 describe("model provider", () => {
-  it("has no provider registered and never falls back to one", () => {
-    expect(registeredProviders()).toEqual([]);
+  it("has only the development adapter registered and never falls back to one", () => {
+    expect(registeredProviders()).toEqual(["anthropic-dev"]);
     expect(getModelProvider({})).toBeNull();
     expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic" })).toBeNull();
     expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "openai", ANTHROPIC_API_KEY: "x" })).toBeNull();
+    // The development adapter needs both the switch and its key, and never runs in Production.
+    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev" })).toBeNull();
+    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "x" })?.id).toBe("anthropic-dev");
+    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "x", VERCEL_ENV: "production" })).toBeNull();
+    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "x", VERCEL_ENV: "preview" })?.id).toBe("anthropic-dev");
   });
 
   it("refuses to generate without a provider", async () => {

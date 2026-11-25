@@ -13,8 +13,10 @@ import { requireOrganization } from "@/lib/auth";
 import { getCard, getEntitlements, getFreeUses, getSpeedComparison } from "@/lib/queries";
 import Link from "next/link";
 import { formatWhen } from "@/lib/activity";
-import { isAiConfigured } from "@/lib/server/ai";
-import { SUPPORTED_DRAFTS } from "@/lib/server/drafts";
+import { isDraftKind } from "@/lib/server/agent/modules/content-creation";
+import { getModelProvider } from "@/lib/server/agent/provider";
+import { approveDraftVersion } from "@/app/actions/drafts";
+import { EditDraftForm } from "@/components/edit-draft";
 import { createClient } from "@/lib/supabase/server";
 
 import { CopyButton } from "./copy-button";
@@ -43,13 +45,14 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
   const closed = card.status === "done" || card.status === "dismissed";
   const isOwner = ws.organization.role === "owner";
   // Drafts are switched off for customers (see src/config/features.ts); every item is a task to do on the site.
-  const draftable = FEATURES.drafts && card.ai_capable && SUPPORTED_DRAFTS.includes(card.execution_type as never);
+  // Content Creation: behind FEATURES.drafts (never in Production), for the draft kinds it supports.
+  const draftable = FEATURES.drafts && card.ai_capable && isDraftKind(card.execution_type);
 
   const supabase = await createClient();
   const [{ data: run }, { data: approval }] = await Promise.all([
     supabase.from("agent_runs").select("id, status, error, output, started_at").eq("action_card_id", card.id)
       .order("started_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("approvals").select("id, decision, note, agent_runs ( output, draft_type )").eq("action_card_id", card.id)
+    supabase.from("approvals").select("id, decision, note, approved_version_id, agent_runs ( output, draft_type )").eq("action_card_id", card.id)
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const running = run?.status === "running";
@@ -57,7 +60,13 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
   const planAllowsDraft = ent.drafts === "all" || (ent.drafts === "meta" && card.execution_type === "meta");
   const canDraft = planAllowsDraft || free.remaining > 0;
   const speed = card.check_key === "pagespeed.performance" ? await getSpeedComparison(ws.organization.id, card.id) : null;
-  const fields = draftFields(approval?.agent_runs?.output);
+  const { data: versions } = approval
+    ? await supabase.from("draft_versions").select("id, version, fields, source, created_at").eq("approval_id", approval.id).order("version", { ascending: false })
+    : { data: null };
+  const latest = versions?.[0] ?? null;
+  const approvedVersion = versions?.find((v) => v.id === approval?.approved_version_id) ?? null;
+  // The version shown: the approved one once approved, otherwise the latest edit (falls back to the run's draft).
+  const fields = draftFields((approval?.decision === "approved" ? approvedVersion ?? latest : latest)?.fields ?? approval?.agent_runs?.output);
   const lastFailed = run?.status === "failed" ? run.error : null;
 
   return (
@@ -78,6 +87,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           <h3 style={{ marginTop: 22 }}>What it should help with</h3>
           <p className="muted">{card.expected_benefit} This is an expected benefit, not a guaranteed result.</p>
           <h3 style={{ marginTop: 22 }}>Evidence</h3>
+          {card.evidence_basis ? <p className="small muted">Why we think so: {card.evidence_basis}</p> : null}
           {evidence.map((e) => (
             <EvidenceLine key={e.id} e={e} />
           ))}
@@ -107,8 +117,9 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           ) : approval?.decision === "pending" ? (
             <>
               <span className="pill yellow" style={{ marginTop: 12 }}>Waiting for approval</span>
-              <h3 style={{ marginTop: 12 }}>Your draft</h3>
-              <DraftPreview fields={fields} />
+              <h3 style={{ marginTop: 12 }}>Your draft{latest ? ` · version ${latest.version}` : ""}</h3>
+              <p className="small muted">Change anything you like. Each save keeps the earlier version.</p>
+              <EditDraftForm approvalId={approval.id} fields={fields} />
               {isOwner ? (
                 <ApprovalActions approvalId={approval.id}>
                   <CopyButton text={draftAsText(fields)} label="Copy draft" />
@@ -116,11 +127,31 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
               ) : (
                 <p className="small muted">Only the account owner can approve drafts.</p>
               )}
+              {versions && versions.length > 1 ? (
+                <details style={{ marginTop: 16 }}>
+                  <summary className="small">Earlier versions ({versions.length - 1})</summary>
+                  {versions.slice(1).map((v) => (
+                    <div key={v.id} style={{ marginTop: 12 }}>
+                      <div className="small muted">
+                        Version {v.version} · {v.source === "owner" ? "edited" : "first draft"} · {formatWhen(v.created_at)}
+                      </div>
+                      <DraftPreview fields={draftFields(v.fields)} />
+                      {isOwner ? (
+                        <form action={approveDraftVersion}>
+                          <input type="hidden" name="approval" value={approval.id} />
+                          <input type="hidden" name="version" value={v.id} />
+                          <button className="btn light" type="submit">Approve version {v.version}</button>
+                        </form>
+                      ) : null}
+                    </div>
+                  ))}
+                </details>
+              ) : null}
             </>
           ) : approval?.decision === "approved" && !closed ? (
             <>
               <span className="pill green" style={{ marginTop: 12 }}>Approved</span>
-              <h3 style={{ marginTop: 12 }}>Your approved draft</h3>
+              <h3 style={{ marginTop: 12 }}>Your approved draft{approvedVersion ? ` · version ${approvedVersion.version}` : ""}</h3>
               <DraftPreview fields={fields} />
               <div className="row" style={{ marginTop: 16 }}>
                 <DraftUseButtons approvalId={approval.id} fields={fields} />
@@ -137,7 +168,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
                 See plans
               </Link>
             </>
-          ) : !isAiConfigured() ? (
+          ) : !getModelProvider() ? (
             <>
               <h3 style={{ marginTop: 12 }}>We can draft this for you</h3>
               <p className="muted">Drafts aren&apos;t switched on yet. You can still follow the steps yourself.</p>

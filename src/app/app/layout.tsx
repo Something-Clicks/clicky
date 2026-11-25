@@ -4,6 +4,7 @@ import Link from "next/link";
 import { signOut } from "@/app/actions/auth";
 import { Shell } from "@/components/shell";
 import { TrackEvent } from "@/components/track-event";
+import { FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,7 +34,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <Shell
       groups={[
-        { label: workspace.business?.businessName ?? "Your business", items: NAV },
+        // "Business details" appears only where the businessProfile switch is on (never in Production).
+        { label: workspace.business?.businessName ?? "Your business", items: FEATURES.businessProfile ? [...NAV.slice(0, 3), { href: "/app/business", label: "Business details" }, ...NAV.slice(3)] : NAV },
         ...(isAdmin === true ? [{ label: "Platform", items: [{ href: "/admin", label: "Admin" }] }] : []),
       ]}
       tabs={TABS}
