@@ -45,7 +45,7 @@ Something Clicks is building its own **Marketing Agent** for small businesses: i
 
 ## Model providers, feature switches and drafts
 - Model calls go only through `src/lib/server/agent/provider.ts`. One temporary development adapter is registered (`anthropic-dev`, Claude Sonnet 5.5, `providers/anthropic-dev.ts`). It runs only with `MARKETING_MODEL_PROVIDER=anthropic-dev` and `ANTHROPIC_API_KEY`, and never in Production (`VERCEL_ENV=production` → no provider). An API key alone activates nothing (tested). Never add a mock model or stand-in answers.
-- Feature switches (`src/config/features.ts`): `drafts`, `businessProfile`, `modelFindings`. Off unless `FEATURE_<NAME>=1`, and always off in Production. Releasing one to customers is an owner decision and a code change. Server-only: pass booleans to client components.
+- Feature switches (`src/config/features.ts`): `drafts`, `businessProfile`, `modelFindings`, `strategy`. Off unless `FEATURE_<NAME>=1`, and always off in Production. Releasing one to customers is an owner decision and a code change. Server-only: pass booleans to client components.
 - Every model output is grounded by Something Clicks before it is stored (`agent/grounding.ts`): quotes must appear on the cited page, figures must be in the source, promises are refused.
 - The older Anthropic-specific code (`src/lib/server/ai.ts`, `drafts.ts`) is retired and dormant (needs `MARKETING_LEGACY_WORDING=1`, which nothing sets); do not delete it. Drafts now come from the Content Creation module.
 
@@ -56,5 +56,8 @@ Something Clicks is building its own **Marketing Agent** for small businesses: i
 - Business Intelligence stores facts in `business_facts` with source, evidence class, basis and freshness. The agent only proposes; the owner confirms (`/app/business`, behind `businessProfile`).
 - Drafts: Content Creation prepares version 1; edits are new versions (`draft_versions`); only the owner approves a specific version. Model findings never count as verified fixed.
 - Stages: prepared → approved (owner only) → completed (marked done, or verified fixed). Never mark generated work completed.
+- Every model call is metered per business (`agent/metering.ts`: daily/monthly/global caps via `model_budget`, usage via `record_model_usage`; unpriced models are never called). Wrap any new model call with `meteredProvider`.
+- Marketing Strategy (`agent/modules/marketing-strategy.ts`, `/app/plan`, behind `strategy`): proposed plans only; priorities point at real open Action Cards; the owner approves; approval is agreement, never completion.
+- Quality: `src/lib/agent-quality.ts` screens output; `/admin/agent-review` (platform admins, never Production) shows output beside evidence. Generic advice, promises and unsupported figures are dropped at generation.
 - Internal identity is "the Something Clicks Marketing Agent". Customer-facing words stay simple and match the website; that copy rule governs wording, not what we build.
 - Plan names (app only; Stripe unchanged): Marketing Report $49; Marketing Assistant ($79/$756) is on hold and cannot be bought; Marketing Studio and Marketing Suite are planned tiers.

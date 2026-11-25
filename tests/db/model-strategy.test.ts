@@ -28,7 +28,7 @@ const usage = (o: string, cost: number, extra: Partial<{ cap: string; outcome: s
   q(owner, "select public.record_model_usage($1,$2,'anthropic-dev','claude-sonnet-5-5',100,50,$3,$4,$5,$6)",
     [o, extra.cap ?? "business_intelligence.understand", cost, extra.outcome ?? "ok", extra.wf ?? null, extra.run ?? null]);
 const plan = (...ids: string[]) => ({
-  summary: "s", objectives: ["o"], next_steps: ["n"], questions: [], not_now: [],
+  summary: "s", objectives: [{ objective: "o", based_on: [] as string[] }], next_steps: ["n"], questions: [] as string[], not_now: [] as { card_id: string; reason: string }[],
   priorities: ids.map((id, i) => ({ card_id: id, order: i + 1, why_now: "w", effort: "small", depends_on: [] as string[] })),
 });
 
@@ -101,6 +101,16 @@ describe("model usage and budgets", () => {
     await db.admin.query("update public.app_config set value = '20000000' where key = 'model_global_daily_cap_micro'");
   });
 
+  it("one business recording inflated usage cannot use up everyone else's allowance", async () => {
+    await db.admin.query("update public.organization_model_limits set daily_cap_micro = 500000, monthly_cap_micro = 100000000 where organization_id = $1", [org]);
+    for (let i = 0; i < 4; i++) await usage(org, 5_000_000);
+    const [{ b: mine }] = await q<{ b: { allowed: boolean; reason: string } }>(owner, "select public.model_budget($1) b", [org]);
+    expect(mine).toMatchObject({ allowed: false, reason: "daily" });
+    const [{ b: other }] = await q<{ b: { allowed: boolean } }>(outsider, "select public.model_budget($1) b", [otherOrg]);
+    expect(other.allowed).toBe(true); // $20 recorded by one business counts as at most its own $0.50 toward the global cap
+    await db.admin.query("delete from public.model_usage where cost_micro = 5000000");
+  });
+
   it("admin spend summary is for platform admins only", async () => {
     await expect(q(owner, "select public.admin_model_usage(7)")).rejects.toThrow(/Forbidden/);
     await expect(q(null, "select public.admin_model_usage(7)")).rejects.toThrow(PERMISSION_DENIED);
@@ -148,6 +158,21 @@ describe("marketing plans", () => {
     await expect(q(null, "select public.save_marketing_plan($1,null,'{}','p','m')", [org])).rejects.toThrow(PERMISSION_DENIED);
   });
 
+  it("refuses plans that are not in the full expected shape (nothing forged or half-built is stored)", async () => {
+    const save = (p: unknown) => q(member, "select public.save_marketing_plan($1,$2,$3,'p','m')", [org, analysis, JSON.stringify(p)]);
+    const good = plan(cardA);
+    const bad = (over: Record<string, unknown>) => ({ ...good, ...over });
+    for (const [name, p] of Object.entries({
+      "no summary": bad({ summary: undefined }), "long summary": bad({ summary: "x".repeat(601) }), "missing objectives": bad({ objectives: undefined }),
+      "four objectives": bad({ objectives: Array(4).fill({ objective: "o" }) }), "objective not an object": bad({ objectives: ["o"] }),
+      "six steps": bad({ next_steps: Array(6).fill("s") }), "step not text": bad({ next_steps: [5] }), "missing questions": bad({ questions: undefined }),
+      "missing not_now": bad({ not_now: undefined }), "not_now card of nobody": bad({ not_now: [{ card_id: "00000000-0000-0000-0000-000000000000", reason: "r" }] }),
+      "bad effort": bad({ priorities: [{ ...good.priorities[0]!, effort: "huge" }] }), "no why_now": bad({ priorities: [{ ...good.priorities[0]!, why_now: "" }] }),
+      "order as text": bad({ priorities: [{ ...good.priorities[0]!, order: "1" }] }),
+    })) await expect(save(p), name).rejects.toThrow(/expected shape/);
+    await save({ ...good, not_now: [{ card_id: cardB, reason: "Later." }] }); // a valid one still saves
+  });
+
   it("a new proposal supersedes the earlier proposed one; only the owner decides", async () => {
     const [{ id: p2 }] = await q<{ id: string }>(owner, "select public.save_marketing_plan($1,$2,$3,'p','m') as id", [org, analysis, JSON.stringify(plan(cardB))]);
     expect((await q<{ status: string }>(owner, "select status from public.marketing_plans where id = $1", [p1]))[0].status).toBe("superseded");
@@ -170,11 +195,18 @@ describe("admin agent review", () => {
   it("is for platform admins only and returns findings with evidence", async () => {
     await expect(q(owner, "select public.admin_agent_review(5)")).rejects.toThrow(/Forbidden/);
     await expect(q(null, "select public.admin_agent_review(5)")).rejects.toThrow(PERMISSION_DENIED);
+    // off by default: even a platform admin gets nothing until the database is marked as a development one
+    await expect(q(admin, "select public.admin_agent_review(5)")).rejects.toThrow(/not enabled/);
+    await db.admin.query("update public.app_config set value = '1' where key = 'agent_review_enabled'");
+    await db.admin.query("insert into public.business_facts (organization_id, analysis_id, category, field, value, source, evidence_class, status) values ($1,$2,'business','contact_phone','(801) 555-0100','owner','verified','confirmed')", [org, analysis]);
+    await db.admin.query("insert into public.business_facts (organization_id, analysis_id, category, field, value, source, evidence_class, status) values ($1,$2,'business','service','Drain cleaning','owner','verified','confirmed')", [org, analysis]);
     await q(owner, "select public.start_marketing_workflow($1,'website_review',null,'{}',$2)", [org, analysis]);
     const [{ r }] = await q<{ r: { organization: string; findings: { evidence: string[] }[]; plan: unknown }[] }>(admin, "select public.admin_agent_review(5) r");
     expect(r[0]!.organization).toBe("Sunrise");
     expect(r[0]!.findings.length).toBe(2);
     expect(r[0]!.plan).toBeTruthy();
+    expect((r[0] as unknown as { facts: { field: string }[] }).facts.map((f) => f.field)).toEqual(["service"]);
+    expect(JSON.stringify(r[0])).not.toContain("555-0100"); // contact details are never part of the review
     const logged = await db.admin.query("select 1 from public.activity_log where action = 'admin.agent_review_viewed' and actor_id = $1", [admin]);
     expect(logged.rowCount).toBeGreaterThan(0);
   });

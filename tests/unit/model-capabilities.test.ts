@@ -69,6 +69,9 @@ describe("deeper business understanding (grounding of positioning, trust, price,
     expect(ok.accepted).toHaveLength(1);
     const notOnPage = groundFacts([trust({ value: "The site advertises a satisfaction guarantee", quotes: [{ page_key: "page0", quote: "Every job comes" }] })], page);
     expect(notOnPage.rejected.map((x) => x.reason)).toEqual(["promise"]);
+    // the page's own promise word does not excuse a different, bigger claim in the stored value
+    const bigger = groundFacts([trust({ value: "Award-winning, the #1 plumber in town", quotes: q })], page);
+    expect(bigger.rejected.map((x) => x.reason)).toEqual(["promise"]);
     const otherField = groundFacts([fact({ field: "competitive_advantage", value: "Satisfaction guaranteed", quotes: q })], page);
     expect(otherField.rejected.map((x) => x.reason)).toEqual(["promise"]);
   });

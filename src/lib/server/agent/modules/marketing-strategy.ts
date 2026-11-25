@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { claimProblemIn, genericPhraseIn, unsupportedNumbers } from "../grounding";
+import { claimProblemIn, genericPhraseIn, jsonForPrompt, unsupportedNumbers } from "../grounding";
 import { generateStructured, type ModelProvider, type ModelUsage } from "../provider";
 import type { KnownFact } from "./business-intelligence";
 
@@ -235,7 +235,7 @@ export async function createPlan(provider: ModelProvider, input: PlanInput): Pro
     {
       task: "marketing_strategy.plan",
       system: SYSTEM,
-      input: `<business>${JSON.stringify(business)}</business>\n<open_actions>${JSON.stringify(open)}</open_actions>${notes}`,
+      input: `<business>${jsonForPrompt(business)}</business>\n<open_actions>${jsonForPrompt(open)}</open_actions>${notes}`,
       schema: PlanSchema,
       maxOutputTokens: 8000,
     },

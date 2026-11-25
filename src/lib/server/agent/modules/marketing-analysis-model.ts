@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { KnownFact } from "./business-intelligence";
-import { claimProblemIn, findQuote, genericPhraseIn, pagesForModel, UNTRUSTED_CONTENT_RULE, unsupportedNumbers, type SourcePage } from "../grounding";
+import { claimProblemIn, findQuote, genericPhraseIn, jsonForPrompt, pagesForModel, UNTRUSTED_CONTENT_RULE, unsupportedNumbers, type SourcePage } from "../grounding";
 import { generateStructured, type ModelProvider, type ModelUsage } from "../provider";
 
 /**
@@ -139,7 +139,7 @@ export async function analyzeWithModel(
     {
       task: "marketing_analysis.review",
       system: SYSTEM,
-      input: `<business>${JSON.stringify(business)}</business>\n<already_found>${JSON.stringify(input.alreadyFound)}</already_found>\n${pagesForModel(input.pages)}`,
+      input: `<business>${jsonForPrompt(business)}</business>\n<already_found>${jsonForPrompt(input.alreadyFound)}</already_found>\n${pagesForModel(input.pages)}`,
       schema: ModelFindingsSchema,
       maxOutputTokens: 8000,
     },

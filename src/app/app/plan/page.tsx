@@ -34,7 +34,18 @@ export default async function PlanPage() {
     .order("created_at", { ascending: false })
     .limit(2);
   const current = rows?.find((r) => r.status === "proposed") ?? rows?.[0] ?? null;
-  const plan = (current?.plan ?? null) as unknown as StoredPlan | null;
+  const raw = (current?.plan ?? null) as unknown as Partial<StoredPlan> | null;
+  // The database checks the shape of every saved plan; read defensively anyway so one bad row can never break the page.
+  const plan: StoredPlan | null = raw && typeof raw.summary === "string" && Array.isArray(raw.priorities)
+    ? {
+        summary: raw.summary,
+        objectives: Array.isArray(raw.objectives) ? raw.objectives.map((o) => ({ ...o, based_on: Array.isArray(o.based_on) ? o.based_on : [] })) : [],
+        priorities: raw.priorities.map((p) => ({ ...p, based_on: Array.isArray(p.based_on) ? p.based_on : [], depends_on: Array.isArray(p.depends_on) ? p.depends_on : [] })),
+        next_steps: Array.isArray(raw.next_steps) ? raw.next_steps : [],
+        questions: Array.isArray(raw.questions) ? raw.questions : [],
+        not_now: Array.isArray(raw.not_now) ? raw.not_now : [],
+      }
+    : null;
 
   const ids = plan ? [...plan.priorities.map((p) => p.card_id), ...plan.not_now.map((n) => n.card_id)] : [];
   const { data: cards } = ids.length

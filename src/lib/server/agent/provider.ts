@@ -111,11 +111,13 @@ export function getModelProvider(env: Record<string, string | undefined> = proce
 }
 
 /**
- * One structured model call with validation and one controlled retry for invalid output.
+ * One structured model call with validation. The caller always passes the provider (wrapped by meteredProvider for
+ * anything that runs for a business): there is deliberately no default, so no call can skip cost metering.
+ * and one controlled retry for invalid output.
  * Throws ModelProviderNotConfigured when there is no provider, ModelOutputInvalid when the
  * answer still does not match the schema, and rethrows transport errors.
  */
-export async function generateStructured<T>(request: ModelRequest<T>, provider: ModelProvider | null = getModelProvider()): Promise<ModelResult<T>> {
+export async function generateStructured<T>(request: ModelRequest<T>, provider: ModelProvider | null): Promise<ModelResult<T>> {
   if (!provider) throw new ModelProviderNotConfigured();
   const { schema, ...rest } = request;
   // The adapter passes this to the provider's structured-output feature; validation still happens here.

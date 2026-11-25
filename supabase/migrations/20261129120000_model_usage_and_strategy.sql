@@ -51,6 +51,7 @@ create policy "Members read their model usage" on public.model_usage for select 
   using (app_private.is_org_member(organization_id));
 
 insert into public.app_config (key, value, description) values
+  ('agent_review_enabled', '0', 'Set to 1 only on development and Preview databases: lets platform admins read recent agent output across businesses (admin_agent_review).'),
   ('model_daily_cap_micro', '500000', 'Model spend per business per day, in millionths of a US dollar ($0.50).'),
   ('model_monthly_cap_micro', '5000000', 'Model spend per business per calendar month, in millionths of a US dollar ($5).'),
   ('model_global_daily_cap_micro', '20000000', 'Model spend across all businesses per day, in millionths of a US dollar ($20).')
@@ -68,6 +69,7 @@ declare
   v_daily bigint;
   v_monthly bigint;
   v_global bigint := app_private.config_bigint('model_global_daily_cap_micro', 20000000);
+  v_default_daily bigint := app_private.config_bigint('model_daily_cap_micro', 500000);
   v_spent_day bigint;
   v_spent_month bigint;
   v_global_day bigint;
@@ -83,7 +85,11 @@ begin
     where organization_id = p_org and created_at > now() - interval '1 day';
   select coalesce(sum(cost_micro), 0) into v_spent_month from public.model_usage
     where organization_id = p_org and created_at >= date_trunc('month', now());
-  select coalesce(sum(cost_micro), 0) into v_global_day from public.model_usage where created_at > now() - interval '1 day';
+  -- Each business counts toward the global total at most up to its own daily cap, so one account that records
+  -- inflated usage can only spend its own allowance, not everyone's.
+  select coalesce(sum(least(s.spent, coalesce(l.daily_cap_micro, v_default_daily))), 0) into v_global_day
+  from (select organization_id, sum(cost_micro) as spent from public.model_usage where created_at > now() - interval '1 day' group by organization_id) s
+  left join public.organization_model_limits l on l.organization_id = s.organization_id;
   return jsonb_build_object(
     'allowed', v_spent_day < v_daily and v_spent_month < v_monthly and v_global_day < v_global,
     'reason', case when v_global_day >= v_global then 'global_daily' when v_spent_day >= v_daily then 'daily'
@@ -190,10 +196,32 @@ begin
   if p_analysis is not null and not exists (select 1 from public.analyses where id = p_analysis and organization_id = p_org) then
     raise exception 'Forbidden' using errcode = '42501';
   end if;
-  if jsonb_typeof(p_plan -> 'priorities') <> 'array' or jsonb_array_length(p_plan -> 'priorities') not between 1 and 10 then
+  if jsonb_typeof(p_plan -> 'priorities') is distinct from 'array' or jsonb_array_length(p_plan -> 'priorities') not between 1 and 10 then
     raise exception 'A plan needs 1 to 10 priorities' using errcode = '22023';
   end if;
+  -- Full shape: the app reads every part, so every part must be present and of the right type and size.
+  if jsonb_typeof(p_plan -> 'summary') is distinct from 'string' or length(p_plan ->> 'summary') not between 1 and 600
+     or jsonb_typeof(p_plan -> 'objectives') is distinct from 'array' or jsonb_array_length(p_plan -> 'objectives') > 3
+     or jsonb_typeof(p_plan -> 'next_steps') is distinct from 'array' or jsonb_array_length(p_plan -> 'next_steps') > 5
+     or jsonb_typeof(p_plan -> 'questions') is distinct from 'array' or jsonb_array_length(p_plan -> 'questions') > 4
+     or jsonb_typeof(p_plan -> 'not_now') is distinct from 'array' or jsonb_array_length(p_plan -> 'not_now') > 5
+     or exists (select 1 from jsonb_array_elements(p_plan -> 'objectives') o
+                where jsonb_typeof(o) is distinct from 'object' or jsonb_typeof(o -> 'objective') is distinct from 'string' or length(o ->> 'objective') > 300)
+     or exists (select 1 from jsonb_array_elements(p_plan -> 'next_steps') n where jsonb_typeof(n) is distinct from 'string' or length(n #>> '{}') > 300)
+     or exists (select 1 from jsonb_array_elements(p_plan -> 'questions') n where jsonb_typeof(n) is distinct from 'string' or length(n #>> '{}') > 300)
+     or exists (select 1 from jsonb_array_elements(p_plan -> 'not_now') n
+                where jsonb_typeof(n) is distinct from 'object' or jsonb_typeof(n -> 'reason') is distinct from 'string' or length(n ->> 'reason') > 300
+                   or not exists (select 1 from public.action_cards c where c.id::text = n ->> 'card_id' and c.organization_id = p_org)) then
+    raise exception 'The plan is not in the expected shape' using errcode = '22023', hint = 'invalid_plan';
+  end if;
   for v_item in select * from jsonb_array_elements(p_plan -> 'priorities') loop
+    if jsonb_typeof(v_item -> 'why_now') is distinct from 'string' or length(v_item ->> 'why_now') not between 1 and 500
+       or (v_item ->> 'effort') is null or (v_item ->> 'effort') not in ('small', 'medium', 'large')
+       or jsonb_typeof(v_item -> 'order') is distinct from 'number'
+       or jsonb_typeof(coalesce(v_item -> 'based_on', '[]'::jsonb)) is distinct from 'array'
+       or jsonb_typeof(coalesce(v_item -> 'depends_on', '[]'::jsonb)) is distinct from 'array' then
+      raise exception 'The plan is not in the expected shape' using errcode = '22023', hint = 'invalid_plan';
+    end if;
     if not exists (
       select 1 from public.action_cards
       where id::text = v_item ->> 'card_id' and organization_id = p_org and status in ('new', 'approved', 'in_progress')
@@ -252,13 +280,17 @@ begin
   if not app_private.is_platform_admin() then
     raise exception 'Forbidden' using errcode = '42501';
   end if;
+  -- Customer content across businesses: off unless this database is a development or Preview one.
+  if app_private.config_bigint('agent_review_enabled', 0) <> 1 then
+    raise exception 'Agent review is not enabled on this database' using errcode = '42501', hint = 'disabled';
+  end if;
   perform app_private.log_activity(null, 'admin.agent_review_viewed', null, null, '{}'::jsonb);
   select coalesce(jsonb_agg(row_to_json(r) order by r.started_at desc), '[]'::jsonb) into v from (
     select w.id, w.organization_id, o.name as organization, b.website, w.kind, w.status, w.started_at, w.completed_at,
            w.provider, w.model, w.usage, w.steps, w.result -> 'evidence_classes' as evidence_classes, w.error,
            (select coalesce(jsonb_agg(jsonb_build_object('category', f.category, 'field', f.field, 'value', f.value,
                    'source', f.source, 'evidence_class', f.evidence_class, 'basis', f.basis, 'evidence', f.evidence, 'status', f.status)), '[]'::jsonb)
-              from public.business_facts f where f.analysis_id = w.analysis_id) as facts,
+              from public.business_facts f where f.analysis_id = w.analysis_id and f.field not in ('contact_phone', 'contact_email')) as facts,
            (select coalesce(jsonb_agg(jsonb_build_object('title', c.title, 'explanation', c.explanation, 'why_it_matters', c.why_it_matters,
                    'recommended_action', c.recommended_action, 'impact', c.impact_priority, 'confidence', c.confidence,
                    'evidence_class', c.evidence_class, 'evidence_basis', c.evidence_basis, 'origin', c.origin,

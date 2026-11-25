@@ -4,7 +4,7 @@ import { FACT_FIELDS, type FactCategory, type FactField, type ProposedFact } fro
 import { EVIDENCE_CLASSES } from "@/lib/evidence";
 
 import type { PageFacts, SiteScan } from "../../site-scan";
-import { claimProblemIn, findQuote, pagesForModel, UNTRUSTED_CONTENT_RULE, unsupportedNumbers, type SourcePage } from "../grounding";
+import { claimProblemIn, findQuote, pagesForModel, promisesQuoted, UNTRUSTED_CONTENT_RULE, unsupportedNumbers, type SourcePage } from "../grounding";
 import { generateStructured, type ModelProvider, type ModelUsage } from "../provider";
 
 /**
@@ -114,7 +114,7 @@ export function groundFacts(raw: ModelFactOutput[], pages: SourcePage[]): Ground
     // Promise words are refused in anything the agent states, except a trust signal that reports what the
     // site itself says (the same words appear in a quote that was found on the page).
     const claim = claimProblemIn(value);
-    const reportsSiteClaim = claim === "promise" && f.field === "trust_signal" && evidence.some((e) => e.excerpt && claimProblemIn(e.excerpt) === "promise");
+    const reportsSiteClaim = claim === "promise" && f.field === "trust_signal" && promisesQuoted(value, evidence.map((e) => e.excerpt));
     if (claim && !reportsSiteClaim) {
       reject(claim);
       continue;

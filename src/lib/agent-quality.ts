@@ -14,7 +14,7 @@
  *    beside every item for that reason).
  * Scores are 0-100 per dimension; a dimension with nothing to judge is null, never a flattering 100.
  */
-import { claimProblemIn, genericPhraseIn, unsupportedNumbers } from "./server/agent/grounding";
+import { claimProblemIn, genericPhraseIn, promisesQuoted, unsupportedNumbers } from "./server/agent/grounding";
 
 export interface ReviewFact {
   category: string; field: string; value: string | null; source: string; evidence_class: string;
@@ -96,7 +96,7 @@ export function reviewQuality(input: ReviewInput): QualityReport {
     if (f.evidence_class === "inferred" && !quoted) { flag({ severity: "problem", area: "fact", kind: "no_evidence", item, message: "Inferred without any quoted evidence." }); ok = false; }
     if ((f.evidence_class === "inferred" || f.evidence_class === "estimated") && !f.basis?.trim()) { flag({ severity: "problem", area: "fact", kind: "missing_basis", item, message: "States no basis for the inference." }); ok = false; }
     const claim = claimProblemIn(f.value!);
-    if (claim === "promise" && f.field !== "trust_signal") { flag({ severity: "problem", area: "fact", kind: "unsupported_claim", item, message: "Contains a promise or ranking claim." }); ok = false; }
+    if (claim === "promise" && !(f.field === "trust_signal" && promisesQuoted(f.value!, (f.evidence ?? []).map((e) => e.excerpt)))) { flag({ severity: "problem", area: "fact", kind: "unsupported_claim", item, message: "Contains a promise or ranking claim." }); ok = false; }
     if (unsupportedNumbers(f.value!, evidenceSource).length) { flag({ severity: "problem", area: "fact", kind: "unsupported_figure", item, message: "Contains a figure that appears nowhere in the evidence." }); ok = false; }
     if (ok) factsOk++;
   }

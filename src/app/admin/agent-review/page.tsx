@@ -49,7 +49,13 @@ export default async function AgentReviewPage() {
         What the Marketing Agent produced, beside its evidence. The scores are automatic screening (evidence present, claims supported, specific, actionable); they cannot tell you whether a quote was understood or the advice is right. Read the items.
       </p>
 
-      {error ? <p className="notice error" role="alert">The review could not be loaded. Check the server logs for admin.agent_review_failed.</p> : null}
+      {error ? (
+        <p className="notice error" role="alert">
+          {(error as { hint?: string }).hint === "disabled"
+            ? "Agent review is switched off on this database. It is for development and Preview databases only."
+            : "The review could not be loaded. Check the server logs for admin.agent_review_failed."}
+        </p>
+      ) : null}
 
       <section className="card" aria-labelledby="spend">
         <h2 id="spend" style={{ marginTop: 0 }}>Model spend, last 7 days</h2>

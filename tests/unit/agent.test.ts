@@ -37,7 +37,7 @@ describe("model provider", () => {
   });
 
   it("refuses to generate without a provider", async () => {
-    await expect(generateStructured({ task: "t", system: "s", input: {}, schema: z.object({ a: z.string() }) })).rejects.toBeInstanceOf(ModelProviderNotConfigured);
+    await expect(generateStructured({ task: "t", system: "s", input: {}, schema: z.object({ a: z.string() }) }, null)).rejects.toBeInstanceOf(ModelProviderNotConfigured);
   });
 
   // A hand-written TEST DOUBLE of the adapter interface (not a model, not a mock answer for any real task):

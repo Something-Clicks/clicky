@@ -42,6 +42,16 @@ export function unsupportedNumbers(text: string, source: string): string[] {
 /** Promises and claims Something Clicks never makes on a business's behalf. */
 const PROMISES = /\b(guarantee[ds]?|guaranteed|number one|best in (town|the city|the state)|rank (first|higher|#\s?1)|award[- ]winning|double your|triple your)\b|#\s?1\b/i;
 
+/** Every promise phrase in `text`, as written. */
+export const promisePhrases = (text: string): string[] => [...text.matchAll(new RegExp(PROMISES.source, "gi"))].map((m) => m[0]);
+
+/** True when each promise phrase in `text` appears word for word in one of the quotes (the page itself said it). */
+export const promisesQuoted = (text: string, quotes: (string | null | undefined)[]): boolean =>
+  promisePhrases(text).every((p) => quotes.some((q) => (q ?? "").toLowerCase().includes(p.toLowerCase())));
+
+/** JSON for a prompt: "<" is escaped so data can never close the tag that fences it. */
+export const jsonForPrompt = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
+
 export function claimProblemIn(text: string): string | null {
   if (leaksSystemText(text)) return "system_text";
   if (PROMISES.test(text)) return "promise";

@@ -27,26 +27,46 @@ Customer request ─► Orchestrator (src/lib/server/agent/orchestrator.ts)
 ## Capabilities (§2.2)
 | Capability | Module | Status |
 |---|---|---|
-| Business Intelligence (§3, §14) | `business-intelligence.ts`, `business-understanding.ts` | **Built.** Fixed extraction (phone, email: verified; services: inferred with basis). **Model part built, not verified live:** what the business does, services, products, audience, customer problems, value proposition, voice and tone, each with quotes that Something Clicks checks against the page. Owner review screen `/app/business` (confirm, correct, reject, add) behind `businessProfile`. |
+| Business Intelligence (§3, §14) | `business-intelligence.ts`, `business-understanding.ts` | **Built.** Fixed extraction (phone, email: verified; services: inferred with basis). **Model part built, not verified live:** what the business does, services, products, audience, customer problems, value proposition, voice and tone, positioning, trust signals, price positioning, buyer objections and decision factors (no guessing: an honest "unknown" beats a guess), each with quotes that Something Clicks checks against the page. Owner review screen `/app/business` (confirm, correct, reject, add) behind `businessProfile`. |
 | Website Intelligence (§5) | `website-intelligence.ts` | **Built.** Safe discovery of the homepage and up to 4 key pages; metadata, text, link labels, email links; failures recorded; mobile speed when available. |
 | SEO Intelligence (§4.3) | `seo-intelligence.ts` | **Partly built.** On-page signals and SEO findings. Keyword data not connected. |
 | Marketing Analysis (§6) | `marketing-analysis.ts`, `marketing-analysis-model.ts` | **Built for fixed checks.** **Model part built, not verified live:** messaging, conversion and content findings with quoted evidence, saved as Action Cards (origin `model`) behind `modelFindings`; never marked "verified fixed". |
 | Performance Intelligence (§11) | `performance-intelligence.ts` | **Partly built.** Verified fixed / still found / awaiting. Traffic and search data not connected. |
 | Content Creation (§8) | `content-creation.ts` | **Built, not verified live.** Homepage copy and SEO title/description from the business understanding and the card's evidence; content rules enforced; version 1 → edits as versions → owner approves a version. Behind `drafts`. |
 | Market Research (§4) | `unavailable.ts` | Not built. |
-| Marketing Strategy (§7) | `unavailable.ts` | Not built. |
+| Marketing Strategy (§7) | `marketing-strategy.ts` | **Built, not verified live.** A proposed plan from the business understanding and the open Action Cards: summary, ≤3 objectives, ≤8 ordered priorities that point at real open actions (by short reference, never ids the model could invent), effort, dependencies that must come earlier, next steps, questions for the owner, what to leave for later. Grounding drops unknown or repeated actions, promises, figures not in the material and generic advice. Owner reviews, revises (adds notes → a new proposal), approves or rejects at `/app/plan` behind `strategy`. Approval = agreement, never completion. Market research is not connected, so plans use only the business's own details and website findings. |
 | Campaign Planning (§9) | `unavailable.ts` | Not built. |
 | Marketing Execution (§10) | `unavailable.ts` | Not built (needs authorized integrations). |
 
 ## Feature switches
-`src/config/features.ts`: `drafts`, `businessProfile`, `modelFindings`. Off unless `FEATURE_<NAME>=1`; always off
+`src/config/features.ts`: `drafts`, `businessProfile`, `modelFindings`, `strategy`. Off unless `FEATURE_<NAME>=1`; always off
 in Production. Customers in Production see none of the model-assisted work.
+
+## Cost control (§16)
+**Built, tested on a throwaway Postgres and on clicky-dev (migration 20261129).** Every model call goes through
+`meteredProvider` (`metering.ts`): before the call the database says whether the business is within its daily
+($0.50) and monthly ($5) caps and the global daily cap ($20) (`model_budget`; defaults in `app_config`, per-business
+overrides in `organization_model_limits`, set only by platform admins); after the call tokens and cost are recorded
+(`record_model_usage`), including refusals and failed calls. A model without a published price (`pricing.ts`) is never
+called. Customers see only "usage limit reached, try again later". Platform admins see spend per business (`admin_model_usage`).
+Known limits: the check and the record are separate calls, so calls running in parallel can overshoot a cap by the cost of those calls
+(bounded by one request's few calls); costs are computed by the app from published prices, so a wrong price table means wrong costs.
+If migration 20261129 is not applied, the budget check fails and model calls are refused (fail closed).
+
+## Quality screening and admin review (§3.4, §6)
+**Built.** `src/lib/agent-quality.ts` scores evidence, support for claims, business relevance, usefulness and actionability
+(0-100, or "nothing to judge") and lists flags: facts or findings without quoted evidence, inferences without a basis,
+promises, figures the evidence does not show, generic advice, not-specific items, vague actions. It is fixed code applying the
+same rules every time: a screening aid, not a verdict; it cannot tell whether a quote was understood or advice is right.
+`/admin/agent-review` (platform admins; **not available in Production**; each view logged) shows recent runs with facts, findings and the plan
+beside their evidence, the flags, and model spend. Generation-time safeguards (generic advice, promises, unsupported figures) drop items before they are stored.
 
 ## Verification
 | What | Status |
 |---|---|
 | Grounding and rejection rules, versions, owner-only approval, evidence classes, isolation | Verified by unit and database tests |
-| Database functions on clicky-dev | Verified (apply → checks → rollback → re-apply) |
+| Database functions on clicky-dev | Verified (apply → checks → rollback → re-apply), including 20261129 (existing rows kept: 4 businesses, 42 cards) |
+| Metering, strategy grounding, quality screening | Verified by unit tests with hand-written inputs and a test double (**simulated**: proves the rules, not model quality) |
 | Real model output quality (understanding, findings, drafts) | **Not verified.** This sandbox cannot hold an Anthropic key (Anthropic hosts cannot use saved network credentials). Needs `ANTHROPIC_API_KEY` as an environment variable in a cloud environment or Vercel Preview |
 | Real websites | **Not verified.** The sandbox cannot reach public websites |
 | Signed-in screens (`/app/business`, draft editing) in a browser | **Not verified.** Needs the Preview with test accounts |
@@ -86,14 +106,13 @@ token usage are recorded on each workflow and draft run.
 
 ## Security (§16)
 Server-side only; RLS on every table; tenant-isolation tests for every new table and function; owner-only
-review of business facts and approvals; website text treated as data; audit log. Not built: cost monitoring
-and spend caps (needed before any model runs for customers).
+review of business facts and approvals and plans; website text and owner notes treated as data; audit log; per-business
+and global model spend caps (see Cost control). Not built: alerting on spend, a customer-visible usage screen.
 
 ## Next, in order
-1. Live verification on Preview: `ANTHROPIC_API_KEY`, `MARKETING_MODEL_PROVIDER=anthropic-dev` and the three
-   switches on Preview only; run on 3–5 real sites with test accounts; review the outputs.
-2. Cost tracking and per-business caps for model calls (usage is recorded; caps are not enforced yet beyond the
-   existing daily limits on checks and drafts).
-3. More Content Creation: service page copy, FAQs, Google Business Profile posts (§8.1–8.2).
-4. Marketing Strategy: a prioritized plan from the understanding and findings (§7).
+1. Live verification on Preview: `ANTHROPIC_API_KEY`, `MARKETING_MODEL_PROVIDER=anthropic-dev` and the four
+   switches (`FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY` = 1) on Preview only; run on 3–5 real
+   sites with test accounts; review the outputs on `/admin/agent-review`, improve weak prompts and rules, repeat.
+2. More Content Creation: service page copy, FAQs, Google Business Profile posts (§8.1–8.2).
+3. Spend alerts and a usage view for owners; atomic budget reservation if parallel calls ever matter.
 Later: research (manual Semrush import), campaign planning, authorized execution, performance data.

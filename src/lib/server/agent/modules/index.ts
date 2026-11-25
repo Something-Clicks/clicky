@@ -1,4 +1,4 @@
-import { getModelProvider } from "../provider";
+import { getModelProvider, type ModelProvider } from "../provider";
 import type { CapabilityId } from "../capabilities";
 import { businessIntelligence } from "./business-intelligence";
 import { createContent, type ContentDraft, type ContentInput } from "./content-creation";
@@ -23,12 +23,21 @@ import { websiteIntelligence } from "./website-intelligence";
  */
 const hasModel = () => getModelProvider() !== null;
 
+/**
+ * Model-using modules take their provider from the caller, who wraps it with meteredProvider, so a call can never
+ * skip cost metering. Without one they are blocked: because none is configured, or because the caller supplied none.
+ */
+const noProvider = (): { status: "blocked"; reason: string } => ({
+  status: "blocked",
+  reason: hasModel() ? "A metered model provider must be supplied by the caller." : "No model provider is configured (development and Preview only).",
+});
+
 /** Content Creation (§8): website copy and SEO titles/descriptions, via the provider-neutral interface. */
-const contentCreation: CapabilityModule<ContentInput, ContentDraft> = {
+const contentCreation: CapabilityModule<ContentInput & { provider?: ModelProvider | null }, ContentDraft> = {
   id: "content_creation",
   async run(input) {
-    const provider = getModelProvider();
-    if (!provider) return { status: "blocked", reason: "No model provider is configured (development and Preview only)." };
+    const provider = input.provider;
+    if (!provider) return noProvider();
     const draft = await createContent(provider, input);
     return { status: "done", output: draft, detail: `Prepared ${draft.fields.length} part${draft.fields.length === 1 ? "" : "s"} of ${input.kind === "meta" ? "a page title and description" : "homepage copy"}.` };
   },
@@ -38,8 +47,8 @@ const contentCreation: CapabilityModule<ContentInput, ContentDraft> = {
 const marketingStrategy: CapabilityModule<PlanInput, MarketingPlan> = {
   id: "marketing_strategy",
   async run(input) {
-    const provider = input.provider ?? getModelProvider();
-    if (!provider) return { status: "blocked", reason: "No model provider is configured (development and Preview only)." };
+    const provider = input.provider;
+    if (!provider) return noProvider();
     const plan = await createPlan(provider, input);
     const n = plan.plan.priorities.length;
     return { status: "done", output: plan, detail: `Proposed a plan with ${n} priorit${n === 1 ? "y" : "ies"} and ${plan.plan.next_steps.length} next steps for the owner to review.` };
