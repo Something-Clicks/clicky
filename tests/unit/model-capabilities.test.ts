@@ -28,6 +28,11 @@ const double = (...outputs: unknown[]): ModelProvider => ({
   id: "test-double",
   generate: vi.fn(async () => ({ output: outputs.shift(), model: "test-double", usage: { inputTokens: 10, outputTokens: 5 } })),
 });
+// Metering refuses unpriced models, so the orchestrator test borrows the priced id/model of the dev adapter (still a test double: no network).
+const pricedDouble = (...outputs: unknown[]): ModelProvider => ({
+  id: "anthropic-dev", model: "claude-sonnet-5-5",
+  generate: vi.fn(async () => ({ output: outputs.shift(), model: "claude-sonnet-5-5", usage: { inputTokens: 10, outputTokens: 5 } })),
+});
 
 const fact = (over: Partial<ModelFactOutput>): ModelFactOutput => ({
   category: "business", field: "service", value: "Drain cleaning", evidence_class: "verified", basis: "",
@@ -172,11 +177,11 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
     for (const on of [true, false]) {
       vi.resetModules();
       const outs = answers();
-      vi.doMock("@/lib/server/agent/provider", async (orig) => ({ ...(await orig<object>()), getModelProvider: () => double(...outs) }));
+      vi.doMock("@/lib/server/agent/provider", async (orig) => ({ ...(await orig<object>()), getModelProvider: () => pricedDouble(...outs) }));
       if (on) process.env.FEATURE_MODEL_FINDINGS = "1";
       else delete process.env.FEATURE_MODEL_FINDINGS;
       const { runWebsiteReview } = await import("@/lib/server/agent/orchestrator");
-      const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf" : name === "add_model_findings" ? 1 : 0, error: null }));
+      const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf" : name === "model_budget" ? { allowed: true } : name === "add_model_findings" ? 1 : 0, error: null }));
       const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business: { businessName: "Sunrise Plumbing", serviceArea: null, primaryGoal: null, website: "https://sunrise.example/" } }, {
         fetchPage: async (u) => ({ url: u, status: 200, contentType: "text/html", body: HOME, truncated: false, redirects: [] }),
         pageSpeed: async () => ({ ok: false as const, reason: "busy" }),
@@ -184,7 +189,8 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
       const names = rpc.mock.calls.map((c) => c[0]);
       expect(names.includes("add_model_findings"), `switch ${on}`).toBe(on);
       const finish = rpc.mock.calls.find((c) => c[0] === "finish_marketing_workflow")![1] as Record<string, unknown>;
-      expect(finish).toMatchObject({ p_status: "prepared", p_provider: "test-double", p_model: "test-double" });
+      expect(finish).toMatchObject({ p_status: "prepared", p_provider: "anthropic-dev", p_model: "claude-sonnet-5-5" });
+      expect(names.filter((n) => n === "record_model_usage").length, "one usage record per model call").toBe(on ? 2 : 1);
       if (on) expect(out.steps.find((s) => s.step === "analyze_marketing_model")).toMatchObject({ status: "done" });
     }
   });

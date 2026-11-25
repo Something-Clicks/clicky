@@ -14,6 +14,7 @@ import { MODULES } from "./modules";
 import { sourcePages } from "./modules/business-understanding";
 import { analyzeWithModel } from "./modules/marketing-analysis-model";
 import { expectDone } from "./modules/types";
+import { meteredProvider } from "./metering";
 import { getModelProvider } from "./provider";
 import type { RankedNeed } from "./rank";
 import { planWorkflow, WORKFLOWS, type WorkflowKind } from "./workflows";
@@ -162,7 +163,10 @@ export async function runWebsiteReview(
   });
 
   // 6. Business Intelligence from the website: propose details for the owner to confirm.
-  const provider = getModelProvider();
+  // Every model call is metered per business (daily/monthly caps, usage recorded) before and after it runs.
+  const baseProvider = getModelProvider();
+  const meter = (capability: string) => (baseProvider ? meteredProvider(baseProvider, { db, orgId: input.orgId, capability, workflowId }) : null);
+  const provider = meter("business_intelligence.understand");
   const bi = expectDone(await MODULES.business_intelligence.run({ profile, scan: r.scan, provider }), "business_intelligence");
   const modelRun = bi.output.model && !("failed" in bi.output.model) ? bi.output.model : null;
   const proposed = await proposeFacts(db, input.orgId, input.analysisId, bi.output.proposals);
@@ -177,7 +181,7 @@ export async function runWebsiteReview(
   let modelName = modelRun?.model ?? null;
   if (provider && FEATURES.modelFindings) {
     try {
-      const mf = await analyzeWithModel(provider, {
+      const mf = await analyzeWithModel(meter("marketing_analysis.review")!, {
         pages: sourcePages(r.scan),
         businessName,
         known: bi.output.understanding.known,

@@ -9,8 +9,9 @@ export const FACT_FIELDS = {
   business: [
     "what_it_does", "industry", "business_model", "service", "product", "service_area", "location",
     "contact_phone", "contact_email", "pricing", "competitive_advantage", "goal", "marketing_objective", "constraint",
+    "trust_signal", "price_positioning",
   ],
-  brand: ["voice", "tone", "value_proposition", "key_message", "preferred_term", "avoid_term", "brand_guideline"],
+  brand: ["voice", "tone", "value_proposition", "key_message", "preferred_term", "avoid_term", "brand_guideline", "positioning"],
   customer: ["audience", "customer_problem", "motivation", "objection", "customer_question", "decision_factor"],
 } as const;
 
@@ -58,6 +59,7 @@ export const FACT_LABEL: Record<FactField, string> = {
   preferred_term: "Preferred term", avoid_term: "Words to avoid", brand_guideline: "Brand guideline", audience: "Audience",
   customer_problem: "Customer problem", motivation: "Purchase motivation", objection: "Common objection",
   customer_question: "Customer question", decision_factor: "Decision factor",
+  trust_signal: "Reason to trust", price_positioning: "Price positioning", positioning: "Positioning",
 };
 
 /** Website-sourced facts not seen again for this long are stale: never treated as current (§3.4). */

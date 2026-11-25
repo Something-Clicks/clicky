@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -8,6 +6,7 @@ import { propose } from "../../src/lib/server/agent/modules/business-intelligenc
 import { extractFacts } from "../../src/lib/server/site-scan";
 
 import { setupTestDb, type TestDb } from "./harness";
+import { reapplyFrom, rollbackFrom } from "./migrations";
 
 let db: TestDb;
 let owner: string;
@@ -226,15 +225,12 @@ describe("application and database agree", () => {
 
 describe("rollback", () => {
   it("rolls back and re-applies on a database with existing cards, re-deriving their classes", async () => {
-    const root = join(__dirname, "..", "..", "supabase");
-    await db.admin.query(readFileSync(join(root, "rollback", "20261128120000_model_findings_and_draft_versions_down.sql"), "utf8"));
-    await db.admin.query(readFileSync(join(root, "rollback", "20261127120000_business_intelligence_evidence_down.sql"), "utf8"));
+    await rollbackFrom(db.admin, "20261127120000_business_intelligence_evidence");
     const gone = await db.admin.query(
       `select to_regclass('public.business_facts') is null tbl,
               (select count(*)::int from information_schema.columns where table_name = 'action_cards' and column_name in ('evidence_class','evidence_basis')) cols`);
     expect(gone.rows[0]).toEqual({ tbl: true, cols: 0 });
-    await db.admin.query(readFileSync(join(root, "migrations", "20261127120000_business_intelligence_evidence.sql"), "utf8"));
-    await db.admin.query(readFileSync(join(root, "migrations", "20261128120000_model_findings_and_draft_versions.sql"), "utf8"));
+    await reapplyFrom(db.admin, "20261127120000_business_intelligence_evidence");
     expect((await classes()).map((c) => c.evidence_class)).toEqual(["verified", "unknown", "verified"]);
     const { rows } = await db.admin.query<{ n: number }>("select count(*)::int n from public.action_cards where evidence_class is null");
     expect(rows[0]!.n).toBe(0);

@@ -8,6 +8,7 @@ import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { loadUnderstanding } from "@/lib/server/agent/context";
 import { ContentRejected, createContent, isDraftKind, type DraftKind } from "@/lib/server/agent/modules/content-creation";
+import { meteredProvider, ModelBudgetExceeded } from "@/lib/server/agent/metering";
 import { getModelProvider, ModelOutputInvalid } from "@/lib/server/agent/provider";
 import { draftFailureMessage } from "@/lib/server/drafts";
 import { notify } from "@/lib/server/notify";
@@ -72,7 +73,7 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
   after(async () => {
     const started = Date.now();
     try {
-      const draft = await createContent(provider, input);
+      const draft = await createContent(meteredProvider(provider, { db: supabase, orgId: ws.organization!.id, capability: "content_creation", agentRunId: runId as string }), input);
       const { error: saveError } = await supabase.rpc("complete_agent_run", {
         p_run: runId,
         p_output: { fields: draft.fields } as unknown as Json,
@@ -85,7 +86,7 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
       await notify(supabase, ws.organization!.id, b.businessName, "draft_ready");
     } catch (e) {
       log.error("agent_run.failed", { runId, ms: Date.now() - started, error: e });
-      const reason = e instanceof ContentRejected ? e.message : e instanceof ModelOutputInvalid ? "We couldn't prepare a usable draft. Please try again." : draftFailureMessage(e);
+      const reason = e instanceof ModelBudgetExceeded ? "Draft preparation has reached its usage limit for now. Please try again later." : e instanceof ContentRejected ? e.message : e instanceof ModelOutputInvalid ? "We couldn't prepare a usable draft. Please try again." : draftFailureMessage(e);
       const { error: failError } = await supabase.rpc("fail_agent_run", { p_run: runId, p_reason: reason });
       if (failError) log.error("agent_run.fail_record_failed", { runId, error: failError.message });
     }

@@ -376,6 +376,12 @@ export type Database = {
       approve_action_card: { Args: { p_card: string; p_note: string | null }; Returns: undefined };
       // ── Business Intelligence (20261127120000) ──
       propose_business_facts: { Args: { p_org: string; p_analysis: string | null; p_facts: Json }; Returns: number };
+      model_budget: { Args: { p_org: string }; Returns: Json };
+      record_model_usage: { Args: { p_org: string; p_capability: string; p_provider: string; p_model: string; p_input: number; p_output: number; p_cost_micro: number; p_outcome: string; p_workflow: string | null; p_agent_run: string | null }; Returns: undefined };
+      admin_model_usage: { Args: { p_days: number }; Returns: Json };
+      save_marketing_plan: { Args: { p_org: string; p_analysis: string; p_plan: Json; p_provider: string; p_model: string }; Returns: string };
+      decide_marketing_plan: { Args: { p_plan: string; p_decision: string }; Returns: undefined };
+      admin_agent_review: { Args: { p_limit: number }; Returns: Json };
       review_business_fact: { Args: { p_fact: string; p_decision: string; p_value: string | null }; Returns: string };
       add_business_fact: { Args: { p_org: string; p_category: string; p_field: string; p_value: string }; Returns: string };
       // ── model findings and draft versions (20261128120000) ──

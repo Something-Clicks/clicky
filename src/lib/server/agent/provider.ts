@@ -53,6 +53,8 @@ export interface ModelRawResponse {
 
 export interface ModelProvider {
   readonly id: string;
+  /** The model this adapter calls (used to price calls before they are made). */
+  readonly model?: string;
   generate(request: Omit<ModelRequest<unknown>, "schema"> & { jsonSchema: unknown }): Promise<ModelRawResponse>;
 }
 

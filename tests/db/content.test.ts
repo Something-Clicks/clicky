@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { setupTestDb, type TestDb } from "./harness";
+import { reapplyFrom, rollbackFrom } from "./migrations";
 
 let db: TestDb;
 let owner: string;
@@ -157,14 +158,14 @@ describe("rollback", () => {
     const root = join(__dirname, "..", "..", "supabase");
     const body = async () => (await db.admin.query<{ src: string }>("select prosrc src from pg_proc where proname = 'verify_outcomes'")).rows[0]!.src;
     const changed = await body();
-    await db.admin.query(readFileSync(join(root, "rollback", "20261128120000_model_findings_and_draft_versions_down.sql"), "utf8"));
+    await rollbackFrom(db.admin, "20261128120000_model_findings_and_draft_versions");
     const restored = await body();
     expect(restored).not.toContain("origin");
     expect(readFileSync(join(root, "migrations", "20261119160000_measurement_retention.sql"), "utf8")).toContain(restored.trim().split("\n")[3]!.trim());
     const gone = await db.admin.query(`select to_regclass('public.draft_versions') is null t,
       (select count(*)::int from pg_proc where proname in ('add_model_findings','edit_draft','approve_draft_version')) f`);
     expect(gone.rows[0]).toEqual({ t: true, f: 0 });
-    await db.admin.query(readFileSync(join(root, "migrations", "20261128120000_model_findings_and_draft_versions.sql"), "utf8"));
+    await reapplyFrom(db.admin, "20261128120000_model_findings_and_draft_versions");
     expect(await body()).toBe(changed);
     const [{ n }] = (await db.admin.query<{ n: number }>("select count(*)::int n from public.draft_versions")).rows as [{ n: number }];
     expect(n).toBeGreaterThan(1); // existing drafts got their version 1 back

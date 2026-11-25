@@ -24,6 +24,7 @@ export function anthropicDevProvider(env: Record<string, string | undefined> = p
   const effort = env.MARKETING_MODEL_EFFORT?.trim() as "low" | "medium" | "high" | undefined;
   return {
     id: "anthropic-dev",
+    model: DEV_MODEL,
     async generate(req): Promise<ModelRawResponse> {
       const format = jsonSchemaOutputFormat(req.jsonSchema as { type: "object" } & Record<string, unknown>);
       const response = await client.messages.create({

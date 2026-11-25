@@ -1,11 +1,10 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { cardStage, completionBasis } from "../../src/lib/stages";
 
 import { setupTestDb, type TestDb } from "./harness";
+import { reapplyFrom, rollbackFrom } from "./migrations";
 
 let db: TestDb;
 let owner: string;
@@ -174,12 +173,8 @@ describe("workflow records", () => {
 
 describe("rollback", () => {
   it("rolls back cleanly, keeps existing cards, and re-applies", async () => {
-    const root = join(__dirname, "..", "..", "supabase");
     const [{ n: before }] = (await db.admin.query<{ n: number }>("select count(*)::int n from public.action_cards")).rows as [{ n: number }];
-    // Rollbacks run newest first: the later evidence-class migration depends on action_cards.origin.
-    await db.admin.query(readFileSync(join(root, "rollback", "20261128120000_model_findings_and_draft_versions_down.sql"), "utf8"));
-    await db.admin.query(readFileSync(join(root, "rollback", "20261127120000_business_intelligence_evidence_down.sql"), "utf8"));
-    await db.admin.query(readFileSync(join(root, "rollback", "20261126120000_marketing_workflow_down.sql"), "utf8"));
+    await rollbackFrom(db.admin, "20261126120000_marketing_workflow");
     const gone = await db.admin.query(
       `select (select count(*)::int from information_schema.columns where table_name = 'action_cards' and column_name in ('stage','origin','completion_basis')) cols,
               to_regclass('public.marketing_workflows') is null tbl,
@@ -189,9 +184,7 @@ describe("rollback", () => {
     // Existing flows still work without the new objects.
     await q(owner, "select public.set_action_card_status(id, 'new', null) from public.action_cards where organization_id = $1 and status = 'dismissed'", [org]);
 
-    await db.admin.query(readFileSync(join(root, "migrations", "20261126120000_marketing_workflow.sql"), "utf8"));
-    await db.admin.query(readFileSync(join(root, "migrations", "20261127120000_business_intelligence_evidence.sql"), "utf8"));
-    await db.admin.query(readFileSync(join(root, "migrations", "20261128120000_model_findings_and_draft_versions.sql"), "utf8"));
+    await reapplyFrom(db.admin, "20261126120000_marketing_workflow");
     const back = await db.admin.query<{ stages: string[] }>("select array_agg(distinct stage order by stage) stages from public.action_cards");
     expect(back.rows[0]!.stages.every((s) => ["prepared", "approved", "completed", "dismissed"].includes(s))).toBe(true);
     const [{ n }] = (await db.admin.query<{ n: number }>("select count(*)::int n from public.action_cards where origin = 'website_check'")).rows as [{ n: number }];
