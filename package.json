@@ -16,7 +16,8 @@
     "test:db": "vitest run --project db",
     "icons": "node scripts/generate-icons.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
-    "e2e": "playwright test --trace off"
+    "e2e": "playwright test --trace off",
+    "eval:providers": "vitest run --project eval --reporter verbose"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

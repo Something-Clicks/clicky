@@ -170,3 +170,7 @@ next-env.d.ts
 /tests/e2e/.env.e2e
 /test-results/
 /playwright-report/
+
+# Provider evaluation output (contains raw model outputs and website excerpts)
+/eval-results/
+/evals/providers/sites.json
