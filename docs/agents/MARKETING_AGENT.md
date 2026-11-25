@@ -1,66 +1,86 @@
-# Marketing Agent: foundation (built Nov 24 2026)
+# The Something Clicks Marketing Agent: architecture map and status
 
-Spec: the owner's "AI Marketing Agent — Detailed Agent Architecture & Functional Specification".
-This is the first slice: one central orchestrator around the existing website analysis, Action Cards,
-agent runs and database. **No model provider is active.** Everything that runs today is a fixed,
-evidence-based check.
+The owner's specification (`AI_MARKETING_AGENT.docx`) is the architecture. This document maps each part
+of it to the code and says honestly what is built. Updated Nov 25 2026.
 
-## What runs today
-Every customer website check (the Check button, the first check after setup, the weekly re-check) goes
-through `runWebsiteReview` in `src/lib/server/agent/orchestrator.ts`:
+**Status words.** *Built*: runs in the app and is covered by unit and database tests (local Postgres; the
+migrations also on clicky-dev). *Not built*: designed, reports "blocked" if a workflow asks for it.
+Nothing below has yet been verified against real customer websites, and no language model is connected.
 
-| Step | Capability | Runs on | What it does |
-|---|---|---|---|
-| understand_business | Business Intelligence | checks | Reads the stored business profile; lists what is missing (service area, main goal). |
-| plan | — | — | Selects only the capabilities this request needs (`workflows.ts`). |
-| analyze_website | Website + SEO Intelligence | checks | The existing `runAnalysis` → `analyzeWebsite` → `complete_analysis`, unchanged. |
-| rank_needs | Marketing Analysis | checks | `rank.ts`: impact → evidence strength (verified / estimated / unknown) → confidence → owner changes first. |
-| prepare_work | Marketing Analysis | checks | The saved Action Cards: evidence, why it matters, what to do. |
-| prepare_drafts | Content Creation | model | **Recorded as blocked** (no provider). Never faked. |
-| owner_review | — | — | Waits for the owner. |
+## How it fits together
+```
+Customer request ─► Orchestrator (src/lib/server/agent/orchestrator.ts)
+                      │  plans with workflows.ts (only the capabilities a request needs)
+                      │  records every run in marketing_workflows (steps, capabilities, result, errors)
+                      ▼
+                    Capability modules (src/lib/server/agent/modules/, one per capability, §2.2)
+                      │  contract: typed input → { done, output, detail } | { blocked, reason }
+                      ▼
+                    Data: business_facts · analyses / analysis_evidence · action_cards · approvals ·
+                          agent_runs · marketing_workflows · activity_log  (RLS on all; writes via checked functions)
+                      ▼
+                    Model provider (provider.ts): provider-neutral, validated structured output,
+                    one retry, no mock. Registry empty in the app.
+```
 
-Each run is saved in `marketing_workflows` (capabilities, steps, result, error; provider/model/usage stay
-null because no model is called). If that record cannot be written, the customer's check still runs and
-the problem is logged.
+## Capabilities (§2.2)
+| Capability | Module | Status |
+|---|---|---|
+| Business Intelligence (§3, §14) | `business-intelligence.ts` | **Built (deterministic part).** Proposes phone and email (verified: observed) and services (inferred, basis stated) from the website; `understand()` merges the owner's profile, confirmed facts and current proposals, lists what is missing, and sets aside stale website facts (older than 180 days). Facts are stored in `business_facts`. Model-derived facts (what the business does, audience, value proposition, brand voice) not built. No customer screen yet. |
+| Website Intelligence (§5) | `website-intelligence.ts` | **Built.** Safe discovery (SSRF defense, redirect/size/time limits) of the homepage and up to 4 key pages; metadata, text, link labels, email links; failures recorded; mobile speed when available. |
+| SEO Intelligence (§4.3) | `seo-intelligence.ts` | **Partly built.** On-page signals per page and SEO findings. Keyword and visibility data not connected (Semrush manual import planned). |
+| Marketing Analysis (§6) | `marketing-analysis.ts` | **Built for fixed checks.** Findings with category (seo / technical / conversion / content / local), evidence class, ranking (impact → evidence strength → confidence → owner-doable first). Messaging and conversion judgment needs a model: not built. |
+| Performance Intelligence (§11) | `performance-intelligence.ts` | **Partly built.** Verified fixed / still found / awaiting (verification runs in the database on each check). Traffic and search data not connected. |
+| Market Research (§4) | `unavailable.ts` | Not built (needs a model and a research source). |
+| Marketing Strategy (§7) | `unavailable.ts` | Not built. |
+| Content Creation (§8) | `unavailable.ts` | Not built. Older draft code (`drafts.ts`) is dormant and will be ported onto the provider interface. |
+| Campaign Planning (§9) | `unavailable.ts` | Not built. |
+| Marketing Execution (§10) | `unavailable.ts` | Not built (needs authorized integrations). |
 
-`requestMarketingWork` handles the other request kinds (homepage headline, competitor research,
-marketing plan, promotional campaign, results review). Without a provider each is recorded as
-**blocked** with the reason; none produces output. No customer screen calls it yet.
+## Orchestrator and workflows (§12)
+**Built:** `runWebsiteReview` runs for every website check (Check button, first check after setup, weekly
+re-check): understand business → plan → Website Intelligence → Marketing Analysis → SEO Intelligence →
+Business Intelligence proposals → rank → prepare Action Cards → drafts (recorded "blocked") → owner review.
+If the workflow record or the fact proposals cannot be saved, the customer's check still completes.
+**Not built:** the other five request kinds (homepage headline, competitor research, marketing plan,
+promotional campaign, results review) are planned and record themselves as blocked.
 
-## Workflow stages (owner-facing)
-`action_cards.stage` is generated by the database from `status` + `verification`
-(mirrored in `src/lib/stages.ts`, tested to agree):
+## Evidence and confidence (§6.3)
+**Built.** Four classes in `src/lib/evidence.ts`, enforced in the database (migration 20261127120000):
+- Action Cards from fixed checks: class derived from the evidence they cite; cannot be set otherwise.
+- Model findings (future, origin `model`): verified must cite observed/measured evidence; inferred must cite
+  evidence and state a basis; estimated must state a basis. Checked at commit.
+- Business facts: the same rules, plus owner-supplied or owner-confirmed facts count as verified; unknown
+  facts record what is missing and carry no value.
 
-- **Prepared** (“Ready for your review”): researched and prepared.
-- **Approved**: the owner approved it (`approve_action_card`, owner only; or `decide_approval` for a draft).
-- **Completed** (“Done”): marked done by the team (`completion_basis = reported`) or verified fixed by a later
-  check (`verified`). Generating a recommendation or a draft never completes anything.
-- Dismissed.
+## Action Cards, approvals, execution (§10, §13)
+**Built:** card fields, stages prepared → approved (owner only) → completed (marked done or verified fixed),
+evidence class per card. Generated work is never "completed".
+**Not built:** effort, dependencies, link to the prepared deliverable, editable drafts with versions.
 
-`action_cards.origin` is `website_check` for every card; `model` is reserved so model-generated work can
-always be told apart. Customers see “From a website check”.
+## Customer context and memory (§14)
+**Built:** Business, Brand and Customer profile store (`business_facts`) with provenance and freshness;
+marketing history via cards, workflows and the activity log.
+**Not built:** Research Library, Marketing Strategy store, Performance History beyond verification; the owner
+screen for reviewing facts (functions `review_business_fact` and `add_business_fact` exist and are tested).
 
-## Customer-visible changes
-- Card page: an **Approve** button for the owner on a prepared card (members still see Mark done / Dismiss);
-  the status pill shows the stage; a “From a website check” pill.
-- Home: one line under “Your next move”, e.g. “3 ready for your review · 1 approved, not done yet”.
-- To do → Done filter includes approved work a later check verified fixed.
-- Internal `workflow.*` log entries are hidden from History.
-No new navigation, no approvals dashboard.
+## Model providers (§15)
+Provider-neutral interface, no provider registered in the app, an API key alone enables nothing (tested).
+Temporary development provider (engineering decision): Claude Sonnet 5.5, development and Preview only, one
+replaceable adapter, not yet added. Selection rationale: already a project dependency, structured output
+verified against the official documentation, mid-tier price. The optional comparison tool is in
+`evals/providers/` and is not a prerequisite.
 
-## Provider architecture
-`src/lib/server/agent/provider.ts`: `ModelProvider` interface, `generateStructured()` (schema validation,
-one controlled retry, usage totals). The registry is **empty**; `getModelProvider()` returns null and nothing
-falls back to a default. To add the chosen provider: one adapter file implementing `ModelProvider`, one
-registry entry, `MARKETING_MODEL_PROVIDER` on the server, then port `ai.ts` / `drafts.ts` onto it.
-The old Anthropic-specific code stays dormant (no key anywhere).
+## Security (§16)
+Server-side only; RLS on every table; tenant-isolation tests for every new table and function; owner-only
+review of business facts and approvals; website text treated as data; audit log. Not built: cost monitoring
+and spend caps (needed before any model runs for customers).
 
-## Blocked until a provider is chosen
-Content Creation (drafts), Marketing Strategy, Market Research (also needs a data source), Campaign Planning,
-model wording of cards. Marketing Execution needs integrations (none exist).
-None of these has been tested with a real model; their status is **BLOCKED**, not complete.
-
-## Database
-Migration `supabase/migrations/20261126120000_marketing_workflow.sql`, rollback
-`supabase/rollback/20261126120000_marketing_workflow_down.sql`. Additive; replaces no existing function.
-Tests: `tests/db/workflow.test.ts` (including rollback → re-apply).
+## Next, in order
+1. Development provider adapter (Claude Sonnet 5.5) behind `provider.ts`, development and Preview only.
+2. Model-assisted Business Intelligence: what the business does, audience, value proposition, proposed with
+   evidence classes; the owner review screen (behind a feature flag until approved).
+3. Model-assisted Marketing Analysis: messaging, conversion, content findings (origin `model`).
+4. Content Creation: homepage copy and SEO titles/descriptions → editable versions → owner approval.
+5. Cost tracking and per-business caps for model calls.
+Later: research and strategy, campaign planning, authorized execution, performance data.

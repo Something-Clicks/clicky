@@ -6,11 +6,16 @@ import { log } from "@/lib/log";
 import type { Database, Json } from "@/lib/supabase/types";
 
 import { wordFindings } from "./ai";
-import { runChecks, type BusinessContext, type Evidence, type Finding } from "./checks";
-import { runPageSpeed } from "./pagespeed";
+import type { BusinessContext, Evidence } from "./checks";
+import { marketingAnalysis, type ClassifiedFinding } from "./agent/modules/marketing-analysis";
+import { seoIntelligence, type SeoIntelligence } from "./agent/modules/seo-intelligence";
+import { expectDone } from "./agent/modules/types";
+import { websiteIntelligence } from "./agent/modules/website-intelligence";
+import type { RankedNeed } from "./agent/rank";
+import type { runPageSpeed } from "./pagespeed";
 import { notify } from "./notify";
-import { createSafeFetcher, FetchBlockedError, type FetchedPage } from "./safe-fetch";
-import { scanSite } from "./site-scan";
+import { FetchBlockedError, type FetchedPage } from "./safe-fetch";
+import type { SiteScan } from "./site-scan";
 import { track } from "./site";
 
 export type Db = SupabaseClient<Database>;
@@ -69,34 +74,38 @@ export interface AnalysisDeps {
 /** The finished result of one website analysis, ready to save. */
 export interface AnalysisResult {
   evidence: Evidence[];
-  findings: Finding[];
+  /** Findings with their category and evidence class (Marketing Analysis). */
+  findings: ClassifiedFinding[];
   coverage: Record<string, unknown>;
   summary: string;
   wording: "ai" | "template";
   pagespeed: boolean;
+  /** What Website Intelligence retrieved, for capabilities that run next (Business Intelligence). */
+  scan: SiteScan;
+  ranked: RankedNeed[];
+  seo: SeoIntelligence;
 }
 
 /**
- * Scans the website, runs the checks, and words the findings. Shared by the workspace
- * analysis and the anonymous first result, so both show exactly the same evidence.
+ * Runs the Marketing Agent's analysis capabilities on a website: Website Intelligence, then
+ * Marketing Analysis, then SEO Intelligence, then wording. Shared by the workspace analysis and the
+ * anonymous first result, so both show exactly the same evidence.
  */
 export async function analyzeWebsite(website: string, biz: BusinessContext, deps: AnalysisDeps = {}): Promise<AnalysisResult> {
-  const fetchPage = deps.fetchPage ?? createSafeFetcher();
-  const pageSpeed = deps.pageSpeed ?? runPageSpeed;
-  const [scan, psi] = await Promise.all([scanSite(website, fetchPage), pageSpeed(website)]);
-  if (scan.homepage.status >= 400) {
-    throw new FetchBlockedError(`your homepage returned an error (${scan.homepage.status}).`, "status", scan.homepage.status);
-  }
-  const { evidence, findings } = runChecks(scan, psi, biz);
-  const pagesReviewed = 1 + scan.pages.length;
-  const worded = await wordFindings(findings, evidence, biz, pagesReviewed);
+  const site = expectDone(await websiteIntelligence.run({ website, fetchPage: deps.fetchPage, pageSpeed: deps.pageSpeed }), "website_intelligence").output;
+  const analysis = expectDone(await marketingAnalysis.run({ site, business: biz }), "marketing_analysis").output;
+  const seo = expectDone(await seoIntelligence.run({ analysis }), "seo_intelligence").output;
+  const worded = await wordFindings(analysis.findings, analysis.evidence, biz, site.pagesReviewed);
+  // Wording never changes which findings exist, their evidence or their class.
+  const classOf = new Map(analysis.findings.map((f) => [f.check_key, f]));
+  const findings = worded.findings.map((f) => ({ ...f, category: classOf.get(f.check_key)!.category, evidence_class: classOf.get(f.check_key)!.evidence_class }));
   const coverage = {
-    website: { status: "observed", pages_reviewed: pagesReviewed, pages_unreachable: scan.failures.length },
-    pagespeed: psi.ok ? { status: "measured", score: psi.performanceScore } : { status: "missing", reason: psi.reason },
+    website: { status: "observed", pages_reviewed: site.pagesReviewed, pages_unreachable: site.scan.failures.length },
+    pagespeed: site.psi.ok ? { status: "measured", score: site.psi.performanceScore } : { status: "missing", reason: site.psi.reason },
     search_console: { status: "not_connected" },
     google_business_profile: { status: "not_connected" },
   };
-  return { evidence, findings: worded.findings, coverage, summary: worded.summary, wording: worded.wording as "ai" | "template", pagespeed: psi.ok };
+  return { evidence: analysis.evidence, findings, coverage, summary: worded.summary, wording: worded.wording as "ai" | "template", pagespeed: site.psi.ok, scan: site.scan, ranked: analysis.ranked, seo };
 }
 
 export type AnalysisOutcome = { ok: true; result: AnalysisResult } | { ok: false; reason: string };

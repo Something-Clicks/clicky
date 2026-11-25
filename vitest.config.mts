@@ -16,7 +16,7 @@ export default defineConfig({
         test: { name: "eval", include: ["evals/**/*.eval.ts"], environment: "node", fileParallelism: false },
       },
       {
-        resolve: { alias },
+        resolve: { alias: { ...alias, "server-only": fileURLToPath(new URL("./tests/unit/server-only-stub.ts", import.meta.url)) } },
         test: { name: "db", include: ["tests/db/**/*.test.ts"], environment: "node", testTimeout: 30_000, fileParallelism: false },
       },
     ],

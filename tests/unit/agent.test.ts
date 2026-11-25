@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { CAPABILITIES } from "@/lib/server/agent/capabilities";
-import { requestMarketingWork, runWebsiteReview, understandBusiness } from "@/lib/server/agent/orchestrator";
+import { requestMarketingWork, runWebsiteReview } from "@/lib/server/agent/orchestrator";
 import {
   generateStructured,
   getModelProvider,
@@ -122,26 +122,26 @@ const business = { businessName: "Sunrise Plumbing", serviceArea: null, primaryG
 const psiMissing = async () => ({ ok: false as const, reason: "PageSpeed Insights is busy right now." });
 
 describe("orchestrator: website review (stub database, fixture HTML)", () => {
-  it("lists what the business profile is missing", () => {
-    expect(understandBusiness(business)).toEqual({ known: ["business name", "website", "main goal"], missing: ["service area"] });
-  });
-
   it("records the workflow, saves the analysis, ranks needs, and finishes as prepared", async () => {
     const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf1" : null, error: null }));
     const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business }, { fetchPage: async (u) => page(u, HOME), pageSpeed: psiMissing });
-    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "finish_marketing_workflow"]);
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "propose_business_facts", "finish_marketing_workflow"]);
     expect(rpc.mock.calls[0]![1]).toMatchObject({ p_org: "o1", p_kind: "website_review", p_analysis: "a1", p_capabilities: ["business_intelligence", "website_intelligence", "seo_intelligence", "marketing_analysis"] });
     expect(out.status).toBe("prepared");
     if (out.status !== "prepared") return;
     expect(out.result.source).toBe("website_check");
     expect(out.result.model_worded).toBe(false);
-    expect(out.result.missing_business_info).toEqual(["service area"]);
+    // The phone number in the page text was proposed (verified: observed); the rest is still missing.
+    expect(out.result.missing_business_info).toEqual(["what_it_does", "service", "audience", "service_area", "value_proposition"]);
+    expect(rpc.mock.calls[2]![1]).toMatchObject({ p_org: "o1", p_analysis: "a1", p_facts: [{ field: "contact_phone", value: "(801) 555-0123", evidence_class: "verified", source: "website" }] });
+    expect(out.result.evidence_classes.inferred).toBe(0);
+    expect(out.result.evidence_classes.verified + out.result.evidence_classes.unknown).toBe(out.result.ranked.length);
     expect(out.result.ranked.length).toBeGreaterThan(2);
     expect(out.steps.map((s) => [s.step, s.status])).toEqual([
-      ["understand_business", "done"], ["plan", "done"], ["analyze_website", "done"], ["rank_needs", "done"],
-      ["prepare_work", "done"], ["prepare_drafts", "blocked"], ["owner_review", "waiting"],
+      ["understand_business", "done"], ["plan", "done"], ["analyze_website", "done"], ["analyze_marketing", "done"], ["analyze_seo", "done"],
+      ["learn_business", "done"], ["rank_needs", "done"], ["prepare_work", "done"], ["prepare_drafts", "blocked"], ["owner_review", "waiting"],
     ]);
-    const finish = rpc.mock.calls[2]![1] as Record<string, unknown>;
+    const finish = rpc.mock.calls[3]![1] as Record<string, unknown>;
     expect(finish).toMatchObject({ p_workflow: "wf1", p_status: "prepared", p_provider: null, p_model: null, p_usage: null });
   });
 
@@ -162,7 +162,7 @@ describe("orchestrator: website review (stub database, fixture HTML)", () => {
     const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a3", business }, { fetchPage: async (u) => page(u, HOME), pageSpeed: psiMissing });
     expect(out.status).toBe("prepared");
     expect(out.workflowId).toBeNull();
-    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis"]);
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "propose_business_facts"]);
   });
 });
 

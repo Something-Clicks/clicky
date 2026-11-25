@@ -14,8 +14,10 @@ export default async function ActivityPage() {
     .from("activity_log")
     .select("id, action, metadata, created_at")
     .eq("organization_id", organization.id)
-    // Internal orchestrator records (workflow.*) stay out of the customer's history.
+    // Internal Marketing Agent records stay out of the customer's history until those features are switched on:
+    // workflow runs (workflow.*) and business details proposed from the website (business_fact.*).
     .not("action", "like", "workflow.%")
+    .not("action", "like", "business_fact.%")
     .order("created_at", { ascending: false })
     .limit(100);
   if (error) log.error("activity.query_failed", { organizationId: organization.id, error: error.message });

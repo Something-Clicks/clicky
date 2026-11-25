@@ -15,11 +15,15 @@ export interface PageFacts {
   wordCount: number;
   hasViewport: boolean;
   telLinks: string[];
+  /** Email addresses from mailto: links. */
+  mailtoLinks: string[];
   phoneInText: string | null;
   imagesTotal: number;
   imagesMissingAlt: number;
   lang: string | null;
   internalLinks: string[];
+  /** Visible text of same-site links (navigation labels), by URL. */
+  internalLinkTexts: { url: string; text: string }[];
   truncated: boolean;
 }
 
@@ -42,19 +46,25 @@ export function extractFacts(page: FetchedPage): PageFacts {
   body.querySelectorAll("script,style,noscript,svg").forEach((el: HTMLElement) => el.remove());
   const text = clean(body.textContent);
 
-  const links = root.querySelectorAll("a[href]").map((a) => a.getAttribute("href") ?? "");
+  const anchors = root.querySelectorAll("a[href]");
+  const links = anchors.map((a) => a.getAttribute("href") ?? "");
   const internal = new Set<string>();
-  for (const href of links) {
+  const linkTexts = new Map<string, string>();
+  anchors.forEach((a, i) => {
     try {
-      const u = new URL(href, base);
+      const u = new URL(links[i]!, base);
       if (u.host === base.host && /^https?:$/.test(u.protocol)) {
         u.hash = "";
-        if (!/\.(pdf|jpe?g|png|gif|webp|svg|zip|docx?|xlsx?)$/i.test(u.pathname)) internal.add(u.toString());
+        if (!/\.(pdf|jpe?g|png|gif|webp|svg|zip|docx?|xlsx?)$/i.test(u.pathname)) {
+          internal.add(u.toString());
+          const label = clean(a.textContent);
+          if (label && label.length <= 80 && !linkTexts.has(u.toString())) linkTexts.set(u.toString(), label);
+        }
       }
     } catch {
       // ignore malformed links
     }
-  }
+  });
   const images = root.querySelectorAll("img");
 
   return {
@@ -68,11 +78,13 @@ export function extractFacts(page: FetchedPage): PageFacts {
     wordCount: text ? text.split(" ").length : 0,
     hasViewport: Boolean(root.querySelector('meta[name="viewport"]')),
     telLinks: links.filter((h) => h.toLowerCase().startsWith("tel:")),
+    mailtoLinks: [...new Set(links.filter((h) => h.toLowerCase().startsWith("mailto:")).map((h) => decodeURIComponent(h.slice(7).split("?")[0]!).trim().toLowerCase()).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))].slice(0, 5),
     phoneInText: text.match(PHONE)?.[0] ?? null,
     imagesTotal: images.length,
     imagesMissingAlt: images.filter((img) => !img.hasAttribute("alt")).length,
     lang: root.querySelector("html")?.getAttribute("lang") ?? null,
     internalLinks: [...internal].slice(0, 200),
+    internalLinkTexts: [...linkTexts].slice(0, 200).map(([url, text]) => ({ url, text })),
     truncated: page.truncated,
   };
 }

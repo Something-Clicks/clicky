@@ -1,4 +1,6 @@
-import type { Evidence, Finding, Kind, Level } from "../checks";
+import { classFromKinds } from "@/lib/evidence";
+
+import type { Evidence, Finding, Level } from "../checks";
 
 /**
  * Ranks marketing needs from existing findings. Deterministic: no model, no invented numbers.
@@ -30,13 +32,11 @@ export interface RankedNeed {
 
 const LEVEL: Record<Level, number> = { high: 0, medium: 1, low: 2 };
 const EVIDENCE: Record<EvidenceClass, number> = { verified: 0, estimated: 1, unknown: 2 };
-const CLASS_OF: Record<Kind, EvidenceClass> = { observed: "verified", measured: "verified", estimated: "estimated", missing: "unknown" };
 
+/** Class from the cited evidence (shared rule in src/lib/evidence.ts). Checks never produce "inferred". */
 export function evidenceClass(finding: Pick<Finding, "evidence_keys">, evidence: Pick<Evidence, "key" | "kind">[]): EvidenceClass {
   const byKey = new Map(evidence.map((e) => [e.key, e.kind]));
-  const classes = finding.evidence_keys.map((k) => byKey.get(k)).filter(Boolean).map((k) => CLASS_OF[k!]);
-  if (!classes.length) return "unknown";
-  return classes.sort((a, b) => EVIDENCE[a] - EVIDENCE[b])[0]!;
+  return classFromKinds(finding.evidence_keys.map((k) => byKey.get(k) ?? "missing")) as EvidenceClass;
 }
 
 export function rankNeeds(findings: Finding[], evidence: Pick<Evidence, "key" | "kind">[]): RankedNeed[] {

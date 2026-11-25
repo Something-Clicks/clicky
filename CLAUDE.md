@@ -1,6 +1,6 @@
 # Something Clicks — instructions for Claude Code sessions
 
-Marketing help for small businesses: check the website, show what's worth fixing with evidence, draft the work, the owner approves. Live at https://somethingclicks.com.
+Something Clicks is building its own **Marketing Agent** for small businesses: it understands the business, analyzes its marketing, prepares the work, the owner approves, and it tracks the outcome. The architecture is the owner's specification (`AI_MARKETING_AGENT.docx`; map and status in `docs/agents/MARKETING_AGENT.md`). An external language model is only a replaceable intelligence provider; Something Clicks owns the agent, its capabilities, data, controls and customer experience. Live at https://somethingclicks.com.
 
 ## Before you change anything
 - Read `docs/launch/LAUNCH_CHECKLIST.md` (what's done, what's next, how to resume).
@@ -43,12 +43,17 @@ Marketing help for small businesses: check the website, show what's worth fixing
 ## Checks before every commit
 `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`, plus `pnpm e2e` when the customer journey changed (see the checklist for the local stack).
 
-## AI provider and drafts
-- Anthropic is not our AI provider and is not a dependency. Never request an Anthropic key. The existing code (`src/lib/server/ai.ts`, `drafts.ts`) stays dormant and unconfigured; do not delete it.
+## Model providers and drafts
+- Model calls go only through `src/lib/server/agent/provider.ts`. No provider is registered in the app; an API key alone never activates anything (`isAiConfigured()` checks the registry; tested). Never add a mock model or stand-in answers.
+- Temporary development provider (engineering decision, Nov 25 2026): Anthropic Claude Sonnet 5.5, development and Preview only, as one replaceable adapter. Not a product dependency; never enabled for Production customers without the owner's approval.
+- The older Anthropic-specific code (`src/lib/server/ai.ts`, `drafts.ts`) stays dormant until it is ported onto the provider interface; do not delete it.
 - `FEATURES.drafts` (`src/config/features.ts`) is `false`: draft creation, approvals and their screens/routes are hidden from customers. Recommendations come from fixed checks; never describe them as AI analysis.
 
-## Marketing agent
-- Foundation built and approved: `docs/agents/MARKETING_AGENT.md`. One orchestrator (`src/lib/server/agent/orchestrator.ts`) runs every website check and records it in `marketing_workflows`.
-- Model calls only through `src/lib/server/agent/provider.ts`. No provider is registered; never add a mock model or stand-in answers, and never activate a provider without the owner's decision.
+## Marketing Agent
+- Map of the specification to the code, what is built and what is not: `docs/agents/MARKETING_AGENT.md`. Keep it current.
+- One orchestrator (`src/lib/server/agent/orchestrator.ts`) runs every website check and records it in `marketing_workflows`. It reaches capabilities only through the module registry (`src/lib/server/agent/modules/`), one module per capability in the specification. Unbuilt capabilities report "blocked" and never return placeholder output.
+- Four evidence classes (verified / inferred / estimated / unknown, `src/lib/evidence.ts`) on findings and business facts, enforced in the database.
+- Business Intelligence stores facts in `business_facts` with source, evidence class, basis and freshness. The agent only proposes; the owner confirms. Not shown to customers yet.
 - Stages: prepared → approved (owner only) → completed (marked done, or verified fixed). Never mark generated work completed.
-- Plan names (app only; Stripe unchanged): Marketing Report $49, Marketing Assistant $79/$756, Marketing Studio and Marketing Suite are planned tiers.
+- Internal identity is "the Something Clicks Marketing Agent". Customer-facing words stay simple and match the website; that copy rule governs wording, not what we build.
+- Plan names (app only; Stripe unchanged): Marketing Report $49; Marketing Assistant ($79/$756) is on hold and cannot be bought; Marketing Studio and Marketing Suite are planned tiers.

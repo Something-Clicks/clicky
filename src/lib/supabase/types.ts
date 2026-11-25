@@ -148,8 +148,32 @@ export type Database = {
           origin: string;
           stage: string;
           completion_basis: string | null;
+          // ── evidence classes (20261127120000); derived for fixed checks, validated for model findings ──
+          evidence_class: string | null;
+          evidence_basis: string | null;
         },
         "organization_id" | "analysis_id" | "check_key" | "title"
+      >;
+      business_facts: Table<
+        {
+          id: string;
+          organization_id: string;
+          category: string;
+          field: string;
+          value: string | null;
+          source: string;
+          evidence_class: string;
+          basis: string | null;
+          evidence: Json;
+          status: string;
+          analysis_id: string | null;
+          observed_at: string;
+          confirmed_by: string | null;
+          confirmed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        },
+        "organization_id" | "category" | "field" | "source" | "evidence_class"
       >;
       marketing_workflows: Table<
         {
@@ -345,6 +369,10 @@ export type Database = {
         Returns: undefined;
       };
       approve_action_card: { Args: { p_card: string; p_note: string | null }; Returns: undefined };
+      // ── Business Intelligence (20261127120000) ──
+      propose_business_facts: { Args: { p_org: string; p_analysis: string | null; p_facts: Json }; Returns: number };
+      review_business_fact: { Args: { p_fact: string; p_decision: string; p_value: string | null }; Returns: string };
+      add_business_fact: { Args: { p_org: string; p_category: string; p_field: string; p_value: string }; Returns: string };
       // ── launch redesign (20261124120000) ──
       free_uses: { Args: { p_org: string }; Returns: Json };
       claim_preview: { Args: { p_claim: string }; Returns: Json };

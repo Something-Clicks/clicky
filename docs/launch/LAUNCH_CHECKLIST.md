@@ -107,6 +107,7 @@ Branch-scoped Preview variables for this branch point at clicky-dev and Stripe T
 Do these in order. Stop if any check fails.
 
 **1. Approve the production migration**
+- Then `supabase/migrations/20261127120000_business_intelligence_evidence.sql` (evidence classes on cards + business_facts; backfills every existing card's class from its evidence without touching updated_at). Clicky-dev, Nov 25: applied → in-transaction checks → rolled back (42 cards kept) → re-applied; 7 function fingerprints equal the repo; advisor: no errors. Rollbacks run newest first.
 - Also `supabase/migrations/20261126120000_marketing_workflow.sql` (clicky-dev, Nov 24: applied → in-transaction checks → rolled back (42 cards kept, statuses unchanged) → re-applied; function fingerprints equal the repo; advisor: no errors) (marketing agent foundation, after the two below). The app tolerates it missing (website checks still run; workflow records and the Approve button do not), but apply it before merging.
 - Review `supabase/migrations/20261124120000_launch_redesign.sql` **and then** `supabase/migrations/20261125120000_funnel_events_and_local_keys.sql` (adds five funnel steps and optional `*_local` server keys; production has none), and their rollbacks in `supabase/rollback/`. Apply in that order. Both were applied, rolled back and re-applied on clicky-dev with in-transaction checks.
 - Tell Claude "apply the launch migration to production". It will confirm the target ref is `ysmwnxvyjougetdlpnba`, apply, then verify tables/functions and run the security advisor.
