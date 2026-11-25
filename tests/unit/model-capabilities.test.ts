@@ -207,6 +207,7 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
     vi.resetModules();
     delete process.env.FEATURE_MODEL_FINDINGS;
     delete process.env.MODEL_USAGE_KEY;
+    delete process.env.FEATURE_BUSINESS_PROFILE;
   });
 
   it("saves grounded model findings only when the modelFindings switch is on, and records model usage", async () => {
@@ -219,6 +220,7 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
       const outs = answers();
       vi.doMock("@/lib/server/agent/provider", async (orig) => ({ ...(await orig<object>()), getModelProvider: () => pricedDouble(...outs) }));
       process.env.MODEL_USAGE_KEY = "k".repeat(40);
+      process.env.FEATURE_BUSINESS_PROFILE = "1"; // the business-details step runs; model findings are what the switch toggles
       if (on) process.env.FEATURE_MODEL_FINDINGS = "1";
       else delete process.env.FEATURE_MODEL_FINDINGS;
       const { runWebsiteReview } = await import("@/lib/server/agent/orchestrator");

@@ -37,9 +37,18 @@ export interface MeterContext {
 
 /** Worst case for one call: all the input we send (3 characters per token, plus overhead) and the full output allowance. */
 export function worstCaseCostMicro(provider: string, model: string, req: { system: string; input: unknown; jsonSchema?: unknown; maxOutputTokens?: number }): number | null {
-  const chars = req.system.length + JSON.stringify(req.input ?? "").length + JSON.stringify(req.jsonSchema ?? "").length;
-  const cost = costMicro(provider, model, Math.ceil(chars / 3) + 500, req.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS);
+  const cost = costMicro(provider, model, estimateInputTokens(`${req.system}${JSON.stringify(req.input ?? "")}${JSON.stringify(req.jsonSchema ?? "")}`), req.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS);
   return cost === null ? null : Math.min(cost, MAX_CALL_COST_MICRO);
+}
+
+/**
+ * Upper bound for the input tokens of a text: plain ASCII costs about 1 token per 3 characters, and every other
+ * UTF-16 unit (accents, CJK, emoji) is counted as 3 tokens, because such text can cost 1-3 tokens per character.
+ */
+export function estimateInputTokens(text: string): number {
+  let ascii = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) < 128) ascii++;
+  return Math.ceil(ascii / 3) + (text.length - ascii) * 3 + 500;
 }
 
 export const MAX_CALL_COST_MICRO = 5_000_000;
@@ -70,16 +79,25 @@ export function meteredProvider(inner: ModelProvider, ctx: MeterContext): ModelP
       let outcome: "ok" | "refused" | "error" = "error";
       let model = inner.model;
       let usage = { inputTokens: 0, outputTokens: 0 };
+      // A call that fails after it was sent (a timeout, a dropped connection, a server error) may still have been
+      // billed, and we cannot know how much, so it is settled at the full reservation. Only a request the provider
+      // rejected outright (a 4xx answer) is known not to have run, and settles at nothing.
+      let rejected = false;
       try {
         const raw = await inner.generate(req);
         model = raw.model;
         usage = raw.usage;
         outcome = raw.refused ? "refused" : "ok";
         return raw;
+      } catch (error) {
+        const status = (error as { status?: unknown } | null)?.status;
+        rejected = typeof status === "number" && status >= 400 && status < 500;
+        throw error;
       } finally {
         // A served model name with a date suffix still prices as the declared model. If settling fails, the
         // reservation stays counted (never less than was reserved), so a lost settlement cannot hide spend.
-        const cost = costMicro(inner.id, model, usage.inputTokens, usage.outputTokens) ?? costMicro(inner.id, inner.model, usage.inputTokens, usage.outputTokens) ?? maxCost;
+        const actual = costMicro(inner.id, model, usage.inputTokens, usage.outputTokens) ?? costMicro(inner.id, inner.model, usage.inputTokens, usage.outputTokens) ?? maxCost;
+        const cost = outcome === "error" && !rejected ? maxCost : actual;
         const { error: settleError } = await ctx.db.rpc("settle_model_call", {
           p_key: key, p_reservation: reservation, p_model: model.slice(0, 100),
           p_input: usage.inputTokens, p_output: usage.outputTokens, p_cost_micro: Math.min(cost, MAX_CALL_COST_MICRO), p_outcome: outcome,

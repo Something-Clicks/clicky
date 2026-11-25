@@ -87,7 +87,7 @@ export default async function ApprovalsPage() {
                 </div>
                 <DraftPreview fields={fields} />
                 {isOwner ? (
-                  <ApprovalActions approvalId={a.id}>
+                  <ApprovalActions approvalId={a.id} versionId={(versions ?? []).find((v) => v.approval_id === a.id)?.id}>
                     <CopyButton text={draftAsText(fields)} label="Copy text" />
                   </ApprovalActions>
                 ) : (

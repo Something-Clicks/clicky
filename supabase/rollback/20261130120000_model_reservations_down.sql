@@ -90,4 +90,6 @@ end $$;
 revoke all on function public.record_model_usage(uuid, text, text, text, integer, integer, bigint, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.record_model_usage(uuid, text, text, text, integer, integer, bigint, text, uuid, uuid) to authenticated, service_role;
 
+drop function if exists app_private.model_budget_full(uuid);
+
 commit;

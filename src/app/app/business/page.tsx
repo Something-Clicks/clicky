@@ -12,6 +12,17 @@ export const metadata: Metadata = { title: "Business details" };
 
 const CATEGORY_TITLE: Record<FactCategory, string> = { business: "Your business", brand: "How you talk about it", customer: "Your customers" };
 
+/** An evidence link that is safe to show: http(s) only, and never able to break the page. */
+function safeLink(url: string | null): { href: string; path: string } | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:" ? { href: u.href, path: u.pathname } : null;
+  } catch {
+    return null;
+  }
+}
+
 function sourceLine(f: StoredFact): string {
   if (f.source === "owner") return "You added this";
   if (f.status === "confirmed") return "You confirmed this";
@@ -85,9 +96,9 @@ export default async function BusinessPage() {
                     {ev?.excerpt ? (
                       <div className="evidence">
                         “{ev.excerpt}”
-                        {ev.url && /^https?:\/\//.test(ev.url) ? (
+                        {safeLink(ev.url) ? (
                           <>
-                            {" "}· <a className="link" href={ev.url} target="_blank" rel="noopener noreferrer nofollow">{new URL(ev.url).pathname}</a>
+                            {" "}· <a className="link" href={safeLink(ev.url)!.href} target="_blank" rel="noopener noreferrer nofollow">{safeLink(ev.url)!.path}</a>
                           </>
                         ) : null}
                       </div>

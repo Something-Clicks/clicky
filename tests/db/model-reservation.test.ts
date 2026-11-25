@@ -127,6 +127,8 @@ describe("caps hold at the moment of reservation", () => {
           await c.query("set local role authenticated");
           await c.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: owner, role: "authenticated" })]);
           await c.query("select public.reserve_model_call($1,$2,'x.y.z','anthropic-dev','claude-sonnet-5-5',100000,null,null)", [KEY, org]);
+          // Hold the transaction open after reserving, so without the lock all twelve would check the cap before any commits.
+          await c.query("select pg_sleep(0.15)");
           await c.query("commit");
           return "ok";
         } catch (e) {

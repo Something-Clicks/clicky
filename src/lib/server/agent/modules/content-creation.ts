@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { KnownFact } from "./business-intelligence";
-import { claimProblemIn, UNTRUSTED_CONTENT_RULE, unsupportedNumbers } from "../grounding";
+import { claimProblemIn, jsonForPrompt, plainForPrompt, UNTRUSTED_CONTENT_RULE, unsupportedNumbers } from "../grounding";
 import { generateStructured, type ModelProvider, type ModelUsage } from "../provider";
 
 /**
@@ -104,10 +104,10 @@ export async function createContent(provider: ModelProvider, input: ContentInput
       system: SYSTEM,
       input: [
         `<brief>${spec.brief}</brief>`,
-        `<business>${JSON.stringify(business)}</business>`,
-        `<action_card>${JSON.stringify(input.card)}</action_card>`,
-        `<evidence>${input.evidence.map((e) => `<website_content url="${e.url ?? ""}">${e.observation}${e.excerpt ? `\n${e.excerpt}` : ""}</website_content>`).join("\n")}</evidence>`,
-        `<owner_notes>${input.ownerNotes ?? ""}</owner_notes>`,
+        `<business>${jsonForPrompt(business)}</business>`,
+        `<action_card>${jsonForPrompt(input.card)}</action_card>`,
+        `<evidence>${input.evidence.map((e) => `<website_content url="${plainForPrompt(e.url ?? "")}">${plainForPrompt(e.observation)}${e.excerpt ? `\n${plainForPrompt(e.excerpt)}` : ""}</website_content>`).join("\n")}</evidence>`,
+        `<owner_notes>${plainForPrompt(input.ownerNotes ?? "")}</owner_notes>`,
       ].join("\n"),
       schema: spec.schema as z.ZodType<Record<string, string>>,
       maxOutputTokens: 4000,

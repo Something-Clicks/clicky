@@ -33,6 +33,17 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
   const orgId = ws.organization.id;
 
   const supabase = await createClient();
+  // One plan at a time: a model call for this business's plan that was reserved in the last three minutes and not
+  // settled yet means another request is still running (a second click, a second tab).
+  const { count: running } = await supabase
+    .from("model_usage")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .eq("capability", "marketing_strategy.plan")
+    .eq("outcome", "reserved")
+    .gt("created_at", new Date(Date.now() - 3 * 60_000).toISOString());
+  if ((running ?? 0) > 0) return { error: "Your plan is already being prepared. Give it a minute." };
+
   const { data: analysis } = await supabase
     .from("analyses")
     .select("id")

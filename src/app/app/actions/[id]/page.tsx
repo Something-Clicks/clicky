@@ -121,7 +121,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
               <p className="small muted">Change anything you like. Each save keeps the earlier version.</p>
               <EditDraftForm approvalId={approval.id} fields={fields} />
               {isOwner ? (
-                <ApprovalActions approvalId={approval.id}>
+                <ApprovalActions approvalId={approval.id} versionId={latest?.id}>
                   <CopyButton text={draftAsText(fields)} label="Copy draft" />
                 </ApprovalActions>
               ) : (

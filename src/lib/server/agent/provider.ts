@@ -124,7 +124,10 @@ export async function generateStructured<T>(request: ModelRequest<T>, provider: 
   const jsonSchema = z.toJSONSchema(schema);
   let lastReason = "unknown";
   const usage: ModelUsage = { inputTokens: 0, outputTokens: 0 };
+  const started = Date.now();
   for (let attempt = 1; attempt <= 2; attempt++) {
+    // A retry only fits if the first answer came back quickly (adapter timeout 75 s + 40 s stays inside a 120 s request).
+    if (attempt === 2 && Date.now() - started > 40_000) throw new ModelOutputInvalid("too_slow_to_retry");
     const raw = await provider.generate({ ...rest, jsonSchema });
     usage.inputTokens += raw.usage.inputTokens;
     usage.outputTokens += raw.usage.outputTokens;

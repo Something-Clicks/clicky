@@ -53,6 +53,10 @@ export async function setupTestDb(): Promise<TestDb> {
     await admin.query(readFileSync(join(dir, file), "utf8"));
   }
 
+  // The functions that store model-produced work are off in a fresh database (as in Production); tests switch them on,
+  // as on clicky-dev, and tests/db/agent-switch.test.ts covers the off state.
+  await admin.query("update public.app_config set value = '1' where key = 'agent_functions_enabled'");
+
   const user = new pg.Client(connectionConfig(name));
   await user.connect();
 

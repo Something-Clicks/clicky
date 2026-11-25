@@ -147,7 +147,11 @@ export async function decideApproval(_prev: FormState, form: FormData): Promise<
   if (decision === "changes_requested" && !note) return { fieldErrors: { note: "Tell us what to change." } };
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("decide_approval", { p_approval: id, p_decision: decision, p_note: note || null });
+  // Approving approves the exact version the owner was looking at, even if someone saved an edit since.
+  const version = String(form.get("version") ?? "");
+  const { error } = decision === "approved" && UUID.test(version)
+    ? await supabase.rpc("approve_draft_version", { p_approval: id, p_version: version })
+    : await supabase.rpc("decide_approval", { p_approval: id, p_decision: decision, p_note: note || null });
   if (error) {
     const hint = (error as { hint?: string }).hint;
     if (hint !== "already_decided" && hint !== "owner_only") log.error("approval.decide_failed", { id, error: error.message });

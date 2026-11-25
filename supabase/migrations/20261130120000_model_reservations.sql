@@ -25,7 +25,8 @@ alter table public.model_usage add constraint model_usage_outcome_check check (o
 
 drop function public.record_model_usage(uuid, text, text, text, integer, integer, bigint, text, uuid, uuid);
 
-create or replace function public.model_budget(p_org uuid) returns jsonb
+-- Full figures, including the platform-wide ones (used by reserve_model_call only; never returned to customers).
+create function app_private.model_budget_full(p_org uuid) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
   v_daily bigint;
@@ -61,6 +62,12 @@ begin
     'global_spent_micro', v_global_day, 'global_cap_micro', v_global);
 end $$;
 
+-- What a business may see: whether it may make another call, and its own figures. The platform-wide figures stay inside.
+create or replace function public.model_budget(p_org uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select app_private.model_budget_full(p_org) - 'global_spent_micro' - 'global_cap_micro';
+$$;
+
 -- Checks the caps for the worst-case cost of one call and, if it fits, records the reservation. One step, one lock.
 create function public.reserve_model_call(
   p_key text, p_org uuid, p_capability text, p_provider text, p_model text, p_max_cost_micro bigint, p_workflow uuid, p_agent_run uuid
@@ -84,7 +91,7 @@ begin
   end if;
   -- Serialises every reservation (business and global caps are checked together), so parallel requests queue here.
   perform pg_advisory_xact_lock(hashtextextended('model_reservations', 0));
-  v_budget := public.model_budget(p_org);
+  v_budget := app_private.model_budget_full(p_org);
   if (v_budget ->> 'global_spent_micro')::bigint + p_max_cost_micro > (v_budget ->> 'global_cap_micro')::bigint then
     raise exception 'Model budget reached' using errcode = 'P0001', hint = 'global_daily';
   end if;
@@ -144,6 +151,6 @@ begin
 end $$;
 
 revoke all on function public.reserve_model_call(text, uuid, text, text, text, bigint, uuid, uuid), public.settle_model_call(text, uuid, text, integer, integer, bigint, text),
-  app_private.model_usage_key_ok(text) from public, anon, authenticated;
+  app_private.model_usage_key_ok(text), app_private.model_budget_full(uuid) from public, anon, authenticated;
 grant execute on function public.reserve_model_call(text, uuid, text, text, text, bigint, uuid, uuid), public.settle_model_call(text, uuid, text, integer, integer, bigint, text)
   to authenticated, service_role;

@@ -12,6 +12,9 @@ import type { ModelProvider, ModelRawResponse } from "../provider";
  * file is the only Anthropic-specific code the Marketing Agent uses; capabilities see only the
  * provider-neutral interface.
  *
+ * The SDK does not retry on its own (maxRetries 0): every attempt is a separate metered call, so the cost reserved
+ * for a call is a true upper bound. (provider.ts retries once when the answer does not match the schema.)
+ *
  * Request shape (official SDK): messages.create with output_config.format = JSON schema (the SDK's
  * jsonSchemaOutputFormat transform drops keywords the API does not support). Validation against the
  * capability's own schema, and the single retry, happen in provider.ts, not here.
@@ -21,7 +24,7 @@ export const DEV_MODEL = "claude-sonnet-5-5";
 export function anthropicDevProvider(env: Record<string, string | undefined> = process.env): ModelProvider | null {
   const apiKey = env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) return null;
-  const client = new Anthropic({ apiKey, maxRetries: 1, timeout: 120_000 });
+  const client = new Anthropic({ apiKey, maxRetries: 0, timeout: 75_000 });
   const effort = env.MARKETING_MODEL_EFFORT?.trim() as "low" | "medium" | "high" | undefined;
   return {
     id: "anthropic-dev",

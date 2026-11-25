@@ -52,6 +52,9 @@ export const promisesQuoted = (text: string, quotes: (string | null | undefined)
 /** JSON for a prompt: "<" is escaped so data can never close the tag that fences it. */
 export const jsonForPrompt = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
 
+/** Plain text placed inside a fence in a prompt: "<" becomes "(", so it can never close or open a tag. */
+export const plainForPrompt = (text: string): string => text.replace(/</g, "(");
+
 export function claimProblemIn(text: string): string | null {
   if (leaksSystemText(text)) return "system_text";
   if (PROMISES.test(text)) return "promise";
@@ -76,7 +79,8 @@ export function genericPhraseIn(text: string): string | null {
 
 /** Page material in the shape the model sees: website content fenced as data. */
 export function pagesForModel(pages: SourcePage[]): string {
-  return pages.map((p) => `<website_content key="${p.key}" url="${p.url}">\n${p.text}\n</website_content>`).join("\n");
+  // Only the closing tag matters: a page that contains it could end its own fence. (Quotes are checked against the original text.)
+  return pages.map((p) => `<website_content key="${p.key}" url="${p.url.replace(/"/g, "%22")}">\n${p.text.replace(/<\/website_content/gi, "<\\/website_content")}\n</website_content>`).join("\n");
 }
 
 export const UNTRUSTED_CONTENT_RULE =

@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { meteredProvider, ModelBudgetExceeded, worstCaseCostMicro } from "@/lib/server/agent/metering";
+import { estimateInputTokens, meteredProvider, ModelBudgetExceeded, worstCaseCostMicro } from "@/lib/server/agent/metering";
 import { costMicro } from "@/lib/server/agent/pricing";
 import type { ModelProvider } from "@/lib/server/agent/provider";
 
@@ -69,13 +69,30 @@ describe("meteredProvider", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it("settles a failed call as an error at zero tokens, and a refusal as refused", async () => {
+  it("settles a call that failed after it was sent at the full reservation (it may have been billed), and one the provider rejected at nothing", async () => {
     const rpc = rpcStub();
-    await expect(meteredProvider(inner(async () => { throw new Error("network"); }), { db: { rpc } as never, orgId: "o", capability: "x.y.z" }).generate(req)).rejects.toThrow("network");
-    expect(rpc.mock.calls[1]![1]).toMatchObject({ p_outcome: "error", p_input: 0, p_output: 0, p_cost_micro: 0 });
+    await expect(meteredProvider(inner(async () => { throw new Error("timeout"); }), { db: { rpc } as never, orgId: "o", capability: "x.y.z" }).generate(req)).rejects.toThrow("timeout");
+    const reserved = rpc.mock.calls[0]![1]!.p_max_cost_micro;
+    expect(rpc.mock.calls[1]![1]).toMatchObject({ p_outcome: "error", p_input: 0, p_output: 0, p_cost_micro: reserved });
+    const serverError = rpcStub();
+    await expect(meteredProvider(inner(async () => { throw Object.assign(new Error("overloaded"), { status: 529 }); }), { db: { rpc: serverError } as never, orgId: "o", capability: "x.y.z" }).generate(req)).rejects.toThrow();
+    expect(serverError.mock.calls[1]![1]).toMatchObject({ p_cost_micro: serverError.mock.calls[0]![1]!.p_max_cost_micro });
+    const rejected = rpcStub();
+    await expect(meteredProvider(inner(async () => { throw Object.assign(new Error("bad request"), { status: 400 }); }), { db: { rpc: rejected } as never, orgId: "o", capability: "x.y.z" }).generate(req)).rejects.toThrow();
+    expect(rejected.mock.calls[1]![1]).toMatchObject({ p_outcome: "error", p_cost_micro: 0 });
+  });
+
+  it("a refusal settles at its actual tokens and cost", async () => {
     const rpc2 = rpcStub();
     await meteredProvider(inner(async () => ({ output: null, model: "claude-sonnet-5-5", usage: { inputTokens: 50, outputTokens: 5 }, refused: true })), { db: { rpc: rpc2 } as never, orgId: "o", capability: "x.y.z" }).generate(req);
-    expect(rpc2.mock.calls[1]![1]).toMatchObject({ p_outcome: "refused", p_input: 50, p_output: 5 });
+    expect(rpc2.mock.calls[1]![1]).toMatchObject({ p_outcome: "refused", p_input: 50, p_output: 5, p_cost_micro: costMicro("anthropic-dev", "claude-sonnet-5-5", 50, 5) });
+  });
+
+  it("the input estimate cannot be pushed under by unusual text (CJK, emoji, accents)", () => {
+    const ascii = estimateInputTokens("a".repeat(3000));
+    expect(ascii).toBeLessThan(1600);
+    expect(estimateInputTokens("日本語".repeat(1000))).toBeGreaterThanOrEqual(9000); // 3,000 characters: up to 3 tokens each
+    expect(estimateInputTokens("😀".repeat(1000))).toBeGreaterThanOrEqual(6000); // two UTF-16 units each
   });
 
   it("a lost settlement does not break the call (the reservation stays counted)", async () => {

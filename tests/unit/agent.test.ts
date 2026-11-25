@@ -4,7 +4,7 @@
  * and fixture HTML (like tests/unit/analysis.test.ts). They prove the control flow only; they
  * are NOT evidence that the agent works on real websites, and no model is involved anywhere.
  */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { CAPABILITIES } from "@/lib/server/agent/capabilities";
@@ -127,6 +127,19 @@ const business = { businessName: "Sunrise Plumbing", serviceArea: null, primaryG
 const psiMissing = async () => ({ ok: false as const, reason: "PageSpeed Insights is busy right now." });
 
 describe("orchestrator: website review (stub database, fixture HTML)", () => {
+  // Business details are learned and saved only where a switch needs them (never in Production).
+  beforeEach(() => { process.env.FEATURE_BUSINESS_PROFILE = "1"; });
+  afterEach(() => { delete process.env.FEATURE_BUSINESS_PROFILE; });
+
+  it("with every switch off (as in Production) it saves no business details and makes no model call", async () => {
+    delete process.env.FEATURE_BUSINESS_PROFILE;
+    const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf1" : null, error: null }));
+    const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business }, { fetchPage: async (u) => page(u, HOME), pageSpeed: psiMissing });
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "finish_marketing_workflow"]);
+    expect(out.status).toBe("prepared");
+    if (out.status === "prepared") expect(out.steps.map((s) => s.step)).not.toContain("learn_business");
+  });
+
   it("records the workflow, saves the analysis, ranks needs, and finishes as prepared", async () => {
     const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf1" : null, error: null }));
     const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business }, { fetchPage: async (u) => page(u, HOME), pageSpeed: psiMissing });

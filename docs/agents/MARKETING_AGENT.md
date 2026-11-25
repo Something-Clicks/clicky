@@ -43,19 +43,16 @@ Customer request ─► Orchestrator (src/lib/server/agent/orchestrator.ts)
 in Production. Customers in Production see none of the model-assisted work.
 
 ## Cost control (§16)
-**Built, tested on a throwaway Postgres and on clicky-dev (migration 20261129).** Every model call goes through
-`meteredProvider` (`metering.ts`): before the call the database says whether the business is within its daily
-($0.50) and monthly ($5) caps and the global daily cap ($20) (`model_budget`; defaults in `app_config`, per-business
-overrides in `organization_model_limits`, set only by platform admins); after the call tokens and cost are recorded
-(`record_model_usage`), including refusals and failed calls. A model without a published price (`pricing.ts`) is never
-called. Customers see only "usage limit reached, try again later". Platform admins see spend per business (`admin_model_usage`).
-Each business counts toward the global cap at most up to its own daily cap, so one account cannot use up everyone's allowance.
-**Known limits (independent security review, Nov 25):** (1) usage is recorded by the signed-in user's own request, so a member who calls the
-database function directly could record false usage for their own business (this can only lower or raise their own allowance, and the
-bounded global effect above applies); a server-held key or a database-computed reservation is the hardening to do before any customer-facing release.
-(2) The budget check and the usage record are separate calls, so parallel requests can overshoot a cap (about $0.09 per plan request, bounded by how many run at once);
-atomic reservation is the fix. (3) Costs are computed by the app from published prices, so a wrong price table means wrong costs.
-If migration 20261129 is not applied, the budget check fails and model calls are refused (fail closed).
+**Built; database side tested on a throwaway Postgres (including 12 parallel reservations against one cap, and a mutation check that the test fails without the lock) and on clicky-dev (migrations 20261129, 20261130).**
+Every model call goes through `meteredProvider` (`metering.ts`):
+1. **Reserve.** Before the call the app asks the database to reserve the call's worst-case cost (`reserve_model_call`): the business's daily ($0.50) and monthly ($5) caps and the global daily cap ($20) are checked and the reservation is recorded in one step under a lock, so parallel requests cannot together pass a cap. The worst case is the full output allowance plus an input estimate that cannot be pushed under by unusual text (CJK, emoji).
+2. **Settle.** After the call the reservation is replaced by the actual tokens and cost (`settle_model_call`). A call that failed after being sent is settled at the full reservation (it may have been billed); a request the provider rejected outright (4xx) at nothing. A lost settlement leaves the reservation counted.
+3. **Key.** Both functions need `MODEL_USAGE_KEY`, a server-only secret (only its hash is in `app_private.secrets`), so a signed-in customer cannot create, change or inflate usage. `record_model_usage` no longer exists. Without the key, or without a published price for the model (`pricing.ts`), no call is made. The dev adapter does not retry on its own (`maxRetries: 0`), so each attempt is a metered call.
+Each business counts toward the global cap at most up to its own daily cap. Customers see only "usage limit reached, try again later". Platform admins see spend per business, with failed and unsettled calls (`admin_model_usage`). If the migrations or the key are missing, model calls are refused (fail closed).
+**Known limits:** (1) a few dozen accounts could together use up the $20 global cap for a day (each can spend its own $0.50, and a plan has no per-person rate limit); fine on Preview where only testers exist, needs an admission limit before any customer-facing release. (2) Costs are computed by the app from published prices, so a wrong price table means wrong costs. (3) Rolling back 20261130 restores the old open recording function and drops in-flight reservations: only for a deliberate revert.
+
+## Server-only functions (independent review, Nov 25)
+`add_model_findings`, `propose_business_facts`, `save_marketing_plan` and `complete_agent_run` are called by the app on behalf of the signed-in member, so a member could call them directly. Migration 20261201 makes them refuse unless `app_config.agent_functions_enabled` = 1 (0 in every migration, on only on clicky-dev), so Production stays closed even if the app's switches were bypassed. **Before customers get any of this** they also need a server-held key like `MODEL_USAGE_KEY`, because on Preview a tester can still call them directly. The orchestrator no longer learns about the business or calls a model at all unless one of the switches needs it.
 
 ## Quality screening and admin review (§3.4, §6)
 **Built.** `src/lib/agent-quality.ts` scores evidence, support for claims, business relevance, usefulness and actionability

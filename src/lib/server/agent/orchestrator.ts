@@ -14,7 +14,7 @@ import { MODULES } from "./modules";
 import { sourcePages } from "./modules/business-understanding";
 import { analyzeWithModel } from "./modules/marketing-analysis-model";
 import { expectDone } from "./modules/types";
-import { meteredProvider } from "./metering";
+import { meteredProvider, ModelBudgetExceeded } from "./metering";
 import { getModelProvider } from "./provider";
 import type { RankedNeed } from "./rank";
 import { planWorkflow, WORKFLOWS, type WorkflowKind } from "./workflows";
@@ -166,14 +166,19 @@ export async function runWebsiteReview(
   // Every model call is metered per business (daily/monthly caps, usage recorded) before and after it runs.
   const baseProvider = getModelProvider();
   const meter = (capability: string) => (baseProvider ? meteredProvider(baseProvider, { db, orgId: input.orgId, capability, workflowId }) : null);
-  const provider = meter("business_intelligence.understand");
+  // The understanding of the business (model call, saved proposals) runs only where something shows or uses it:
+  // never in Production, where all of these switches are off.
+  const learns = FEATURES.businessProfile || FEATURES.modelFindings || FEATURES.strategy || FEATURES.drafts;
+  const provider = learns ? meter("business_intelligence.understand") : null;
   const bi = expectDone(await MODULES.business_intelligence.run({ profile, scan: r.scan, provider }), "business_intelligence");
   const modelRun = bi.output.model && !("failed" in bi.output.model) ? bi.output.model : null;
-  const proposed = await proposeFacts(db, input.orgId, input.analysisId, bi.output.proposals);
-  step({
-    step: "learn_business", capability: "business_intelligence", status: proposed === null ? "failed" : "done",
-    detail: proposed === null ? `${bi.output.proposals.length} details found on the website could not be saved.` : `${bi.detail} ${proposed} new detail${proposed === 1 ? "" : "s"} saved for the owner to confirm.`,
-  });
+  const proposed = learns ? await proposeFacts(db, input.orgId, input.analysisId, bi.output.proposals) : 0;
+  if (learns) {
+    step({
+      step: "learn_business", capability: "business_intelligence", status: proposed === null ? "failed" : "done",
+      detail: proposed === null ? `${bi.output.proposals.length} details found on the website could not be saved.` : `${bi.detail} ${proposed} new detail${proposed === 1 ? "" : "s"} saved for the owner to confirm.`,
+    });
+  }
 
   // 6b. Model-assisted Marketing Analysis (messaging, conversion, content), only where the
   //     modelFindings switch is on (never in Production). Findings follow the evidence rules.
@@ -201,7 +206,12 @@ export async function runWebsiteReview(
         detail: `${saved} finding${saved === 1 ? "" : "s"} on messaging, conversion and content saved (${mf.rejected.length} dropped for failing evidence checks).`,
       });
     } catch (error) {
-      step({ step: "analyze_marketing_model", capability: "marketing_analysis", status: "failed", detail: error instanceof Error ? error.message.slice(0, 300) : "failed" });
+      log.warn("workflow.model_findings_failed", { workflowId, error });
+      // Plain words only in the record: raw provider or database messages stay in the server log.
+      step({
+        step: "analyze_marketing_model", capability: "marketing_analysis", status: "failed",
+        detail: error instanceof ModelBudgetExceeded ? "Skipped: the model usage limit for this business was reached." : "The model step did not complete; the other results are unaffected.",
+      });
     }
   }
 

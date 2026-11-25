@@ -25,4 +25,6 @@ export async function reapplyFrom(admin: pg.Client, from: string) {
   for (const m of reversible().filter((x) => x >= from)) {
     await admin.query(readFileSync(join(root, "migrations", `${m}.sql`), "utf8"));
   }
+  // Re-applying resets the switch to its default (off); put the test database back to "on".
+  await admin.query("update public.app_config set value = '1' where key = 'agent_functions_enabled'");
 }
