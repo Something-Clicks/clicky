@@ -49,8 +49,12 @@ in Production. Customers in Production see none of the model-assisted work.
 overrides in `organization_model_limits`, set only by platform admins); after the call tokens and cost are recorded
 (`record_model_usage`), including refusals and failed calls. A model without a published price (`pricing.ts`) is never
 called. Customers see only "usage limit reached, try again later". Platform admins see spend per business (`admin_model_usage`).
-Known limits: the check and the record are separate calls, so calls running in parallel can overshoot a cap by the cost of those calls
-(bounded by one request's few calls); costs are computed by the app from published prices, so a wrong price table means wrong costs.
+Each business counts toward the global cap at most up to its own daily cap, so one account cannot use up everyone's allowance.
+**Known limits (independent security review, Nov 25):** (1) usage is recorded by the signed-in user's own request, so a member who calls the
+database function directly could record false usage for their own business (this can only lower or raise their own allowance, and the
+bounded global effect above applies); a server-held key or a database-computed reservation is the hardening to do before any customer-facing release.
+(2) The budget check and the usage record are separate calls, so parallel requests can overshoot a cap (about $0.09 per plan request, bounded by how many run at once);
+atomic reservation is the fix. (3) Costs are computed by the app from published prices, so a wrong price table means wrong costs.
 If migration 20261129 is not applied, the budget check fails and model calls are refused (fail closed).
 
 ## Quality screening and admin review (§3.4, §6)
@@ -58,7 +62,7 @@ If migration 20261129 is not applied, the budget check fails and model calls are
 (0-100, or "nothing to judge") and lists flags: facts or findings without quoted evidence, inferences without a basis,
 promises, figures the evidence does not show, generic advice, not-specific items, vague actions. It is fixed code applying the
 same rules every time: a screening aid, not a verdict; it cannot tell whether a quote was understood or advice is right.
-`/admin/agent-review` (platform admins; **not available in Production**; each view logged) shows recent runs with facts, findings and the plan
+`/admin/agent-review` (platform admins; **not available in Production**: the page is hidden there and the database function is off unless `app_config.agent_review_enabled` = 1, which is set only on clicky-dev; contact details are left out; each view logged) shows recent runs with facts, findings and the plan
 beside their evidence, the flags, and model spend. Generation-time safeguards (generic advice, promises, unsupported figures) drop items before they are stored.
 
 ## Verification
@@ -66,6 +70,7 @@ beside their evidence, the flags, and model spend. Generation-time safeguards (g
 |---|---|
 | Grounding and rejection rules, versions, owner-only approval, evidence classes, isolation | Verified by unit and database tests |
 | Database functions on clicky-dev | Verified (apply → checks → rollback → re-apply), including 20261129 (existing rows kept: 4 businesses, 42 cards) |
+| Independent security review (Opus) of the migration, metering, plan and admin paths | Done; findings fixed or recorded above (global-cap bound, plan shape validated in the database, stricter promise rule, review switch, no unmetered provider path, prompt escaping) |
 | Metering, strategy grounding, quality screening | Verified by unit tests with hand-written inputs and a test double (**simulated**: proves the rules, not model quality) |
 | Real model output quality (understanding, findings, drafts) | **Not verified.** This sandbox cannot hold an Anthropic key (Anthropic hosts cannot use saved network credentials). Needs `ANTHROPIC_API_KEY` as an environment variable in a cloud environment or Vercel Preview |
 | Real websites | **Not verified.** The sandbox cannot reach public websites |
