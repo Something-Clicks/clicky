@@ -21,10 +21,11 @@ Branch `claude/ecstatic-curie-9shvjf`; nothing is merged, deployed to Production
 ### 1. Completed and verified
 Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
 - **Database:** every migration applies in order; rollback → re-apply passed for each new one; 172 database tests (local Postgres) cover isolation, owner-only approvals, evidence classes, key-gated usage, atomic caps, plan slots (10 simultaneous submissions → exactly one wins), admission limits, the off-switch; migrations through 20261202 applied to clicky-dev with in-transaction checks; existing data kept (4 businesses, 42 cards).
-- **Security hardening (Phase 2), three independent Opus review rounds on the earlier work, a fourth on the final hardening is in progress (see group 4):** usage cannot be forged (server key); caps cannot be passed by parallel requests (locked reservation); model-storing functions need the server key and a database switch that is 0 in Production; per-business hourly and per-person daily limits; one-plan-at-a-time slot in the database; one request-wide deadline for every model call; prompt text escaped everywhere; raw errors kept out of customer-visible records; no secrets in logs, responses or the browser.
+- **Security hardening (Phase 2), three independent Opus review rounds on the earlier work, a fourth on the final hardening (Nov 25) found nothing critical or high; its medium and low findings are fixed or recorded in `MARKETING_AGENT.md`:** usage cannot be forged (server key); caps cannot be passed by parallel requests (locked reservation); model-storing functions need the server key and a database switch that is 0 in Production; per-business hourly and per-person daily limits; one-plan-at-a-time slot in the database; one request-wide deadline for every model call; prompt text escaped everywhere; raw errors kept out of customer-visible records; no secrets in logs, responses or the browser.
 - **Auth, claim flow, isolation, funnel counts, consent gating, entitlements from real Stripe objects, Stripe TEST checkout configuration, environment separation, public pages at 390 px and desktop (axe 0 violations):** see "Item status" below.
+- **Server key through the real stack (clicky-dev API, Nov 25):** a signed-in customer calling the model-storing function with no header or a wrong header gets 403 `agent_key`; the server's real key works; reserving without the key and writing usage rows directly are refused.
 - **Agent screens in a real browser** (app running locally against clicky-dev, fixtures written by SQL, no model): Your plan, Business details, internal agent review, owner vs member vs admin, hidden in Production mode, 390 px and desktop, axe 0. `tests/e2e/agent-screens.spec.ts`.
-- **Local checks:** lint, types, 235 unit tests, 182 database tests, build.
+- **Local checks:** lint, types, 233 unit tests, 182 database tests, build.
 - **Cost control and admission limits by simulation:** metering unit tests (reserve before the call, settle after, fail closed), deadline test.
 
 ### 2. Implemented but not verified
@@ -57,7 +58,7 @@ Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
 4. Error monitoring: Vercel runtime logs only today (structured `log.*` lines, no secrets). Decide whether to add alerting (Vercel log drain or an error service) before launch, or accept manual log checks for the first weeks.
 **[B] Scope B (in addition)**
 5. Real-model evaluation meeting the written quality standard in two consecutive rounds (group 3, items 1–2).
-6. The Opus review of the final hardening (running now) with its findings fixed.
+6. Final Opus review of the whole system after the real-model fixes (the Phase 2 hardening review is done).
 7. Attorney-approved AI wording published in the same release as the model features; Anthropic data terms confirmed.
 8. In Production: generate a separate `MODEL_USAGE_KEY`, store its hash, set `agent_functions_enabled` = 1 and the `FEATURE_*` switches (code change and your approval), keep `agent_review_enabled` = 0 (the admin review page stays a development tool).
 

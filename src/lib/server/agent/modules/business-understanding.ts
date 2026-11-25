@@ -159,7 +159,7 @@ export async function learnWithModel(provider: ModelProvider, scan: SiteScan, bu
       system: SYSTEM,
       input: `<business name="${business.businessName.replace(/"/g, "'")}" service_area="${(business.serviceArea ?? "").replace(/"/g, "'")}" />\n${pagesForModel(pages)}`,
       schema: UnderstandingSchema,
-      maxOutputTokens: 8000,
+      maxOutputTokens: 6000,
       deadlineAt,
     },
     provider,

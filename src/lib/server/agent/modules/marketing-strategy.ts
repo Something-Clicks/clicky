@@ -239,7 +239,7 @@ export async function createPlan(provider: ModelProvider, input: PlanInput): Pro
       system: SYSTEM,
       input: `<business>${jsonForPrompt(business)}</business>\n<open_actions>${jsonForPrompt(open)}</open_actions>${notes}`,
       schema: PlanSchema,
-      maxOutputTokens: 8000,
+      maxOutputTokens: 4000,
       deadlineAt: input.deadlineAt,
     },
     provider,

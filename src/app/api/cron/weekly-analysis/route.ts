@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Worker not configured" }, { status: 503 });
   }
 
-  const { data: due, error } = await db.rpc("worker_due_organizations", { p_limit: 3 });
+  const { data: due, error } = await db.rpc("worker_due_organizations", { p_limit: 2 });
   if (error) {
     log.error("cron.weekly_analysis.due_failed", { error: error.message });
     return NextResponse.json({ error: "Could not list due businesses" }, { status: 500 });

@@ -141,7 +141,7 @@ export async function analyzeWithModel(
       system: SYSTEM,
       input: `<business>${jsonForPrompt(business)}</business>\n<already_found>${jsonForPrompt(input.alreadyFound)}</already_found>\n${pagesForModel(input.pages)}`,
       schema: ModelFindingsSchema,
-      maxOutputTokens: 8000,
+      maxOutputTokens: 5000,
       deadlineAt: input.deadlineAt,
     },
     provider,

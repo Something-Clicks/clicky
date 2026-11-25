@@ -26,6 +26,7 @@ const LEVEL = (v: string) => IMPACT[v as keyof typeof IMPACT] ?? 3;
  * waits for the owner to approve or reject it.
  */
 export async function preparePlan(_prev: FormState, form: FormData): Promise<FormState> {
+  const deadlineAt = Date.now() + REQUEST_DEADLINE_MS; // counted from the start of the request
   if (!FEATURES.strategy) return { error: "Plans aren't available yet." };
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };
@@ -81,7 +82,7 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
         impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown", stage: cardStage(c),
       })),
       ownerNotes: notes,
-      deadlineAt: Date.now() + REQUEST_DEADLINE_MS,
+      deadlineAt,
     });
     const { error } = await supabase.rpc("save_marketing_plan", {
       p_org: orgId, p_analysis: analysis.id, p_plan: result.plan as unknown as Json, p_provider: result.provider, p_model: result.model,

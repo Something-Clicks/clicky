@@ -37,6 +37,12 @@ describe("meteredProvider", () => {
     expect(reserve.p_max_cost_micro as number).toBeGreaterThan(costMicro("anthropic-dev", "claude-sonnet-5-5", 1000, 200)!);
   });
 
+  it("passes the request's time limit through to the provider unchanged", async () => {
+    const seen: unknown[] = [];
+    await meteredProvider(inner(async (r) => { seen.push((r as { timeoutMs?: number }).timeoutMs); return { output: {}, model: "claude-sonnet-5-5", usage: { inputTokens: 1, outputTokens: 1 } }; }), { db: { rpc: rpcStub() } as never, orgId: "o", capability: "x.y.z" }).generate({ ...req, timeoutMs: 41_000 } as never);
+    expect(seen).toEqual([41_000]);
+  });
+
   it("the reservation covers the full output allowance, so a call can never cost more than was reserved", () => {
     const big = { ...req, input: "x".repeat(30_000), maxOutputTokens: 8000 };
     const worst = worstCaseCostMicro("anthropic-dev", "claude-sonnet-5-5", big)!;

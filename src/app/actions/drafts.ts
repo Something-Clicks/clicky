@@ -29,6 +29,7 @@ const START_ERRORS: Record<string, string> = {
 };
 
 export async function prepareDraft(_prev: FormState, form: FormData): Promise<FormState> {
+  const deadlineAt = Date.now() + 100_000; // counted from the start of the request
   if (!FEATURES.drafts) return { error: "Drafts aren't available yet." };
   const ws = await getWorkspace();
   const cardId = String(form.get("id") ?? "");
@@ -63,7 +64,7 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
     kind: card.execution_type as DraftKind,
     businessName: b.businessName,
     known: understanding.known,
-    deadlineAt: Date.now() + 100_000,
+    deadlineAt,
     card: { title: card.title, explanation: card.explanation, recommendedAction: card.recommended_action },
     evidence: card.action_card_evidence.map((x) => x.analysis_evidence).filter((e) => e !== null),
     ownerNotes: instructions,
