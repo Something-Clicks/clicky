@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FACT_FIELDS } from "../../src/lib/business-profile";
+import { buildRulesPlan, RULES_MODEL, RULES_PROVIDER } from "../../src/lib/server/agent/modules/rules-strategy";
 import { setupTestDb, type TestDb } from "./harness";
 import { reapplyFrom, rollbackFrom } from "./migrations";
 
@@ -27,8 +28,8 @@ const card = (check_key: string) => ({
 let MODEL_KEY: string;
 /** One model call as the server records it: reserve the worst case, then settle with the actual cost. */
 const usage = async (o: string, cost: number, extra: Partial<{ cap: string; outcome: string; wf: string | null; run: string | null }> = {}) => {
-  const [{ id }] = await q<{ id: string }>(owner, "select public.reserve_model_call($1,$2,$3,'anthropic-dev','claude-sonnet-5-5',$4,$5,$6) as id", [MODEL_KEY, o, extra.cap ?? "business_intelligence.understand", cost, extra.wf ?? null, extra.run ?? null]);
-  return q(owner, "select public.settle_model_call($1,$2,'claude-sonnet-5-5',100,50,$3,$4)", [MODEL_KEY, id, cost, extra.outcome ?? "ok"]);
+  const [{ id }] = await q<{ id: string }>(owner, "select public.reserve_model_call($1,$2,$3,'test-double','test-model',$4,$5,$6) as id", [MODEL_KEY, o, extra.cap ?? "business_intelligence.understand", cost, extra.wf ?? null, extra.run ?? null]);
+  return q(owner, "select public.settle_model_call($1,$2,'test-model',100,50,$3,$4)", [MODEL_KEY, id, cost, extra.outcome ?? "ok"]);
 };
 const plan = (...ids: string[]) => ({
   summary: "s", objectives: [{ objective: "o", based_on: [] as string[] }], next_steps: ["n"], questions: [] as string[], not_now: [] as { card_id: string; reason: string }[],
@@ -133,7 +134,7 @@ describe("marketing plans", () => {
   let p1: string;
 
   it("a member proposes a plan that points only at open actions of the business", async () => {
-    [{ id: p1 }] = await q<{ id: string }>(member, "select public.save_marketing_plan($1,$2,$3,'anthropic-dev','claude-sonnet-5-5') as id", [org, analysis, JSON.stringify(plan(cardA, cardB))]);
+    [{ id: p1 }] = await q<{ id: string }>(member, "select public.save_marketing_plan($1,$2,$3,'test-double','test-model') as id", [org, analysis, JSON.stringify(plan(cardA, cardB))]);
     const [row] = await q<{ status: string; created_by: string }>(owner, "select status, created_by from public.marketing_plans where id = $1", [p1]);
     expect(row).toEqual({ status: "proposed", created_by: member });
     await expect(q(owner, "insert into public.marketing_plans (organization_id, plan) values ($1,'{}')", [org])).rejects.toThrow(PERMISSION_DENIED);
@@ -183,6 +184,30 @@ describe("marketing plans", () => {
     await q(owner, "select public.decide_marketing_plan($1,'approved')", [p3]);
     const statuses = await q<{ id: string; status: string }>(owner, "select id, status from public.marketing_plans where id in ($1,$2)", [p2, p3]);
     expect(Object.fromEntries(statuses.map((s) => [s.id, s.status]))).toEqual({ [p2]: "superseded", [p3]: "approved" });
+  });
+});
+
+describe("a plan built by fixed rules (no model)", () => {
+  it("is stored like any other plan, labelled as rules, and still needs the owner's decision", async () => {
+    const open = await q<{ id: string; check_key: string; title: string; why_it_matters: string; recommended_action: string; impact_priority: string; confidence: string; evidence_class: string }>(
+      owner, "select id, check_key, title, why_it_matters, recommended_action, impact_priority, confidence, evidence_class from public.action_cards where organization_id = $1 and status in ('new','approved','in_progress')", [org]);
+    expect(open.length).toBeGreaterThan(0);
+    const rules = buildRulesPlan({
+      businessName: "Sunrise", primaryGoal: "get_found", missing: ["audience"],
+      cards: open.map((c) => ({ id: c.id, check_key: c.check_key, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action, impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class })),
+    })!;
+    const [{ id }] = await q<{ id: string }>(member, "select public.save_marketing_plan($1,$2,$3,$4,$5) as id", [org, analysis, JSON.stringify(rules), RULES_PROVIDER, RULES_MODEL]);
+    const [row] = await q<{ status: string; provider: string; model: string }>(owner, "select status, provider, model from public.marketing_plans where id = $1", [id]);
+    expect(row).toEqual({ status: "proposed", provider: "something-clicks", model: "rules-v1" });
+    await expect(q(member, "select public.decide_marketing_plan($1,'approved')", [id])).rejects.toThrow(/Only the account owner/);
+    await q(owner, "select public.decide_marketing_plan($1,'approved')", [id]);
+    expect((await q<{ status: string }>(owner, "select status from public.marketing_plans where id = $1", [id]))[0].status).toBe("approved");
+  });
+
+  it("the database still refuses a rules plan that points at a card of another business", async () => {
+    const [foreign] = await q<{ id: string }>(outsider, "select id from public.action_cards limit 1").catch(() => [] as never);
+    const bogus = buildRulesPlan({ businessName: "Sunrise", primaryGoal: null, missing: [], cards: [{ id: foreign?.id ?? "00000000-0000-0000-0000-000000000000", check_key: null, title: "t", why_it_matters: "w.", recommended_action: "r.", impact: "high", confidence: "high", evidence_class: "verified" }] })!;
+    await expect(q(owner, "select public.save_marketing_plan($1,$2,$3,$4,$5)", [org, analysis, JSON.stringify(bogus), RULES_PROVIDER, RULES_MODEL])).rejects.toThrow(/open action/);
   });
 });
 

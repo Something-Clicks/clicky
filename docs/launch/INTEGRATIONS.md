@@ -24,8 +24,7 @@ Set in **Vercel → Project `something-clicks` → Settings → Environment Vari
 | `CRON_SECRET` | Protects the cron endpoint | **secret** | `openssl rand -hex 32` | Production | — | Vercel → Cron Jobs → run now → 200 |
 | `SITE_SERVER_KEY` | **New.** Authorizes the `site_*` database functions (free first result, feedback, funnel counts) | **secret** | `openssl rand -hex 32`; store its hash in Supabase (step S2) | Production, Preview | — | Admin → Funnel shows "Homepage visits" rising |
 | `FREE_PREVIEW_ENABLED` | **New.** `true` turns on the free first result without an account | server | — | Production: leave **unset** until the Privacy Policy is published | — | Homepage form opens results instead of sign-up |
-| `ANTHROPIC_API_KEY` | Plain-language wording and drafts | **secret** | console.anthropic.com → API Keys (set a monthly spend limit) | Production | — | A draft can be prepared |
-| `MARKETING_MODEL_PROVIDER` | Turns on the development model adapter (`anthropic-dev`); ignored in Production | public | the literal `anthropic-dev` | **Preview only** | — | `/app/plan` no longer says "Plans aren't switched on yet" |
+| `MARKETING_MODEL_PROVIDER` | Names a registered model adapter. **None exists** (no external AI provider; a self-hosted adapter is planned), so this does nothing today | public | leave unset | — | — | — |
 | `MODEL_USAGE_KEY` | Lets the server (and nobody else) reserve and record model spend | **secret** | `python3 -c 'import secrets;print(secrets.token_hex(32))'`; store its SHA-256 in clicky-dev: `insert into app_private.secrets (name, hash) values ('model_usage', decode('<sha256 hex>','hex')) on conflict (name) do update set hash = excluded.hash;` | **Preview only** (never the same value as any Production key) | — | A model call records a row in `model_usage` |
 | `FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY` | Show unfinished Marketing Agent screens and run their model steps | public | `1` | **Preview only** (always off in Production whatever is set) | — | Nav shows "Business details" and "Your plan" |
 | `PAGESPEED_API_KEY` | Google mobile speed test quota | **secret** | Google Cloud → APIs → PageSpeed Insights API → Credentials | Production | — | Results show "Measured" mobile speed |
@@ -193,11 +192,8 @@ only when they become available.
 `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, and `STRIPE_ALLOW_LIVE=true`. The app then uses the LIVE ids.
 Do not make real purchases to test; use test mode.
 
-## Anthropic
-Server-side only (`src/lib/server/ai.ts`, `src/lib/server/drafts.ts`), model `claude-opus-5-5`.
-Cost controls in place: one wording call per completed check, one call per draft, database caps of 10 checks and
-20 drafts per business per day, 200 new anonymous checks per day overall (`preview_daily_cap`).
-Set a monthly spend limit in the Anthropic console.
+## AI providers
+None. Something Clicks uses no Anthropic, OpenAI, Gemini or other hosted AI API and holds no such key (owner decision, Nov 25 2026). The plan for running our own model is `docs/agents/OWN_MODEL_PLAN.md`. Database caps of 10 checks and 20 drafts per business per day and 200 new anonymous checks per day overall (`preview_daily_cap`) remain.
 
 ## Google PageSpeed Insights
 Create an API key (Google Cloud → APIs & Services → Credentials), restrict it to the PageSpeed Insights API,
@@ -251,7 +247,7 @@ Create the IDs: GA4 → Admin → Create property → Web stream → copy the Me
 
 
 ## Marketing Agent model testing on Preview (Nov 25)
-**Required** (the model features do nothing without all of these): `ANTHROPIC_API_KEY` (**you add it**: Anthropic hosts cannot use the saved-credential prompt, so it must be a branch-scoped Preview variable; set a spend limit in the Anthropic console), `MARKETING_MODEL_PROVIDER=anthropic-dev`, `MODEL_USAGE_KEY`, and at least one `FEATURE_*` = 1.
+**Required for the deterministic Marketing Agent screens on Preview:** `MODEL_USAGE_KEY` (the server key the database functions check, also used for the rules-based plan) and the `FEATURE_*` you want to see. **No provider key is required or wanted.**
 **Optional:** `MARKETING_MODEL_EFFORT` (`low`|`medium`|`high`) to tune the dev adapter; `PAGESPEED_API_KEY` (mobile speed in checks); the per-business caps are not variables, they are database settings (`app_config.model_daily_cap_micro` $0.50, `model_monthly_cap_micro` $5, `model_global_daily_cap_micro` $20; per-business overrides in `organization_model_limits`).
 **Database switches (clicky-dev only, both 0 by default in every migration):** `agent_functions_enabled` (lets the app store model-produced findings, business details, plans, draft output) and `agent_review_enabled` (admin review page). Production keeps them at 0.
-**Already set by Claude on branch `claude/ecstatic-curie-9shvjf` (Preview only; values never shown):** `MODEL_USAGE_KEY` (generated; only its hash is in clicky-dev), `MARKETING_MODEL_PROVIDER`, the four `FEATURE_*`. **Not set by Claude:** `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `SUPABASE_SECRET_KEY`. A push to the branch redeploys the Preview with these.
+**Already set by Claude on branch `claude/ecstatic-curie-9shvjf` (Preview only; values never shown):** `MODEL_USAGE_KEY` (generated; only its hash is in clicky-dev), `MARKETING_MODEL_PROVIDER` (now unused; can be deleted), the four `FEATURE_*`. **Not set by Claude:** `STRIPE_SECRET_KEY`, `SUPABASE_SECRET_KEY`. A push to the branch redeploys the Preview with these.

@@ -21,9 +21,9 @@ const PERMISSION_DENIED = /permission denied/;
 const q = <T = Record<string, unknown>>(user: string | null, sql: string, params: unknown[] = []) =>
   db.as(user, async (c) => (await c.query(sql, params)).rows as [T, ...T[]]);
 const reserve = (user: string | null, o: string, cost: number, key = KEY, extra: { wf?: string | null; run?: string | null } = {}) =>
-  q<{ id: string }>(user, "select public.reserve_model_call($1,$2,'marketing_strategy.plan','anthropic-dev','claude-sonnet-5-5',$3,$4,$5) as id", [key, o, cost, extra.wf ?? null, extra.run ?? null]);
+  q<{ id: string }>(user, "select public.reserve_model_call($1,$2,'marketing_strategy.plan','test-double','test-model',$3,$4,$5) as id", [key, o, cost, extra.wf ?? null, extra.run ?? null]);
 const settle = (user: string | null, id: string, cost: number, outcome = "ok", key = KEY) =>
-  q(user, "select public.settle_model_call($1,$2,'claude-sonnet-5-5',1200,300,$3,$4)", [key, id, cost, outcome]);
+  q(user, "select public.settle_model_call($1,$2,'test-model',1200,300,$3,$4)", [key, id, cost, outcome]);
 const budget = async (user: string, o: string) => (await q<{ b: Record<string, number | boolean | string> }>(user, "select public.model_budget($1) b", [o]))[0].b;
 
 beforeAll(async () => {
@@ -79,7 +79,7 @@ describe("usage cannot be forged", () => {
     await expect(settle(owner, id, 0)).rejects.toThrow(/Forbidden/); // already settled: cannot be lowered afterwards
     await expect(settle(owner, "00000000-0000-0000-0000-000000000000", 1)).rejects.toThrow(/Forbidden/);
     const [row] = await q<{ outcome: string; cost_micro: number; input_tokens: number; model: string }>(owner, "select outcome, cost_micro, input_tokens, model from public.model_usage where id = $1", [id]);
-    expect(row).toEqual({ outcome: "ok", cost_micro: "400", input_tokens: 1200, model: "claude-sonnet-5-5" });
+    expect(row).toEqual({ outcome: "ok", cost_micro: "400", input_tokens: 1200, model: "test-model" });
   });
 
   it("an unrealistic reservation is refused, so no single call can claim or burn a huge amount", async () => {
@@ -135,7 +135,7 @@ describe("caps hold at the moment of reservation", () => {
         try {
           await c.query("set local role authenticated");
           await c.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: owner, role: "authenticated" })]);
-          await c.query("select public.reserve_model_call($1,$2,'x.y.z','anthropic-dev','claude-sonnet-5-5',100000,null,null)", [KEY, org]);
+          await c.query("select public.reserve_model_call($1,$2,'x.y.z','test-double','test-model',100000,null,null)", [KEY, org]);
           // Hold the transaction open after reserving, so without the lock all twelve would check the cap before any commits.
           await c.query("select pg_sleep(0.15)");
           await c.query("commit");

@@ -15,7 +15,7 @@ let analysis: string;
 const q = <T = Record<string, unknown>>(user: string | null, sql: string, params: unknown[] = [], customer = false) =>
   db.as(user, async (c) => (await c.query(sql, params)).rows as [T, ...T[]], { customer });
 const reserve = (user: string, o: string, cost: number) =>
-  q<{ id: string }>(user, "select public.reserve_model_call($1,$2,'marketing_strategy.plan','anthropic-dev','claude-sonnet-5-5',$3,null,null) as id", [db.modelKey, o, cost]);
+  q<{ id: string }>(user, "select public.reserve_model_call($1,$2,'marketing_strategy.plan','test-double','test-model',$3,null,null) as id", [db.modelKey, o, cost]);
 const hint = async (p: Promise<unknown>) => ((await p.catch((e) => e)) as { hint?: string }).hint;
 
 const fact = { category: "business", field: "service", value: "Drain cleaning", source: "website", evidence_class: "verified", basis: null, evidence: [{ kind: "observed", url: "https://a.example/", excerpt: "We clear drains" }] };

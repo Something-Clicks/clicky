@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { FEATURES } from "@/config/features";
 import { getModelProvider, registeredProviders } from "@/lib/server/agent/provider";
-import { getClient, isAiConfigured } from "@/lib/server/ai";
 
 const KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "MARKETING_MODEL_PROVIDER", "VERCEL_ENV", "FEATURE_DRAFTS", "FEATURE_BUSINESS_PROFILE", "FEATURE_MODEL_FINDINGS"];
 
@@ -21,15 +20,13 @@ describe("model features stay off without an approved provider", () => {
     process.env.OPENAI_API_KEY = "sk-test-not-real";
     process.env.GEMINI_API_KEY = "test-not-real";
     process.env.MARKETING_MODEL_PROVIDER = "anthropic";
-    expect(registeredProviders()).toEqual(["anthropic-dev"]);
+    expect(registeredProviders()).toEqual([]);
     expect(getModelProvider()).toBeNull();
-    expect(isAiConfigured()).toBe(false);
-    expect(() => getClient()).toThrow(/No model provider is enabled/);
   });
 
   it("in Production nothing turns on, whatever the variables say", () => {
     Object.assign(process.env, {
-      VERCEL_ENV: "production", MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "sk-test-not-real",
+      VERCEL_ENV: "production", MARKETING_MODEL_PROVIDER: "self-hosted", ANTHROPIC_API_KEY: "sk-test-not-real",
       FEATURE_DRAFTS: "1", FEATURE_BUSINESS_PROFILE: "1", FEATURE_MODEL_FINDINGS: "1",
     });
     expect(getModelProvider()).toBeNull();
@@ -42,10 +39,19 @@ describe("model features stay off without an approved provider", () => {
     expect([FEATURES.drafts, FEATURES.businessProfile, FEATURES.modelFindings]).toEqual([false, true, false]);
   });
 
-  it("the old wording code stays off even with a provider enabled", () => {
-    Object.assign(process.env, { MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "sk-test-not-real" });
-    expect(getModelProvider()?.id).toBe("anthropic-dev");
-    expect(isAiConfigured()).toBe(false);
+  it("no application code imports a hosted AI provider's SDK or names its key variable", () => {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const f of readdirSync(dir)) {
+        const p = join(dir, f);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(f)) files.push(p);
+      }
+    };
+    walk(join(__dirname, "..", "..", "src"));
+    const offenders = files.filter((f) => /@anthropic-ai|from "openai"|@google\/genai|ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY/.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual([]);
+    expect(JSON.parse(readFileSync(join(__dirname, "..", "..", "package.json"), "utf8")).dependencies).not.toHaveProperty("@anthropic-ai/sdk");
   });
 
   it("application code never reads evaluation settings", () => {

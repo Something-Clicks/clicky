@@ -7,7 +7,7 @@
  * What is stood in: the plan, the business details, the usage rows and the workflow record are FIXTURES written by SQL
  * (provider "e2e-fixture"), because this sandbox cannot call a model. These tests show the screens render, authorize
  * and decide correctly; they say nothing about the quality of anything a model writes.
- * No model is configured on this server, so "Revise the plan" must answer with the plain "not switched on" message.
+ * No model is configured on this server (none exists), so the plan screen offers "Refresh the plan" (fixed rules, no free-text notes).
  */
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -59,12 +59,14 @@ test.describe("owner: Your plan and Business details", () => {
     await expect(page).toHaveURL(/\/app\/actions\/[0-9a-f-]{36}/);
   });
 
-  test("revising without a model gives the plain 'not switched on' message and changes nothing", async ({ page }, info) => {
+  test("with no model the screen offers no notes box, only 'Refresh the plan', and refreshing builds a rules-based plan", async ({ page }, info) => {
     test.skip(suffix(info) === "m", "desktop only");
     await login(page, "pat-d@e2e.test", "", "/app/plan");
-    await page.getByLabel("What should change?").fill("We cannot take weekend jobs.");
-    await page.getByRole("button", { name: "Revise the plan" }).click();
-    await expect(page.getByText("Plans aren't switched on yet.")).toBeVisible();
+    await expect(page.getByLabel("What should change?")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Anything changed?" })).toBeVisible();
+    await page.getByRole("button", { name: "Refresh the plan" }).click();
+    await expect(page.getByText("Here's the revised plan.").or(page.getByText("Here's your plan."))).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Put together with fixed rules/)).toBeVisible();
     await expect(page.getByText("Waiting for your review")).toBeVisible();
   });
 
@@ -105,7 +107,7 @@ test.describe("member: sees the plan, cannot decide", () => {
     await login(page, "other-d@e2e.test", "", "/app/plan");
     await expect(page.getByRole("heading", { name: "Your plan", level: 1 })).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve this plan" })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Want it different?" })).toBeVisible(); // members can ask for a revision
+    await expect(page.getByRole("heading", { name: "Anything changed?" })).toBeVisible(); // members can refresh the plan
     await noSideScroll(page);
     await page.goto("/app/business");
     await expect(page.getByRole("button", { name: "That's right" })).toHaveCount(0);

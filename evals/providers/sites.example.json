@@ -1,5 +1,0 @@
-[
-  { "url": "https://www.example-plumbing.com", "business_name": "Example Plumbing", "service_area": "Salt Lake City, UT", "primary_goal": "more_calls" },
-  { "url": "https://www.example-bakery.com", "business_name": "Example Bakery", "service_area": "Provo, UT", "primary_goal": "get_found" },
-  { "url": "https://www.example-dental.com", "business_name": "Example Dental", "service_area": null, "primary_goal": "easier_marketing" }
-]

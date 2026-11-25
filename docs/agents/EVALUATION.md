@@ -2,12 +2,12 @@
 
 Purpose: find out whether the agent's business understanding, findings, drafts and plans are accurate and useful on real small-business websites, then improve what is weak and test again. Nothing here runs in Production.
 
-**Status (Nov 25): NOT RUN.** There is no Anthropic key on Preview and this sandbox cannot reach public websites, so no real-model result exists yet. Everything below is the procedure and what will be checked.
+**Status (Nov 25): NOT RUN.** No external AI provider is used (owner decision) and no self-hosted model exists yet, so there is no real-model result. This standard and procedure apply unchanged to **any** model Something Clicks runs (`OWN_MODEL_PLAN.md`, phase 2) and, for the parts that need no model (structured profile, rules-based plan, checks), to the deterministic agent on real sites today. The sandbox also cannot reach public websites, so a real-site run happens on Preview.
 
 ## 1. One-time setup (you; Claude never sees the secret)
 Vercel → `something-clicks` → Settings → Environment Variables → Add, **Preview only, branch `claude/ecstatic-curie-9shvjf`**:
-- `ANTHROPIC_API_KEY` (mark Sensitive; set a monthly spend limit in the Anthropic console first).
-Already set on that branch by Claude (values never shown): `MARKETING_MODEL_PROVIDER=anthropic-dev`, `MODEL_USAGE_KEY`, `FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY`. clicky-dev has `agent_functions_enabled` = 1 and `agent_review_enabled` = 1.
+- None for the deterministic agent. (No provider key exists or is wanted. A self-hosted model endpoint secret is added only in phase 1 of `OWN_MODEL_PLAN.md`.)
+Already set on that branch by Claude (values never shown): `MODEL_USAGE_KEY` (and a now-unused `MARKETING_MODEL_PROVIDER`, which can be deleted), `FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY`. clicky-dev has `agent_functions_enabled` = 1 and `agent_review_enabled` = 1.
 Also still missing for a full signed-in Preview (unrelated to the model): `STRIPE_SECRET_KEY` (test), `SUPABASE_SECRET_KEY`.
 Then redeploy the branch (push or Redeploy). The Preview is behind Vercel login (Deployment Protection stays on).
 

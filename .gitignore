@@ -171,6 +171,5 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 
-# Provider evaluation output (contains raw model outputs and website excerpts)
+# Model evaluation output (may contain raw model outputs and website excerpts)
 /eval-results/
-/evals/providers/sites.json

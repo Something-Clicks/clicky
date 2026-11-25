@@ -5,7 +5,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { log } from "@/lib/log";
 import type { Database, Json } from "@/lib/supabase/types";
 
-import { wordFindings } from "./ai";
 import type { BusinessContext, Evidence } from "./checks";
 import { marketingAnalysis, type ClassifiedFinding } from "./agent/modules/marketing-analysis";
 import { seoIntelligence, type SeoIntelligence } from "./agent/modules/seo-intelligence";
@@ -19,6 +18,15 @@ import type { SiteScan } from "./site-scan";
 import { track } from "./site";
 
 export type Db = SupabaseClient<Database>;
+
+/** The overview line above the cards: counts only, fixed wording. */
+export function templateSummary(findings: { impact_priority: string }[], pagesReviewed: number): string {
+  const high = findings.filter((f) => f.impact_priority === "high").length;
+  if (findings.length === 0) {
+    return `We reviewed ${pagesReviewed} page${pagesReviewed === 1 ? "" : "s"} and didn't find anything that needs attention right now.`;
+  }
+  return `We reviewed ${pagesReviewed} page${pagesReviewed === 1 ? "" : "s"} and found ${findings.length} thing${findings.length === 1 ? "" : "s"} worth your attention${high ? `, ${high} of them high impact` : ""}. Start with the first card below.`;
+}
 
 /**
  * What the customer sees when the analysis cannot finish: calm, plain words, and what to do next.
@@ -95,17 +103,16 @@ export async function analyzeWebsite(website: string, biz: BusinessContext, deps
   const site = expectDone(await websiteIntelligence.run({ website, fetchPage: deps.fetchPage, pageSpeed: deps.pageSpeed }), "website_intelligence").output;
   const analysis = expectDone(await marketingAnalysis.run({ site, business: biz }), "marketing_analysis").output;
   const seo = expectDone(await seoIntelligence.run({ analysis }), "seo_intelligence").output;
-  const worded = await wordFindings(analysis.findings, analysis.evidence, biz, site.pagesReviewed);
-  // Wording never changes which findings exist, their evidence or their class.
-  const classOf = new Map(analysis.findings.map((f) => [f.check_key, f]));
-  const findings = worded.findings.map((f) => ({ ...f, category: classOf.get(f.check_key)!.category, evidence_class: classOf.get(f.check_key)!.evidence_class }));
+  // Card wording is fixed text written by Something Clicks for each check; no model rewrites it.
+  const summary = templateSummary(analysis.findings, site.pagesReviewed);
+  const findings = analysis.findings;
   const coverage = {
     website: { status: "observed", pages_reviewed: site.pagesReviewed, pages_unreachable: site.scan.failures.length },
     pagespeed: site.psi.ok ? { status: "measured", score: site.psi.performanceScore } : { status: "missing", reason: site.psi.reason },
     search_console: { status: "not_connected" },
     google_business_profile: { status: "not_connected" },
   };
-  return { evidence: analysis.evidence, findings, coverage, summary: worded.summary, wording: worded.wording as "ai" | "template", pagespeed: site.psi.ok, scan: site.scan, ranked: analysis.ranked, seo };
+  return { evidence: analysis.evidence, findings, coverage, summary, wording: "template", pagespeed: site.psi.ok, scan: site.scan, ranked: analysis.ranked, seo };
 }
 
 export type AnalysisOutcome = { ok: true; result: AnalysisResult } | { ok: false; reason: string };

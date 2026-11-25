@@ -14,6 +14,7 @@ import { checkDraft, ContentRejected, createContent } from "@/lib/server/agent/m
 import { MODULES } from "@/lib/server/agent/modules";
 import { groundFindings, type ModelFindingOutput } from "@/lib/server/agent/modules/marketing-analysis-model";
 import { expectDone } from "@/lib/server/agent/modules/types";
+import { registerPrice } from "@/lib/server/agent/pricing";
 import type { ModelProvider } from "@/lib/server/agent/provider";
 import { extractFacts, type SiteScan } from "@/lib/server/site-scan";
 
@@ -28,10 +29,11 @@ const double = (...outputs: unknown[]): ModelProvider => ({
   id: "test-double",
   generate: vi.fn(async () => ({ output: outputs.shift(), model: "test-double", usage: { inputTokens: 10, outputTokens: 5 } })),
 });
-// Metering refuses unpriced models, so the orchestrator test borrows the priced id/model of the dev adapter (still a test double: no network).
+// Metering refuses unpriced models, so this double is given a made-up price (still a test double: no network, not a model).
+registerPrice("test-double", "test-model", { input: 2, output: 10 });
 const pricedDouble = (...outputs: unknown[]): ModelProvider => ({
-  id: "anthropic-dev", model: "claude-sonnet-5-5",
-  generate: vi.fn(async () => ({ output: outputs.shift(), model: "claude-sonnet-5-5", usage: { inputTokens: 10, outputTokens: 5 } })),
+  id: "test-double", model: "test-model",
+  generate: vi.fn(async () => ({ output: outputs.shift(), model: "test-model", usage: { inputTokens: 10, outputTokens: 5 } })),
 });
 
 const fact = (over: Partial<ModelFactOutput>): ModelFactOutput => ({
@@ -122,7 +124,7 @@ describe("Business Intelligence: grounding model facts", () => {
       profile: { businessName: "Sunrise Plumbing", website: "https://sunrise.example/", serviceArea: null, primaryGoal: null },
       scan, provider: double({ facts: [fact({}), fact({ category: "customer", field: "audience", value: "Homeowners", evidence_class: "inferred", basis: "Mentions homes.", quotes: [{ page_key: "page0", quote: "for homes" }] })] }),
     }), "bi").output;
-    expect(ok.proposals.map((p) => [p.field, p.source])).toEqual([["contact_phone", "website"], ["service", "model"], ["audience", "model"]]);
+    expect(ok.proposals.map((p) => [p.field, p.source])).toEqual([["contact_phone", "website"], ["trust_signal", "website"], ["service", "model"], ["audience", "model"]]);
     expect(ok.model).toMatchObject({ provider: "test-double", accepted: 2, rejected: [] });
     expect(ok.understanding.missing).toEqual(["what_it_does", "service_area", "value_proposition"]);
 
@@ -131,7 +133,7 @@ describe("Business Intelligence: grounding model facts", () => {
       scan, provider: double({ wrong: true }, { still: "wrong" }),
     }), "bi").output;
     expect(failed.model).toMatchObject({ failed: expect.stringContaining("ModelOutputInvalid") });
-    expect(failed.proposals.map((p) => p.source)).toEqual(["website"]);
+    expect(failed.proposals.map((p) => p.source)).toEqual(["website", "website"]) // a failed model call keeps the deterministic proposals (phone, the site's own trust statement);
   });
 });
 
@@ -223,6 +225,8 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
       process.env.FEATURE_BUSINESS_PROFILE = "1"; // the business-details step runs; model findings are what the switch toggles
       if (on) process.env.FEATURE_MODEL_FINDINGS = "1";
       else delete process.env.FEATURE_MODEL_FINDINGS;
+      // resetModules reloaded the price table: declare the test double's made-up price in the fresh copy.
+      (await import("@/lib/server/agent/pricing")).registerPrice("test-double", "test-model", { input: 2, output: 10 });
       const { runWebsiteReview } = await import("@/lib/server/agent/orchestrator");
       const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf" : name === "reserve_model_call" ? "reservation-1" : name === "add_model_findings" ? 1 : 0, error: null }));
       const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business: { businessName: "Sunrise Plumbing", serviceArea: null, primaryGoal: null, website: "https://sunrise.example/" } }, {
@@ -232,7 +236,7 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
       const names = rpc.mock.calls.map((c) => c[0]);
       expect(names.includes("add_model_findings"), `switch ${on}`).toBe(on);
       const finish = rpc.mock.calls.find((c) => c[0] === "finish_marketing_workflow")![1] as Record<string, unknown>;
-      expect(finish).toMatchObject({ p_status: "prepared", p_provider: "anthropic-dev", p_model: "claude-sonnet-5-5" });
+      expect(finish).toMatchObject({ p_status: "prepared", p_provider: "test-double", p_model: "test-model" });
       expect(names.filter((n) => n === "reserve_model_call").length, "one reservation per model call").toBe(on ? 2 : 1);
       expect(names.filter((n) => n === "settle_model_call").length, "each reservation settled").toBe(on ? 2 : 1);
       if (on) expect(out.steps.find((s) => s.step === "analyze_marketing_model")).toMatchObject({ status: "done" });

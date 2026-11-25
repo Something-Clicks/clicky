@@ -11,8 +11,10 @@ import type { CapabilityModule } from "./types";
  *
  * Two jobs:
  *  1. propose(): derive facts from what Website Intelligence retrieved. Deterministic today:
- *     phone numbers and email addresses (verified: observed on the site) and services
- *     (inferred: from pages the site links to under /services/, with the basis stated).
+ *     phone numbers and email addresses (verified: observed on the site), the site's own schema.org markup
+ *     (address, area served, price range, rating, offered services: verified), the site's own trust and offer
+ *     statements quoted exactly (verified), and services (inferred: from pages the site links to under /services/,
+ *     with the basis stated).
  *     Model-derived facts (what the business does, audience, value proposition) come later and
  *     follow the same evidence rules. The agent only proposes; the owner confirms.
  *  2. understand(): the current picture for any workflow: the owner's profile, confirmed facts and
@@ -99,6 +101,26 @@ export function propose(scan: SiteScan): ProposedFact[] {
     }
   }
 
+  // The site's own machine-readable markup (schema.org): the site states these details itself, so they are verified.
+  for (const p of pages) {
+    const sd = p.structured;
+    if (!sd) continue;
+    const observed = (what: string) => [{ kind: "observed" as const, url: p.url, excerpt: `Structured data on the page lists ${what}` }];
+    const base = { category: "business" as const, source: "website" as const, evidence_class: "verified" as const, basis: null };
+    if (sd.telephone) add({ ...base, field: "contact_phone", value: formatPhone(sd.telephone), evidence: observed(`telephone: ${sd.telephone}`) });
+    if (sd.email) add({ ...base, field: "contact_email", value: sd.email, evidence: observed(`email: ${sd.email}`) });
+    if (sd.address) add({ ...base, field: "location", value: sd.address, evidence: observed(`address: ${sd.address}`) });
+    for (const area of sd.areaServed) add({ ...base, field: "service_area", value: area, evidence: observed(`area served: ${area}`) });
+    if (sd.priceRange) add({ ...base, field: "pricing", value: `Price range shown on the site: ${sd.priceRange}`, evidence: observed(`price range: ${sd.priceRange}`) });
+    if (sd.rating) {
+      const counted = sd.rating.count ? ` from ${sd.rating.count} reviews` : "";
+      add({ ...base, field: "trust_signal", value: `The site shows a rating of ${sd.rating.value} out of 5${counted} (its own figure; we have not checked it)`, evidence: observed(`rating: ${sd.rating.value}${counted}`) });
+    }
+    for (const svc of sd.services) add({ ...base, field: "service", value: svc, evidence: observed(`service: ${svc}`) });
+  }
+
+  for (const f of trustStatements(pages)) add(f);
+
   let services = 0;
   for (const p of pages) {
     for (const { url, text } of p.internalLinkTexts) {
@@ -110,7 +132,48 @@ export function propose(scan: SiteScan): ProposedFact[] {
       if (facts.length > before) services++;
     }
   }
-  return facts;
+  // The database accepts at most 50 proposals per call.
+  return facts.slice(0, 50);
+}
+
+/**
+ * Statements the site makes about itself that give a customer a reason to trust or choose it, found by fixed patterns.
+ * Each one is the site's own sentence, quoted exactly (it is a substring of the page text), so the owner can see it.
+ * We report what the site says; we never say it is true. Nothing here is a judgment or a model's reading.
+ */
+const TRUST_PATTERNS: { re: RegExp; field: "trust_signal" | "competitive_advantage" }[] = [
+  { re: /\b(licensed|insured|bonded|certified|accredited)\b/i, field: "trust_signal" },
+  { re: /\b(family|locally|veteran|woman|women)[- ]owned\b/i, field: "trust_signal" },
+  { re: /\b(\d{1,3}\+?\s+years?\s+(of\s+)?(experience|in business)|serving\b[^.]{0,60}\bsince\s+(19|20)\d{2}|since\s+(19|20)\d{2}|established\s+in\s+(19|20)\d{2})/i, field: "trust_signal" },
+  { re: /\b(\d(\.\d)?[- ]?stars?|five[- ]star|5[- ]star)\b/i, field: "trust_signal" },
+  { re: /\b(warranty|warranties|guarantee[ds]?)\b/i, field: "trust_signal" },
+  { re: /\bfree\s+(estimates?|quotes?|consultations?|inspections?)\b/i, field: "competitive_advantage" },
+  { re: /\b(24\/7|24[- ]hours?|same[- ]day|emergency\s+(service|repair|calls?))\b/i, field: "competitive_advantage" },
+];
+const MAX_TRUST = 5;
+const MAX_ADVANTAGE = 3;
+
+export function trustStatements(pages: PageFacts[]): ProposedFact[] {
+  const out: ProposedFact[] = [];
+  const seen = new Set<string>();
+  const counts = { trust_signal: 0, competitive_advantage: 0 };
+  for (const p of pages) {
+    const sentences = p.text.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x.length >= 15 && x.length <= 220);
+    for (const sentence of sentences) {
+      for (const { re, field } of TRUST_PATTERNS) {
+        if (!re.test(sentence) || seen.has(sentence.toLowerCase())) continue;
+        if (counts[field] >= (field === "trust_signal" ? MAX_TRUST : MAX_ADVANTAGE)) continue;
+        seen.add(sentence.toLowerCase());
+        counts[field]++;
+        out.push({
+          category: "business", field, value: `The site states: “${sentence}”`, source: "website", evidence_class: "verified", basis: null,
+          evidence: [{ kind: "observed", url: p.url, excerpt: sentence }],
+        });
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 const ageDays = (iso: string, now: Date) => (now.getTime() - new Date(iso).getTime()) / 86_400_000;

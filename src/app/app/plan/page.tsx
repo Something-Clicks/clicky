@@ -8,6 +8,8 @@ import { PlanForm } from "@/components/plan-form";
 import { requireOrganization } from "@/lib/auth";
 import { FACT_LABEL, type FactField } from "@/lib/business-profile";
 import type { StoredPlan } from "@/lib/server/agent/modules/marketing-strategy";
+import { getModelProvider } from "@/lib/server/agent/provider";
+import { RULES_PROVIDER } from "@/lib/server/agent/modules/rules-strategy";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Your plan" };
@@ -28,11 +30,12 @@ export default async function PlanPage() {
   const supabase = await createClient();
   const { data: rows } = await supabase
     .from("marketing_plans")
-    .select("id, status, plan, created_at, decided_at")
+    .select("id, status, plan, provider, created_at, decided_at")
     .eq("organization_id", ws.organization.id)
     .in("status", ["proposed", "approved"])
     .order("created_at", { ascending: false })
     .limit(2);
+  const canTakeNotes = getModelProvider() !== null;
   const current = rows?.find((r) => r.status === "proposed") ?? rows?.[0] ?? null;
   const raw = (current?.plan ?? null) as unknown as Partial<StoredPlan> | null;
   // The database checks the shape of every saved plan; read defensively anyway so one bad row can never break the page.
@@ -64,7 +67,7 @@ export default async function PlanPage() {
         <section className="card stack">
           <h2 style={{ marginTop: 0 }}>No plan yet</h2>
           <p className="muted">We&apos;ll use what we know about your business and what we found on your website to suggest what to do first.</p>
-          <PlanForm revising={false} />
+          <PlanForm revising={false} canTakeNotes={canTakeNotes} />
         </section>
       ) : (
         <>
@@ -74,6 +77,7 @@ export default async function PlanPage() {
               {current.status === "approved" ? <span className="pill green">Approved</span> : <span className="pill yellow">Waiting for your review</span>}
             </div>
             <p>{plan.summary}</p>
+            {current.provider === RULES_PROVIDER ? <p className="small muted">Put together with fixed rules from your website check and your goal. It doesn&apos;t read free-text notes.</p> : null}
             {plan.objectives.length ? (
               <div>
                 <div className="small muted">What we&apos;re aiming for</div>
@@ -119,7 +123,7 @@ export default async function PlanPage() {
             <section className="card stack" aria-labelledby="plan-questions">
               <h2 id="plan-questions" style={{ margin: 0 }}>Help us make it better</h2>
               <ul>{plan.questions.map((s) => <li key={s}>{s}</li>)}</ul>
-              <p className="small muted">Answer by revising the plan below, or add details on the Business details page.</p>
+              <p className="small muted">{canTakeNotes ? "Answer by revising the plan below, or add details on the Business details page." : "Add these on the Business details page, then refresh the plan."}</p>
             </section>
           ) : null}
 
@@ -159,8 +163,8 @@ export default async function PlanPage() {
           ) : null}
 
           <section className="card stack" aria-labelledby="plan-revise">
-            <h2 id="plan-revise" style={{ margin: 0 }}>Want it different?</h2>
-            <PlanForm revising />
+            <h2 id="plan-revise" style={{ margin: 0 }}>{canTakeNotes ? "Want it different?" : "Anything changed?"}</h2>
+            <PlanForm revising canTakeNotes={canTakeNotes} />
           </section>
         </>
       )}

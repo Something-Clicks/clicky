@@ -3,6 +3,7 @@ import "server-only";
 import { parse, type HTMLElement } from "node-html-parser";
 
 import type { FetchedPage } from "./safe-fetch";
+import { extractStructuredBusiness, type StructuredBusiness } from "./structured-data";
 
 export interface PageFacts {
   url: string;
@@ -25,6 +26,8 @@ export interface PageFacts {
   /** Visible text of same-site links (navigation labels), by URL. */
   internalLinkTexts: { url: string; text: string }[];
   truncated: boolean;
+  /** What the page says about its business in schema.org markup, if anything (deterministic parse). */
+  structured: StructuredBusiness | null;
 }
 
 export interface SiteScan {
@@ -42,6 +45,8 @@ export function extractFacts(page: FetchedPage): PageFacts {
   const meta = (name: string) =>
     clean(root.querySelector(`meta[name="${name}"]`)?.getAttribute("content")) || null;
 
+  // Machine-readable markup (schema.org) comes from the raw HTML; the visible text below excludes scripts.
+  const structured = extractStructuredBusiness(page.body);
   const body = root.querySelector("body") ?? root;
   body.querySelectorAll("script,style,noscript,svg").forEach((el: HTMLElement) => el.remove());
   const text = clean(body.textContent);
@@ -86,6 +91,7 @@ export function extractFacts(page: FetchedPage): PageFacts {
     internalLinks: [...internal].slice(0, 200),
     internalLinkTexts: [...linkTexts].slice(0, 200).map(([url, text]) => ({ url, text })),
     truncated: page.truncated,
+    structured,
   };
 }
 

@@ -14,7 +14,7 @@ Something Clicks is building its own **Marketing Agent** for small businesses: i
 - Test locally: `pnpm test:db` runs every migration on a throwaway local Postgres (`PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres`). Local Postgres is not full Supabase validation; also check Supabase-specific details (roles, auth.users columns, constraint names, advisors) read-only.
 
 ## Architecture
-- Next.js 16 App Router, strict TypeScript, plain CSS (`src/app/globals.css`, mobile first at 390px), Supabase (Postgres, Auth, RLS), Stripe, Anthropic, Resend, Vercel (+ Cron), Vitest, pnpm.
+- Next.js 16 App Router, strict TypeScript, plain CSS (`src/app/globals.css`, mobile first at 390px), Supabase (Postgres, Auth, RLS), Stripe, Resend, Vercel (+ Cron), Vitest, pnpm.
 - Customer requests run as the signed-in user (RLS always applies). No service-role key in customer paths.
 - Privileged writes go through `SECURITY DEFINER` functions that check the caller. Server-only keys, stored hashed in `app_private.secrets`:
   - `BILLING_WEBHOOK_KEY` → `billing_*` functions (Stripe webhook only).
@@ -44,10 +44,12 @@ Something Clicks is building its own **Marketing Agent** for small businesses: i
 `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`, plus `pnpm e2e` when the customer journey changed (see the checklist for the local stack).
 
 ## Model providers, feature switches and drafts
-- Model calls go only through `src/lib/server/agent/provider.ts`. One temporary development adapter is registered (`anthropic-dev`, Claude Sonnet 5.5, `providers/anthropic-dev.ts`). It runs only with `MARKETING_MODEL_PROVIDER=anthropic-dev` and `ANTHROPIC_API_KEY`, and never in Production (`VERCEL_ENV=production` → no provider). An API key alone activates nothing (tested). Never add a mock model or stand-in answers.
+- **No external AI provider, ever (owner decision, Nov 25 2026).** Something Clicks does not use Anthropic, OpenAI, Gemini or any paid hosted AI API, never holds such a key, and never treats its absence as a blocker. Do not add one, request one, or add an SDK for one. The plan to run our own model is `docs/agents/OWN_MODEL_PLAN.md` (an open-weight model we host; say "adapted from <base>" never "our own model" unless we trained it from scratch).
+- Model calls go only through `src/lib/server/agent/provider.ts`. No adapter is registered, so `getModelProvider()` is always null and model-written capabilities report "blocked" (tested: no key or setting turns one on). Never add a mock model or stand-in answers; test doubles in tests prove checking rules only, never capability. Verification words: *functionality verified* (tests), *model inference verified* (a real model ran: none yet), *model quality verified* (met `EVALUATION.md`: none yet), *not implemented*.
 - Feature switches (`src/config/features.ts`): `drafts`, `businessProfile`, `modelFindings`, `strategy`. Off unless `FEATURE_<NAME>=1`, and always off in Production. Releasing one to customers is an owner decision and a code change. Server-only: pass booleans to client components.
 - Every model output is grounded by Something Clicks before it is stored (`agent/grounding.ts`): quotes must appear on the cited page, figures must be in the source, promises are refused.
-- The older Anthropic-specific code (`src/lib/server/ai.ts`, `drafts.ts`) is retired and dormant (needs `MARKETING_LEGACY_WORDING=1`, which nothing sets); do not delete it. Drafts now come from the Content Creation module.
+- The old Anthropic-specific wording and draft code (`ai.ts`, `drafts.ts`), the `anthropic-dev` adapter and the hosted-API evaluation harness were removed (Nov 25 2026). Card wording is fixed text; drafts need a model and are blocked without one.
+- Works without any model today: website checks, ranking, Action Cards, approvals, structured business profile (contact details, schema.org data, quoted trust statements), and a **rules-based plan** (`modules/rules-strategy.ts`; labelled "fixed rules" in the product; not AI reasoning; ignores free-text notes).
 
 ## Marketing Agent
 - Map of the specification to the code, what is built and what is not: `docs/agents/MARKETING_AGENT.md`. Keep it current.

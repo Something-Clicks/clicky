@@ -24,16 +24,13 @@ import { FetchBlockedError, type FetchedPage } from "@/lib/server/safe-fetch";
 import { cardStage, completionBasis, stageCounts } from "@/lib/stages";
 
 describe("model provider", () => {
-  it("has only the development adapter registered and never falls back to one", () => {
-    expect(registeredProviders()).toEqual(["anthropic-dev"]);
+  it("has no adapter registered: no key or setting can switch a model on", () => {
+    expect(registeredProviders()).toEqual([]);
     expect(getModelProvider({})).toBeNull();
-    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic" })).toBeNull();
-    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "openai", ANTHROPIC_API_KEY: "x" })).toBeNull();
-    // The development adapter needs both the switch and its key, and never runs in Production.
-    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev" })).toBeNull();
-    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "x" })?.id).toBe("anthropic-dev");
-    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "x", VERCEL_ENV: "production" })).toBeNull();
-    expect(getModelProvider({ MARKETING_MODEL_PROVIDER: "anthropic-dev", ANTHROPIC_API_KEY: "x", VERCEL_ENV: "preview" })?.id).toBe("anthropic-dev");
+    for (const id of ["anthropic", "anthropic-dev", "openai", "gemini", "self-hosted", "test-double"]) {
+      expect(getModelProvider({ MARKETING_MODEL_PROVIDER: id, ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "x", GEMINI_API_KEY: "x" })).toBeNull();
+      expect(getModelProvider({ MARKETING_MODEL_PROVIDER: id, VERCEL_ENV: "preview" })).toBeNull();
+    }
   });
 
   it("refuses to generate without a provider", async () => {
@@ -83,7 +80,7 @@ describe("workflow selection (spec 12.2)", () => {
     const env = { modelProvider: false };
     expect(planWorkflow("website_review", env).blocked).toBeNull();
     for (const kind of ["homepage_headline", "competitor_research", "marketing_plan", "promotional_campaign", "results_review"] as const) {
-      expect(planWorkflow(kind, env).blocked).toMatch(/No model provider is configured/);
+      expect(planWorkflow(kind, env).blocked).toMatch(/No language model is available yet/);
     }
     expect(planWorkflow("homepage_headline", { modelProvider: true }).blocked).toBeNull();
   });
@@ -204,7 +201,7 @@ describe("orchestrator: model-dependent requests", () => {
     const out = await requestMarketingWork({ rpc } as never, { orgId: "o1", kind: "homepage_headline", request: "Improve my homepage headline" });
     expect(out.status).toBe("blocked");
     if (out.status !== "blocked") return;
-    expect(out.reason).toMatch(/Content Creation: No model provider is configured/);
+    expect(out.reason).toMatch(/Content Creation: No language model is available yet/);
     expect(rpc.mock.calls[1]![1]).toMatchObject({ p_status: "blocked", p_result: null });
   });
 });

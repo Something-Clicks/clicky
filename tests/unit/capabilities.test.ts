@@ -38,7 +38,7 @@ describe("the capability registry", () => {
       if (BUILT.includes(id)) continue;
       const r = await MODULES[id].run(undefined as never);
       expect(r.status, id).toBe("blocked");
-      expect((r as { reason: string }).reason, id).toMatch(/model provider|integration|not built/);
+      expect((r as { reason: string }).reason, id).toMatch(/language model|integration|not built/);
     }
   });
 });

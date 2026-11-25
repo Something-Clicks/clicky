@@ -81,6 +81,6 @@ export interface Availability {
 export function unavailableReason(id: CapabilityId, env: Availability): string | null {
   const c = CAPABILITIES[id];
   if (c.runsOn === "checks") return null;
-  if (c.runsOn === "model") return env.modelProvider ? null : "No model provider is configured (provider decision pending).";
+  if (c.runsOn === "model") return env.modelProvider ? null : "No language model is available yet. Something Clicks is building its own model hosting.";
   return "No authorized integration exists for this yet.";
 }

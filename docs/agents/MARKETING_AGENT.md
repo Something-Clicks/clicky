@@ -8,7 +8,18 @@ migrations also on clicky-dev). *Built, not verified live*: the code path runs e
 model in tests, but has never been run with a real model or on a real website (see Verification).
 *Not built*: designed, reports "blocked" if a workflow asks for it.
 
-## How it fits together
+## Independence and what is verified (Nov 25 2026)
+Something Clicks uses no external hosted AI. Plan to run our own: `docs/agents/OWN_MODEL_PLAN.md`. The agent software is ours; a future model would be an open-weight base we host (licence-bound), never described as a model we created.
+
+| Capability | Without a model | Functionality verified | Model inference verified | Model quality verified |
+|---|---|---|---|---|
+| Website Intelligence, SEO checks, ranking, Action Cards, approvals, verification | Complete | Yes (unit, database, build; fixtures, not yet real sites) | n/a | n/a |
+| Business Intelligence: contact details, services from links, schema.org data, quoted trust statements, review screen | Complete | Yes | n/a | n/a |
+| Marketing Strategy | **Rules-based plan** (fixed rules; no prose generation; no notes) | Yes (unit + database) | n/a (it is not a model) | n/a |
+| Language understanding of a site; model findings; plan wording; Content Creation (drafts) | **Blocked** (needs a model) | Checking rules only, with test doubles | **No** | **No** |
+| Market Research, Campaign Planning, Execution | Not implemented | No | No | No |
+
+
 ```
 Customer request ─► Orchestrator (src/lib/server/agent/orchestrator.ts)
                       │  plans with workflows.ts (only the capabilities a request needs)
@@ -73,7 +84,7 @@ beside their evidence, the flags, and model spend. Generation-time safeguards (g
 | Database functions on clicky-dev | Verified (apply → checks → rollback → re-apply), including 20261129 (existing rows kept: 4 businesses, 42 cards) |
 | Independent security review (Opus) of the migration, metering, plan and admin paths | Done; findings fixed or recorded above (global-cap bound, plan shape validated in the database, stricter promise rule, review switch, no unmetered provider path, prompt escaping) |
 | Metering, strategy grounding, quality screening | Verified by unit tests with hand-written inputs and a test double (**simulated**: proves the rules, not model quality) |
-| Real model output quality (understanding, findings, drafts) | **Not verified.** This sandbox cannot hold an Anthropic key (Anthropic hosts cannot use saved network credentials). Needs `ANTHROPIC_API_KEY` as an environment variable in a cloud environment or Vercel Preview |
+| Real model output (inference) and its quality (understanding, findings, drafts) | **Not verified, and not possible yet**: no external AI provider is used (owner decision), and no self-hosted model exists. The path is `OWN_MODEL_PLAN.md` (phases 1–2) |
 | Real websites | **Not verified.** The sandbox cannot reach public websites |
 | Signed-in screens (`/app/business`, draft editing) in a browser | **Not verified.** Needs the Preview with test accounts |
 
@@ -105,12 +116,11 @@ marketing history via cards, workflows and the activity log.
 screen for reviewing facts (functions `review_business_fact` and `add_business_fact` exist and are tested).
 
 ## Model providers (§15)
-Provider-neutral interface; one development adapter (`providers/anthropic-dev.ts`, Claude Sonnet 5.5) used only
-with `MARKETING_MODEL_PROVIDER=anthropic-dev` and a key, never in Production. Every model output is validated
+Provider-neutral interface with **no adapter registered** (the Anthropic development adapter was removed Nov 25 2026; Something Clicks uses no hosted AI provider). The planned first adapter serves an open-weight model we host ourselves (`OWN_MODEL_PLAN.md`). Never in Production until released. Every model output is validated
 against its schema (one retry) and grounded by Something Clicks (`grounding.ts`) before it is stored. Model and
 token usage are recorded on each workflow and draft run.
 
-### Replacing or adding a provider (checked Nov 25; Preview runs `anthropic-dev`)
+### Adding a provider (the self-hosted adapter will be the first)
 Capabilities never import a provider: they receive a `ModelProvider` (`id`, `model`, `generate`) and ask for a schema-validated answer through `generateStructured`. To switch: (1) add `providers/<name>.ts` implementing `generate` (structured output, per-request timeout, no SDK retries, report tokens and refusals); (2) register it in `PROVIDERS` in `provider.ts`; (3) add its model's published prices to `pricing.ts` (an unpriced model is never called); (4) set `MARKETING_MODEL_PROVIDER=<name>` and its key. Nothing else changes: grounding, metering, caps, slots, deadlines, screening and every screen are provider-independent. Tests that prove it: an unknown provider id and a key alone activate nothing; Production never has a provider; the metering and deadline tests use a provider that is not Anthropic's adapter.
 
 ## Security (§16)
@@ -119,7 +129,7 @@ review of business facts and approvals and plans; website text and owner notes t
 and global model spend caps (see Cost control). Not built: alerting on spend, a customer-visible usage screen.
 
 ## Next, in order
-1. Live verification on Preview: `ANTHROPIC_API_KEY`, `MARKETING_MODEL_PROVIDER=anthropic-dev` and the four
+1. (Superseded: no external provider.) Deterministic path on real sites on Preview (no key needed); then `OWN_MODEL_PLAN.md` phases 1–2. Old text follows: `MARKETING_MODEL_PROVIDER` and the four
    switches (`FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY` = 1) on Preview only; run on 3–5 real
    sites with test accounts; review the outputs on `/admin/agent-review`, improve weak prompts and rules, repeat.
 2. More Content Creation: service page copy, FAQs, Google Business Profile posts (§8.1–8.2).

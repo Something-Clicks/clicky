@@ -8,6 +8,7 @@ import { log } from "@/lib/log";
 import { loadUnderstanding } from "@/lib/server/agent/context";
 import { meteredProvider, ModelBudgetExceeded } from "@/lib/server/agent/metering";
 import { createPlan, PlanRejected } from "@/lib/server/agent/modules/marketing-strategy";
+import { buildRulesPlan, RULES_MODEL, RULES_PROVIDER } from "@/lib/server/agent/modules/rules-strategy";
 import { getModelProvider, ModelOutputInvalid } from "@/lib/server/agent/provider";
 import { cardStage } from "@/lib/stages";
 import { createClient } from "@/lib/supabase/server";
@@ -22,17 +23,18 @@ const LEVEL = (v: string) => IMPACT[v as keyof typeof IMPACT] ?? 3;
 
 /**
  * Prepares a proposed marketing plan (Marketing Strategy), or a revised one when the owner adds notes.
- * Runs as the signed-in user; every model call is metered per business; nothing is applied: the plan
- * waits for the owner to approve or reject it.
+ * Runs as the signed-in user; nothing is applied: the plan waits for the owner to approve or reject it.
+ * With no model configured (today) the plan is built by fixed rules and free-text notes are not used; with a model,
+ * every call is metered per business.
  */
 export async function preparePlan(_prev: FormState, form: FormData): Promise<FormState> {
   const deadlineAt = Date.now() + REQUEST_DEADLINE_MS; // counted from the start of the request
   if (!FEATURES.strategy) return { error: "Plans aren't available yet." };
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };
-  const notes = String(form.get("notes") ?? "").trim().slice(0, 600) || null;
   const rawProvider = getModelProvider();
-  if (!rawProvider) return { error: "Plans aren't switched on yet." };
+  // Fixed rules cannot read free text: without a model, notes are ignored (and the screen does not offer them).
+  const notes = rawProvider ? String(form.get("notes") ?? "").trim().slice(0, 600) || null : null;
   const orgId = ws.organization.id;
 
   const supabase = await createClient();
@@ -48,7 +50,7 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
 
   const { data: rows } = await supabase
     .from("action_cards")
-    .select("id, title, why_it_matters, recommended_action, impact_priority, confidence, evidence_class, status, verification")
+    .select("id, check_key, title, why_it_matters, recommended_action, impact_priority, confidence, evidence_class, status, verification")
     .eq("organization_id", orgId)
     .in("status", ["new", "approved", "in_progress"])
     .limit(100);
@@ -71,24 +73,45 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
   }
 
   try {
-    const provider = meteredProvider(rawProvider, { db: supabase, orgId, capability: "marketing_strategy.plan" });
-    const result = await createPlan(provider, {
-      businessName: b.businessName,
-      serviceArea: b.serviceArea,
-      primaryGoal: b.primaryGoal,
-      known: understanding.known,
-      cards: open.map((c) => ({
-        id: c.id, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action,
-        impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown", stage: cardStage(c),
-      })),
-      ownerNotes: notes,
-      deadlineAt,
-    });
+    let stored: Json;
+    let by = { provider: RULES_PROVIDER, model: RULES_MODEL };
+    let summary = "rules";
+    if (rawProvider) {
+      const provider = meteredProvider(rawProvider, { db: supabase, orgId, capability: "marketing_strategy.plan" });
+      const result = await createPlan(provider, {
+        businessName: b.businessName,
+        serviceArea: b.serviceArea,
+        primaryGoal: b.primaryGoal,
+        known: understanding.known,
+        cards: open.map((c) => ({
+          id: c.id, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action,
+          impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown", stage: cardStage(c),
+        })),
+        ownerNotes: notes,
+        deadlineAt,
+      });
+      stored = result.plan as unknown as Json;
+      by = { provider: result.provider, model: result.model };
+      summary = `model priorities=${result.plan.priorities.length} dropped=${result.rejected.length}`;
+    } else {
+      const rules = buildRulesPlan({
+        businessName: b.businessName,
+        primaryGoal: b.primaryGoal,
+        missing: understanding.missing,
+        cards: open.map((c) => ({
+          id: c.id, check_key: c.check_key, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action,
+          impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown",
+        })),
+      });
+      if (!rules) throw new PlanRejected("no_open_actions");
+      stored = rules as unknown as Json;
+      summary = `rules priorities=${rules.priorities.length}`;
+    }
     const { error } = await supabase.rpc("save_marketing_plan", {
-      p_org: orgId, p_analysis: analysis.id, p_plan: result.plan as unknown as Json, p_provider: result.provider, p_model: result.model,
+      p_org: orgId, p_analysis: analysis.id, p_plan: stored, p_provider: by.provider, p_model: by.model,
     });
     if (error) throw new Error(`save_marketing_plan: ${error.message}`);
-    log.info("plan.proposed", { orgId, priorities: result.plan.priorities.length, dropped: result.rejected.length, revised: notes !== null, ...result.usage });
+    log.info("plan.proposed", { orgId, how: summary, revised: notes !== null });
   } catch (e) {
     log.error("plan.failed", { orgId, error: e });
     if (e instanceof ModelBudgetExceeded) return { error: "Planning has reached its usage limit for now. Please try again later." };

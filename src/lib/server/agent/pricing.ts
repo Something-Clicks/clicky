@@ -1,14 +1,18 @@
 /**
- * Published per-token prices for the models the Marketing Agent may call, used to compute the cost of
- * every call (model_usage.cost_micro). A model without a price here is never called: the agent refuses
- * rather than spend an unknown amount.
+ * Per-token prices for the models the Marketing Agent may call, used to compute the cost of every call
+ * (model_usage.cost_micro). A model without a price here is never called: the agent refuses rather than spend an
+ * unknown amount. There are no entries: Something Clicks uses no hosted provider. For a self-hosted model the price
+ * is its amortized GPU cost per million tokens at MEASURED utilization (OWN_MODEL_PLAN.md, section 4.4); it is added
+ * with the adapter, from a measurement, never guessed.
  *
- * Prices in US dollars per 1M tokens, from the provider's official pricing page.
- *   claude-sonnet-5-5: $2 input / $10 output (platform.claude.com/docs/en/about-claude/pricing, read Nov 25 2026)
+ * Prices in US dollars per 1M tokens.
  */
-const PRICES: Record<string, { input: number; output: number }> = {
-  "anthropic-dev/claude-sonnet-5-5": { input: 2, output: 10 },
-};
+const PRICES: Record<string, { input: number; output: number }> = {};
+
+/** An adapter (or a test) declares the measured price of the model it serves. */
+export function registerPrice(provider: string, model: string, price: { input: number; output: number }): void {
+  PRICES[`${provider}/${model}`] = price;
+}
 
 /** Cost in millionths of a dollar, or null if the model has no known price. */
 export function costMicro(provider: string, model: string, inputTokens: number, outputTokens: number): number | null {

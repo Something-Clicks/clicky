@@ -4,19 +4,14 @@ import { z } from "zod";
 
 import { log } from "@/lib/log";
 
-import { anthropicDevProvider } from "./providers/anthropic-dev";
 
 /**
  * Provider-neutral interface for language-model calls made by the marketing agent.
  *
- * STATUS: one temporary development adapter is registered ("anthropic-dev", Claude Sonnet 5.5).
- * It runs only when MARKETING_MODEL_PROVIDER=anthropic-dev and ANTHROPIC_API_KEY are set, and never
- * in Production. Otherwise `getModelProvider()` returns null and model-dependent capabilities report
- * themselves as blocked. There is no mock model. Replacing the provider means one new adapter file
- * and one entry in `PROVIDERS`.
- *
- * (The older Anthropic-specific code in ../ai.ts and ../drafts.ts stays dormant and unconfigured;
- * it is ported onto this interface once a provider is chosen.)
+ * STATUS: no adapter is registered, so `getModelProvider()` always returns null and every capability that needs a
+ * language model reports "blocked" (never placeholder output). Something Clicks does not use an external hosted AI
+ * provider (owner decision, Nov 25 2026; docs/agents/OWN_MODEL_PLAN.md). The planned adapter talks to an open-weight
+ * model that Something Clicks hosts itself. Adding one means one file in ./providers and one entry in PROVIDERS.
  *
  * Rules every adapter must keep:
  * - Server-side only; keys come from server environment variables, never NEXT_PUBLIC_.
@@ -73,7 +68,7 @@ export const MIN_ATTEMPT_MS = 12_000;
 
 export class ModelProviderNotConfigured extends Error {
   constructor() {
-    super("No model provider is configured. The provider decision is pending.");
+    super("No language model is available yet. Something Clicks uses no external AI provider; its own model hosting is not built yet.");
     this.name = "ModelProviderNotConfigured";
   }
 }
@@ -86,12 +81,10 @@ export class ModelOutputInvalid extends Error {
 }
 
 /**
- * Registered adapters. One temporary development adapter (see providers/anthropic-dev.ts); the
- * product's provider for customers is an owner decision and is not registered here.
+ * Registered adapters: none. A self-hosted adapter is the planned first entry (phase 1 of OWN_MODEL_PLAN.md).
+ * Tests register stand-ins explicitly to prove the checking rules; a stand-in is never evidence of model capability.
  */
-const PROVIDERS: Record<string, (env: Record<string, string | undefined>) => ModelProvider | null> = {
-  "anthropic-dev": (env) => anthropicDevProvider(env),
-};
+const PROVIDERS: Record<string, (env: Record<string, string | undefined>) => ModelProvider | null> = {};
 
 export const registeredProviders = () => Object.keys(PROVIDERS);
 

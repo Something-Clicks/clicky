@@ -16,7 +16,8 @@ Branch `claude/ecstatic-curie-9shvjf`; nothing is merged, deployed to Production
 
 **Two launch scopes (your decision):**
 - **Scope A: launch the product without the model features.** Website check with fixed, evidence-backed findings, accounts, free uses, $49 report, billing, owner approvals for the work that exists. The Marketing Agent's model features (business understanding, model findings, drafts, plan) stay off and hidden, and the live Privacy Policy stays true as written ("no AI service"). Needs only the items marked **[A]** below.
-- **Scope B: Scope A plus the Marketing Agent's model features.** Needs everything marked **[A]** and **[B]**, and the agent must first meet the written quality standard on real sites (`docs/agents/EVALUATION.md`). Releasing is a code change plus your approval.
+- **Scope B: Scope A plus the Marketing Agent's model features.** Needs everything marked **[A]** and **[B]**, a self-hosted model (no external AI provider: `docs/agents/OWN_MODEL_PLAN.md`, phases 1–3), and the written quality standard met on real sites (`docs/agents/EVALUATION.md`). Releasing is a code change plus your approval.
+- **Independence decision (Nov 25):** no Anthropic or other hosted AI, ever. There is no AI key to add and none is a blocker. What runs with no model today: website checks, ranking, Action Cards, approvals, the structured business profile and a rules-based plan (fixed rules, not AI).
 
 ### 1. Completed and verified
 Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
@@ -26,14 +27,16 @@ Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
 - **Server key through the real stack (clicky-dev API, Nov 25):** a signed-in customer calling the model-storing function with no header or a wrong header gets 403 `agent_key`; the server's real key works; reserving without the key and writing usage rows directly are refused.
 - **Agent screens in a real browser** (app running locally against clicky-dev, fixtures written by SQL, no model): Your plan, Business details, internal agent review, owner vs member vs admin, hidden in Production mode, 390 px and desktop, axe 0. `tests/e2e/agent-screens.spec.ts`.
 - **Local checks (re-run Nov 25 after the final-review fixes):** lint, types, 237 unit tests, 182 database tests (local Postgres), production build. The build needs the three `NEXT_PUBLIC_*` variables; without them it stops on `/app` prerender ("Supabase is not configured"), which is the environment, not a code fault (built here with clearly fake placeholder values).
-- **Final-review fixes (this pass):** the weekly worker now isolates one business crashing (that analysis is failed, the next still runs) and starts no new business after 150 s of its 300 s limit (4 unit tests, `tests/unit/cron.test.ts`; overlapping runs were already safe: `start_analysis` locks the business and refuses a second running check); a draft whose setup fails after it starts now closes its run instead of leaving the action "being prepared" for 10 minutes; Home now shows why a check failed (it used to look like a fresh start), always links to Business details for owners (it was unreachable on a phone once everything was confirmed), and the plan button says it can take up to a minute.
+- **Independence change (Nov 25):** Anthropic removed (adapter, SDK, legacy wording/draft code, hosted-API benchmark harness, price entry, variables); provider registry empty and tested (no key or setting enables a model; no source imports a hosted-AI SDK); structured website data, quoted trust statements and a rules-based plan added with unit and database tests; `OWN_MODEL_PLAN.md` written. 221 unit and 184 database tests pass; build passes.
+- **Final-review fixes (earlier this pass):** the weekly worker now isolates one business crashing (that analysis is failed, the next still runs) and starts no new business after 150 s of its 300 s limit (4 unit tests, `tests/unit/cron.test.ts`; overlapping runs were already safe: `start_analysis` locks the business and refuses a second running check); a draft whose setup fails after it starts now closes its run instead of leaving the action "being prepared" for 10 minutes; Home now shows why a check failed (it used to look like a fresh start), always links to Business details for owners (it was unreachable on a phone once everything was confirmed), and the plan button says it can take up to a minute.
 - **Test accounts are disabled (clicky-dev, read-only check Nov 25):** all 12 `@e2e.test` users have `banned_until` set 100 years ahead, none active.
 - **Cost control and admission limits by simulation:** metering unit tests (reserve before the call, settle after, fail closed), deadline test.
 
 ### 2. Implemented but not verified
 - **That a disabled test account is refused by Supabase Auth.** The database state is verified (above), but no sign-in attempt was made (needs a test password and re-enabling nothing). A ban stops new sign-ins and token refresh; an access token already issued stays valid until it expires (about an hour). **[A]**
 - **Customer screens in a real browser after this pass's Home changes** (typed and unit-checked; the browser tests need the e2e accounts re-enabled in clicky-dev, which was not done). The nine-step walk was a code and copy review, not a browser run. **[B]**
-- **The real model's output (everything model-written: business understanding, findings, drafts, plans).** Never run; no Anthropic key on Preview and the sandbox cannot reach public sites. Verified only with test doubles and hand-written examples, which prove the checking rules, not usefulness. **[B]**
+- **Any real language-model output (language understanding, model findings, drafts, wording).** *Model inference verified: no. Model quality verified: no.* No model exists to run (no external provider; the self-hosted one is planned, `OWN_MODEL_PLAN.md`). The checking rules around a model are tested only with test doubles, which prove the rules, not capability. **[B]**
+- **The deterministic agent on real websites** (schema.org extraction, quoted trust statements, rules-based plan): *functionality verified* on fixtures and in the database; never run on a real site or in a browser yet. Needs no model and no key; run it on 3–5 permissioned sites on Preview. **[A/B]**
 - Home-page pointers to "details to check" and "your plan" (added Nov 25; unit/type checked, not yet in a browser run). **[B]**
 - Real website scan (only fixture HTML so far), plain-words scan failure messages against real failing sites. **[A]**
 - Real email: save-this → link → claim; sign-in and password-reset emails (Resend not run). **[A]**
@@ -45,11 +48,11 @@ Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
 ### 3. Waiting for your action (I never ask for secrets in chat)
 **Preview variables, branch `claude/ecstatic-curie-9shvjf` (names only, checked through the Vercel API Nov 25; values never read):**
 - *Already configured:* `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `BILLING_WEBHOOK_KEY`, `SITE_SERVER_KEY`, `STRIPE_WEBHOOK_SECRET`, `MODEL_USAGE_KEY`, `MARKETING_MODEL_PROVIDER`, `FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY`, `FREE_PREVIEW_ENABLED`.
-- *Missing, needs you:* **`ANTHROPIC_API_KEY`** (blocks all real-model work), `STRIPE_SECRET_KEY` (test), `SUPABASE_SECRET_KEY`.
+- *Missing, needs you:* `STRIPE_SECRET_KEY` (test), `SUPABASE_SECRET_KEY`. **No AI key is needed or wanted.** Optional cleanup: delete the now-unused Preview variable `MARKETING_MODEL_PROVIDER` (it names an adapter that no longer exists; harmless).
 - *Missing, optional:* `PAGESPEED_API_KEY`, `RESEND_API_KEY` + `EMAIL_FROM`, GA4/Clarity ids. `CRON_SECRET` is Production-only by design (Vercel runs crons only in Production).
 - Production holds only the Scope A names (no `ANTHROPIC_*`, `MARKETING_*`, `FEATURE_*`, `MODEL_USAGE_KEY`), as intended. Nothing was changed.
-1. **`ANTHROPIC_API_KEY`**: Vercel → `something-clicks` → Settings → Environment Variables → Add New; Sensitive; Environment: Preview; Git branch `claude/ecstatic-curie-9shvjf`; set a monthly spend limit in the Anthropic console first. Then redeploy the branch. (Already set by me: `MARKETING_MODEL_PROVIDER`, `MODEL_USAGE_KEY`, the four `FEATURE_*`.) **[B]**
-2. **Choose and run 3–5 real small-business sites** (yours or with permission) through Preview following `docs/agents/EVALUATION.md` section 3; tell me the business names. I then read the results from clicky-dev, compare them with the live sites, fix, and repeat until the written standard is met. **[B]**
+1. **Decisions in `docs/agents/OWN_MODEL_PLAN.md` section 8**: approve phase 1 (self-hosted adapter, rented GPU budget) or stay deterministic-only for now; approve the candidate rules; approve a consent approach before any customer data is used for adaptation. Development continues without them. **[B]**
+2. **Choose 3–5 real small-business sites** (yours or with permission) and run them through Preview (`docs/agents/EVALUATION.md` section 3); tell me the business names. Without a model this tests the deterministic agent (profile extraction, ranking, rules-based plan); it cannot validate any model-written output. **[A/B]**
 3. **`STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY`** on the same Preview branch (INTEGRATIONS: "Preview: two values only you can add"); plus optionally `PAGESPEED_API_KEY`. **[A]**
 4. **Attorney review** of `/privacy` and `/terms`. For Scope B also `docs/launch/LEGAL_AI_DRAFT.md` (the AI wording and the provider's data terms to confirm). **[A], [B]**
 5. **Approve the Production migrations and variables** (group 4, items 1–2) and, separately, the merge and deploy. **[A]**
@@ -67,8 +70,8 @@ Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
 4. Error monitoring: Vercel runtime logs only today (structured `log.*` lines, no secrets). Decide whether to add alerting (Vercel log drain or an error service) before launch, or accept manual log checks for the first weeks.
 **[B] Scope B (in addition)**
 5. Real-model evaluation meeting the written quality standard in two consecutive rounds (group 3, items 1–2).
-6. Final Opus review of the whole system after the real-model fixes (the Phase 2 hardening review is done).
-7. Attorney-approved AI wording published in the same release as the model features; Anthropic data terms confirmed.
+6. Final independent review of the whole system after a self-hosted model exists and is evaluated (the Phase 2 hardening review is done).
+7. Attorney-approved wording for the self-hosted model (processor named; no customer data used for training without consent) published in the same release as any model feature.
 8. In Production: generate a separate `MODEL_USAGE_KEY`, store its hash, set `agent_functions_enabled` = 1 and the `FEATURE_*` switches (code change and your approval), keep `agent_review_enabled` = 0 (the admin review page stays a development tool).
 
 ### 5. Post-launch improvements (not needed to launch)
@@ -97,7 +100,7 @@ Supabase holds all customer data. Daily backups exist on paid plans; **point-in-
 - **First result with a real site:** only fixture HTML scanned so far (the sandbox has no public internet). Needs the real scan (group 4: hosts and sites).
 - **Save this email → link → claim:** database and routes verified; **the real email was never sent or opened**, so `/auth/confirm` with a real Supabase link and the email templates are unverified.
 - **Webhook delivery:** Stripe's real events were re-sent to a local route (stand-in). Real delivery needs your local Stripe CLI run (INTEGRATIONS, "Webhook testing: local Stripe CLI").
-- **Drafts and model wording:** output handling is unit-tested with a stub client. **No real model call has been made**: no Anthropic key reached this environment.
+- **Drafts and model wording:** output handling is unit-tested with a stub client. **No real model call has been made and none is planned against a hosted provider.**
 - **Model-output safeguards added this round** (shared leak/jargon guard, plain draft errors, every template fallback logged with its reason, "AI-worded" only when every card has the model's words; also fixed a filter that let "40%" and "#1" through). Unit-tested only.
 - **Real iPhone / Safari / WebKit** (the 10-step checklist below is yours to run; WebKit could not be installed here).
 - **Resend** sending and the weekly worker: not run.
@@ -110,11 +113,11 @@ Supabase holds all customer data. Daily backups exist on paid plans; **point-in-
 
 ### 4. Still requiring external configuration
 See "Needs from me" in the latest report and INTEGRATIONS. Open items, with the exact thing needed:
-- **Network and credentials do not match your description.** The live environment shows only `ofstvbgaoznipsiqbjjp.supabase.co` allowed, and only the Stripe and Vercel credentials. Missing here: Anthropic, PageSpeed and Resend credentials; hosts `api.resend.com`, `checkout.stripe.com`, `billing.stripe.com`, `cdn.playwright.dev`, the preview host, and the scan sites. The tool accepts exact host names (no wildcards): the preview needs `something-clicks-git-claude-94123f-matt-hills-projects-54d303a1.vercel.app`.
+- **Network and credentials do not match your description.** The live environment shows only `ofstvbgaoznipsiqbjjp.supabase.co` allowed, and only the Stripe and Vercel credentials. Missing here: PageSpeed and Resend credentials; hosts `api.resend.com`, `checkout.stripe.com`, `billing.stripe.com`, `cdn.playwright.dev`, the preview host, and the scan sites. The tool accepts exact host names (no wildcards): the preview needs `something-clicks-git-claude-94123f-matt-hills-projects-54d303a1.vercel.app`.
 - **Scan sites** (3–4 real public sites incl. slow, redirecting, JavaScript-heavy, bot-blocking, invalid) and a **test email address you control**.
 - **Resend sending domain** name and its verified status.
 - **Stripe TEST customer portal:** Stripe's API shows **0 portal configurations** in this TEST account, so it is not activated here (check the account and mode).
-- **Preview secrets** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` on this branch, plus `ANTHROPIC_API_KEY`, `PAGESPEED_API_KEY`, and Resend values if previews should use them.
+- **Preview secrets** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` on this branch, plus `PAGESPEED_API_KEY`, and Resend values if previews should use them.
 - **Your local Stripe CLI run** and, at that step only, the local-key hash swap (Vercel Preview values must be updated to match).
 - **Stripe TEST webhook endpoints:** decision pending (see below); no change made.
 - **Dashboard confirmation:** delivery attempts for the 24 failed production events (Stripe Dashboard → Developers → Webhooks → endpoint → Event deliveries).
@@ -142,7 +145,7 @@ See "Needs from me" in the latest report and INTEGRATIONS. Open items, with the 
 - **`main`:** still the single "Initial commit" `9b14f91` (`README.md`, `.gitignore`). `063cca4` is 19 commits ahead of it (146 files added, 2 modified, ~15,260 lines). Production is **not** running `main`.
 - **Intended for Preview only?** No. `063cca4` is the finished Phase 7 app that docs/LAUNCH.md says was deployed to production from the branch on purpose. None of the launch-redesign features exist in it (no free first result, claim flow, `FREE_PREVIEW_ENABLED`, new pricing): it still shows Diagnostic Audit $39, Starter AI $49, Growth AI $149, Scale & Automation $399.
 - **Database match:** production Supabase has exactly the 7 migrations that `063cca4` expects and none of the launch objects; 0 users, businesses and subscriptions. No mismatch today. **The mismatch risk is in the future:** merging this branch into `main` (which auto-deploys Production) would ship code that calls launch-migration functions, so the migration must be applied first (go-live runbook step 1).
-- **Production variables the code reads but are not set:** `STRIPE_SECRET_KEY` (checkout says "isn't switched on yet"), `ANTHROPIC_API_KEY` (template wording, drafts off), `PAGESPEED_API_KEY`, `SUPABASE_SECRET_KEY` (the daily cron answers 503 "Worker not configured"), `EMAIL_FROM` (with it unset, `RESEND_API_KEY` alone sends nothing), `EMAIL_REPLY_TO`, `STRIPE_ALLOW_LIVE`.
+- **Production variables the code reads but are not set:** `STRIPE_SECRET_KEY` (checkout says "isn't switched on yet"), `PAGESPEED_API_KEY`, `SUPABASE_SECRET_KEY` (the daily cron answers 503 "Worker not configured"), `EMAIL_FROM` (with it unset, `RESEND_API_KEY` alone sends nothing), `EMAIL_REPLY_TO`, `STRIPE_ALLOW_LIVE`.
 - **Production webhook log:** `integration_events` holds 32 rows. 8 are from the Nov 19 verification (3 processed, 5 failed). **24 failed rows were recorded Nov 24 02:25–02:33 UTC, caused by the journey tests**: the TEST Stripe account has two endpoints that point at production, so Stripe delivered my test subscriptions' events there. They failed safely (`Stripe is not configured`; no such businesses exist in production; nothing granted) but they are production rows that testing caused, and Stripe may keep retrying for up to three days.
 - **Risks:** a push or merge to `main` deploys to Production; the production-branch setting and what is live disagree; the old TEST endpoints keep sending test events to production.
 - **Recommendation (no action taken):** leave Production as is (no rollback needed); disable the two production-pointing TEST webhook endpoints in Stripe; set `EMAIL_FROM`; before any merge, get approval to apply the launch migration to production, set the Production variables, then merge. Optionally make `main` match what is live first (a fast-forward of `main` to `063cca4`), which triggers a production build of identical code and needs your approval.
@@ -160,7 +163,7 @@ Branch-scoped Preview variables for this branch point at clicky-dev and Stripe T
 | `BILLING_WEBHOOK_KEY` (sensitive) | generated new for dev; only its hash is in clicky-dev |
 | `STRIPE_WEBHOOK_SECRET` (sensitive) | signing secret of TEST endpoint `we_1Uf9ApFnFMCbDhHEbQoz3sYP` (preview URL) |
 
-**Not added (needs you; I never see secret values):** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` (clicky-dev) — see INTEGRATIONS "Preview: two values only you can add". Not added on purpose: GA4, Clarity, Resend, cron, Anthropic, PageSpeed, any live Stripe value. This branch no longer has a `CRON_SECRET` (it only existed as a shared Production row).
+**Not added (needs you; I never see secret values):** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` (clicky-dev) — see INTEGRATIONS "Preview: two values only you can add". Not added on purpose: GA4, Clarity, Resend, cron, PageSpeed, any live Stripe value. This branch no longer has a `CRON_SECRET` (it only existed as a shared Production row).
 
 ## Marketing Agent screens (clicky-dev, no model)
 1. Seed the e2e users (below), then write the fixtures: in the clicky-dev SQL editor run `set app.allow_e2e_seed = 'on';` then `tests/e2e/agent-seed.sql` (it re-enables `pat-d`, `other-d`, `admin-d`; re-run it to reset).
@@ -189,7 +192,7 @@ Do these in order. Stop if any check fails.
 - Store the server-key hash in production (INTEGRATIONS S2) with a **new** production `SITE_SERVER_KEY` (not the dev one).
 
 **2. Add Production variables** (Vercel → Settings → Environment Variables, Production only; names only here)
-`SITE_SERVER_KEY` (new) · `STRIPE_SECRET_KEY` (test key first) · `SUPABASE_SECRET_KEY` · `ANTHROPIC_API_KEY` · `PAGESPEED_API_KEY` · `EMAIL_FROM` (+ optional `EMAIL_REPLY_TO`) · `NEXT_PUBLIC_GA_MEASUREMENT_ID` · `NEXT_PUBLIC_CLARITY_PROJECT_ID`. Already set: `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `BILLING_WEBHOOK_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, `STRIPE_WEBHOOK_SECRET`. **Do not** set `FREE_PREVIEW_ENABLED` or `STRIPE_ALLOW_LIVE` yet.
+`SITE_SERVER_KEY` (new) · `STRIPE_SECRET_KEY` (test key first) · `SUPABASE_SECRET_KEY` · `PAGESPEED_API_KEY` · `EMAIL_FROM` (+ optional `EMAIL_REPLY_TO`) · `NEXT_PUBLIC_GA_MEASUREMENT_ID` · `NEXT_PUBLIC_CLARITY_PROJECT_ID`. Already set: `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `BILLING_WEBHOOK_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, `STRIPE_WEBHOOK_SECRET`. **Do not** set `FREE_PREVIEW_ENABLED` or `STRIPE_ALLOW_LIVE` yet.
 Production Supabase dashboard: URL configuration, email templates, Resend SMTP, leaked-password protection, Pro plan (INTEGRATIONS S3–S6, S8). Resend domain DNS verified.
 
 **3. Merge and deploy**
