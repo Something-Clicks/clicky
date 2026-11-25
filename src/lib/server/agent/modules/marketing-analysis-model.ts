@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { KnownFact } from "./business-intelligence";
-import { claimProblemIn, findQuote, pagesForModel, UNTRUSTED_CONTENT_RULE, unsupportedNumbers, type SourcePage } from "../grounding";
+import { claimProblemIn, findQuote, genericPhraseIn, pagesForModel, UNTRUSTED_CONTENT_RULE, unsupportedNumbers, type SourcePage } from "../grounding";
 import { generateStructured, type ModelProvider, type ModelUsage } from "../provider";
 
 /**
@@ -83,6 +83,10 @@ export function groundFindings(raw: ModelFindingOutput[], pages: SourcePage[], a
     }
     if (texts.some((t) => unsupportedNumbers(t, source).length)) {
       reject("figure_not_in_source");
+      continue;
+    }
+    if (texts.some(genericPhraseIn)) {
+      reject("generic_advice");
       continue;
     }
     if (already.has(f.title.toLowerCase())) {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { claimProblemIn, unsupportedNumbers } from "../grounding";
+import { claimProblemIn, genericPhraseIn, unsupportedNumbers } from "../grounding";
 import { generateStructured, type ModelProvider, type ModelUsage } from "../provider";
 import type { KnownFact } from "./business-intelligence";
 
@@ -13,7 +13,8 @@ import type { KnownFact } from "./business-intelligence";
  *  - every priority must point at one of the open actions it was given (by short reference, never an
  *    id the model could invent); unknown or repeated references are dropped;
  *  - order and dependencies are normalised (a dependency must come earlier in the plan);
- *  - no figures that are not in the supplied material, and no promises (rankings, guarantees, results);
+ *  - no figures that are not in the supplied material, no promises (rankings, guarantees, results), and no
+ *    generic advice that would fit any business (dropped, and recorded in `rejected`);
  *  - "based on" references must be details the business actually has;
  *  - a plan with no usable priority, or an unusable summary, is refused whole.
  * The plan is saved as a proposal (save_marketing_plan); only the owner approves it. Approval means
@@ -128,7 +129,7 @@ export function groundPlan(raw: PlanOutput, input: Pick<PlanInput, "businessName
     ...input.known.map((k) => k.value),
     ...cards.flatMap((c) => [c.title, c.why_it_matters, c.recommended_action]),
   ].join("\n");
-  const textProblem = (t: string) => claimProblemIn(t) ?? (unsupportedNumbers(t, source).length ? "figure_not_in_source" : null);
+  const textProblem = (t: string) => claimProblemIn(t) ?? (unsupportedNumbers(t, source).length ? "figure_not_in_source" : null) ?? (genericPhraseIn(t) ? "generic_advice" : null);
   const basedOn = (names: string[]) => [...new Set(names.map((n) => n.trim()).filter((n) => fieldNames.has(n)))].slice(0, 6);
 
   const summary = clean(raw.summary, 600);

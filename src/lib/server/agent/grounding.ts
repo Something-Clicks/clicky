@@ -48,6 +48,22 @@ export function claimProblemIn(text: string): string | null {
   return null;
 }
 
+/**
+ * Advice that would fit any business. A match means the text says nothing specific to this business, so
+ * generated findings and plan items containing one are dropped, and the quality screening flags it.
+ */
+export const GENERIC_PHRASES = [
+  "improve your seo", "optimize your seo", "optimise your seo", "post on social media", "post regularly", "build your brand", "brand awareness",
+  "high quality content", "high-quality content", "engage with your audience", "stay consistent", "leverage", "synergy", "digital presence",
+  "online presence", "target audience", "create valuable content", "content is king", "best practices", "take your business to the next level",
+  "increase your visibility", "drive traffic", "grow your business",
+] as const;
+
+export function genericPhraseIn(text: string): string | null {
+  const t = text.toLowerCase();
+  return GENERIC_PHRASES.find((p) => t.includes(p)) ?? null;
+}
+
 /** Page material in the shape the model sees: website content fenced as data. */
 export function pagesForModel(pages: SourcePage[]): string {
   return pages.map((p) => `<website_content key="${p.key}" url="${p.url}">\n${p.text}\n</website_content>`).join("\n");

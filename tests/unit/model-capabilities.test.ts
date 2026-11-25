@@ -159,6 +159,7 @@ describe("Marketing Analysis: grounding model findings", () => {
       finding({ slug: "d", basis: "" }),
     ], pages, []);
     expect(r.rejected.map((x) => x.reason)).toEqual(["figure_not_in_source", "promise", "quote_not_found", "basis_missing"]);
+    expect(groundFindings([finding({ recommended_action: "Leverage best practices to improve your SEO." })], pages, []).rejected.map((x) => x.reason)).toEqual(["generic_advice"]);
     expect(groundFindings([finding({ title: "Add a page title" })], pages, ["Add a page title"]).rejected.map((x) => x.reason)).toEqual(["duplicate_of_check"]);
     expect(groundFindings(Array.from({ length: 7 }, (_, i) => finding({ slug: `s${i}` })), pages, []).cards).toHaveLength(5);
     expect(r.cards).toEqual([expect.objectContaining({ check_key: "model.f", evidence_class: "estimated", execution_type: "manual", evidence_keys: [] })]);

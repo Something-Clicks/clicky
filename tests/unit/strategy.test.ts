@@ -75,6 +75,18 @@ describe("groundPlan", () => {
     expect(bad.rejected.map((r) => r.reason).sort()).toEqual(["figure_not_in_source", "figure_not_in_source", "promise", "promise", "promise"]);
   });
 
+  it("drops generic advice that would fit any business", () => {
+    const { plan: p, rejected } = groundPlan(plan({
+      objectives: [{ objective: "Build your brand online", based_on: [] }, { objective: "Make booking a drain cleaning obvious", based_on: [] }],
+      priorities: [prio("a1", 1, { why_now: "Leverage best practices to grow." }), prio("a2", 2)],
+      next_steps: ["Post on social media daily.", "Add your phone number to the homepage heading."],
+    }), input, cards);
+    expect(p.objectives.map((o) => o.objective)).toEqual(["Make booking a drain cleaning obvious"]);
+    expect(p.priorities.map((x) => x.card_id)).toEqual(["id-cta"]);
+    expect(p.next_steps).toEqual(["Add your phone number to the homepage heading."]);
+    expect(rejected.map((r) => r.reason)).toEqual(["generic_advice", "generic_advice", "generic_advice"]);
+  });
+
   it("allows figures that come from the business's own material", () => {
     const withNumbers = [{ ...cardsIn[0]!, why_it_matters: "Your title shows within 60 characters." }];
     const { plan: p, rejected } = groundPlan(plan({ priorities: [prio("a1", 1, { why_now: "Keep it within 60 characters." })], not_now: [] }), input, withRefs(withNumbers));

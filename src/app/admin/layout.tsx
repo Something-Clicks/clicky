@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { signOut } from "@/app/actions/auth";
+import { releaseAllowed } from "@/config/features";
 import { Shell } from "@/components/shell";
 import { requirePlatformAdmin } from "@/lib/auth";
 
@@ -17,6 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: "/admin", label: "Overview", exact: true },
             { href: "/admin/funnel", label: "Funnel and feedback" },
             { href: "/admin/agent-runs", label: "Draft runs" },
+            ...(releaseAllowed() ? [{ href: "/admin/agent-review", label: "Agent review" }] : []),
           ],
         },
         { label: "Customer app", items: [{ href: "/app", label: "Back to workspace" }] },
