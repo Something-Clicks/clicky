@@ -40,7 +40,7 @@ export function unsupportedNumbers(text: string, source: string): string[] {
 }
 
 /** Promises and claims Something Clicks never makes on a business's behalf. */
-const PROMISES = /\b(guarantee[ds]?|guaranteed|number one|best in (town|the city|the state)|rank (first|higher|#\s?1)|award[- ]winning|double your|triple your|#\s?1\b)/i;
+const PROMISES = /\b(guarantee[ds]?|guaranteed|number one|best in (town|the city|the state)|rank (first|higher|#\s?1)|award[- ]winning|double your|triple your)\b|#\s?1\b/i;
 
 export function claimProblemIn(text: string): string | null {
   if (leaksSystemText(text)) return "system_text";

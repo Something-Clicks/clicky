@@ -34,8 +34,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <Shell
       groups={[
-        // "Business details" appears only where the businessProfile switch is on (never in Production).
-        { label: workspace.business?.businessName ?? "Your business", items: FEATURES.businessProfile ? [...NAV.slice(0, 3), { href: "/app/business", label: "Business details" }, ...NAV.slice(3)] : NAV },
+        // "Business details" and "Your plan" appear only where their switches are on (never in Production).
+        { label: workspace.business?.businessName ?? "Your business", items: [...NAV.slice(0, 3), ...(FEATURES.businessProfile ? [{ href: "/app/business", label: "Business details" }] : []), ...(FEATURES.strategy ? [{ href: "/app/plan", label: "Your plan" }] : []), ...NAV.slice(3)] },
         ...(isAdmin === true ? [{ label: "Platform", items: [{ href: "/admin", label: "Admin" }] }] : []),
       ]}
       tabs={TABS}

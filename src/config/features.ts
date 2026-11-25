@@ -9,6 +9,8 @@
  *                     approves a version.
  *   businessProfile - the owner's "Business details" screen: review what the Marketing Agent learned.
  *   modelFindings   - model-assisted Marketing Analysis findings shown as Action Cards.
+ *   strategy        - Marketing Strategy: a proposed plan (objectives, ordered priorities, next steps) the
+ *                     owner reviews, revises, approves or rejects.
  *
  * Server-only: read these in server components and server actions, and pass plain booleans to client
  * components (client bundles never see these variables, so they would always read false).
@@ -26,5 +28,8 @@ export const FEATURES = {
   },
   get modelFindings() {
     return on("MODEL_FINDINGS");
+  },
+  get strategy() {
+    return on("STRATEGY");
   },
 };

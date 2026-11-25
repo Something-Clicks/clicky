@@ -56,7 +56,7 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
   },
   marketing_strategy: {
     id: "marketing_strategy", label: "Marketing Strategy", runsOn: "model",
-    today: "Not available: needs a model provider.",
+    today: "A proposed plan from the business understanding and the open findings: objectives, ordered priorities tied to real actions, next steps and questions for the owner; the owner revises, approves or rejects it (behind a switch, development and Preview). Market research is not connected, so the plan uses only the business's own details and website findings.",
   },
   content_creation: {
     id: "content_creation", label: "Content Creation", runsOn: "model",

@@ -311,6 +311,20 @@ export type Database = {
       >;
       platform_admins: Table<{ granted_at: string; note: string | null; user_id: string }, "user_id">;
       profiles: Table<{ created_at: string; full_name: string | null; id: string; updated_at: string }, "id">;
+      model_usage: Table<
+        {
+          id: string; organization_id: string; capability: string; provider: string; model: string; input_tokens: number; output_tokens: number;
+          cost_micro: number; outcome: string; workflow_id: string | null; agent_run_id: string | null; created_at: string;
+        },
+        "organization_id" | "capability" | "provider" | "model" | "input_tokens" | "output_tokens" | "cost_micro" | "outcome"
+      >;
+      marketing_plans: Table<
+        {
+          id: string; organization_id: string; analysis_id: string | null; plan: Json; status: string; provider: string | null; model: string | null;
+          created_by: string | null; decided_by: string | null; decided_at: string | null; created_at: string;
+        },
+        "organization_id" | "plan"
+      >;
     };
     Views: { [_ in never]: never };
     Functions: {

@@ -23,8 +23,9 @@ import { generateStructured, type ModelProvider, type ModelUsage } from "../prov
 /** Profile fields the model may propose. Contact details come from deterministic extraction instead. */
 export const MODEL_FIELDS = [
   "what_it_does", "industry", "business_model", "service", "product", "location", "pricing", "competitive_advantage",
-  "value_proposition", "key_message", "voice", "tone",
-  "audience", "customer_problem", "motivation", "customer_question",
+  "trust_signal", "price_positioning",
+  "value_proposition", "key_message", "voice", "tone", "positioning",
+  "audience", "customer_problem", "motivation", "customer_question", "objection", "decision_factor",
 ] as const satisfies readonly FactField[];
 
 const ModelFact = z
@@ -46,17 +47,17 @@ const SYSTEM = `You are the Business Intelligence capability of the Something Cl
 ${UNTRUSTED_CONTENT_RULE}
 
 Record facts for these fields only (category: fields):
-- business: what_it_does (one plain sentence), industry, business_model, service (one per service), product (one per product), location, pricing (only prices stated on the site), competitive_advantage
-- brand: value_proposition, key_message, voice, tone
-- customer: audience (one per group), customer_problem, motivation, customer_question
+- business: what_it_does (one plain sentence), industry, business_model, service (one per service), product (one per product), location, pricing (only prices stated on the site), competitive_advantage, trust_signal (one per reason a customer could trust the business that the site itself shows: reviews or testimonials, licences, certifications, years in business, named clients, policies, photos of real work; say "The site shows..." or "The site states...", quote the words), price_positioning (budget, mid-range, premium or unclear, only as an inference from quoted wording such as prices, "affordable", "luxury", financing offers; basis required)
+- brand: value_proposition, key_message, voice, tone, positioning (how the business sets itself apart from alternatives, in the site's own terms; never name competitors that the site does not name; basis required)
+- customer: audience (one per group), customer_problem, motivation, customer_question, objection (a likely hesitation a buyer has, only when the site answers or addresses it, for example a pricing, trust, timing or process concern; quote the passage that addresses it), decision_factor (what the site suggests customers weigh when choosing, such as speed, price, local presence or expertise; quote and give the basis)
 
 For every fact:
 - quotes: copy exact words from the page you cite (page_key is the key attribute). Quote enough to show the fact (a phrase or sentence), never paraphrase inside a quote.
 - evidence_class: "verified" when the quote states the fact directly; "inferred" when the fact is a reasonable interpretation of the quotes (say how in basis); "estimated" only for an approximate judgment with its assumptions in basis; "unknown" when the website does not say (value empty, no quotes).
 - Never invent services, prices, years, awards, reviews, certifications, guarantees, locations or audiences. If the site does not say it, use "unknown" or leave it out.
 - Brand voice and tone describe how the site's own text sounds, inferred from quotes.
-- Plain, short values a business owner would recognise. At most 8 services, 4 audiences, 25 facts in total.
-Always include what_it_does, audience and value_proposition, as "unknown" if the site does not support them.`;
+- Plain, short values a business owner would recognise. At most 8 services, 4 audiences, 5 trust signals, 4 objections, 30 facts in total.
+Always include what_it_does, audience, value_proposition, positioning, trust_signal and price_positioning, as "unknown" if the site does not support them. An honest "unknown" is more useful than a guess: customers' objections and decision factors are never to be guessed from general knowledge of the industry.`;
 
 export function sourcePages(scan: SiteScan): SourcePage[] {
   const pages: PageFacts[] = [scan.homepage, ...scan.pages];
@@ -85,7 +86,7 @@ export function groundFacts(raw: ModelFactOutput[], pages: SourcePage[]): Ground
   const rejected: GroundingResult["rejected"] = [];
   const seen = new Set<string>();
   const source = pages.map((p) => p.text).join("\n");
-  for (const f of raw.slice(0, 25)) {
+  for (const f of raw.slice(0, 30)) {
     const reject = (reason: string) => rejected.push({ field: f.field, value: f.value, reason });
     if (!categoryOk(f.category, f.field)) {
       reject("wrong_category");
@@ -105,16 +106,19 @@ export function groundFacts(raw: ModelFactOutput[], pages: SourcePage[]): Ground
       reject("empty_value");
       continue;
     }
-    const claim = claimProblemIn(value);
-    if (claim) {
-      reject(claim);
-      continue;
-    }
     const evidence = f.quotes
       .map((q) => ({ q, page: findQuote(pages, q.page_key, q.quote) }))
       .filter((x) => x.page)
       .slice(0, 5)
       .map(({ q, page }) => ({ kind: "observed" as const, url: page!.url, excerpt: q.quote.trim().slice(0, 300) }));
+    // Promise words are refused in anything the agent states, except a trust signal that reports what the
+    // site itself says (the same words appear in a quote that was found on the page).
+    const claim = claimProblemIn(value);
+    const reportsSiteClaim = claim === "promise" && f.field === "trust_signal" && evidence.some((e) => e.excerpt && claimProblemIn(e.excerpt) === "promise");
+    if (claim && !reportsSiteClaim) {
+      reject(claim);
+      continue;
+    }
     const figures = unsupportedNumbers(value, source);
     if (figures.length) {
       reject("figure_not_in_source");

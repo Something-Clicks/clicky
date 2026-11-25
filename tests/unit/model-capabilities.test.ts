@@ -39,6 +39,41 @@ const fact = (over: Partial<ModelFactOutput>): ModelFactOutput => ({
   quotes: [{ page_key: "page0", quote: "We clear drains" }], ...over,
 });
 
+describe("deeper business understanding (grounding of positioning, trust, price, objections)", () => {
+  const trust = (over: Partial<ModelFactOutput>) => fact({ field: "trust_signal", value: "The site states it has been family owned since 2009", quotes: [{ page_key: "page0", quote: "Family owned since 2009" }], ...over });
+
+  it("keeps trust signals and positioning that quote the page, with the basis for inferences", () => {
+    const r = groundFacts([
+      trust({}),
+      fact({ category: "brand", field: "positioning", value: "A local, family-run alternative for home plumbing", evidence_class: "inferred", basis: "Stresses family ownership and local service.", quotes: [{ page_key: "page0", quote: "Family owned since 2009" }] }),
+      fact({ category: "customer", field: "decision_factor", value: "Reliability", evidence_class: "inferred", basis: "The headline stresses dependability.", quotes: [{ page_key: "page0", quote: "Plumbing you can count on" }] }),
+    ], pages);
+    expect(r.rejected).toEqual([]);
+    expect(r.accepted.map((f) => [f.field, f.evidence_class])).toEqual([["trust_signal", "verified"], ["positioning", "inferred"], ["decision_factor", "inferred"]]);
+  });
+
+  it("refuses positioning, price and objections without a quote or basis (no guessing from the industry)", () => {
+    const r = groundFacts([
+      fact({ category: "brand", field: "positioning", value: "The premium choice", evidence_class: "inferred", basis: "", quotes: [{ page_key: "page0", quote: "We clear drains" }] }),
+      fact({ field: "price_positioning", value: "Premium", evidence_class: "inferred", basis: "Plumbers are premium.", quotes: [{ page_key: "page0", quote: "luxury pricing" }] }),
+      fact({ category: "customer", field: "objection", value: "Worried about cost", evidence_class: "verified", quotes: [] }),
+    ], pages);
+    expect(r.accepted).toEqual([]);
+    expect(r.rejected.map((x) => x.reason)).toEqual(["inferred_without_basis", "quote_not_found", "quote_not_found"]);
+  });
+
+  it("allows a promise word in a trust signal only when the page itself says it; never in other fields", () => {
+    const page: SourcePage[] = [{ key: "page0", url: "https://s.example/", text: "Every job comes with a satisfaction guarantee." }];
+    const q = [{ page_key: "page0", quote: "satisfaction guarantee" }];
+    const ok = groundFacts([trust({ value: "The site advertises a satisfaction guarantee", quotes: q })], page);
+    expect(ok.accepted).toHaveLength(1);
+    const notOnPage = groundFacts([trust({ value: "The site advertises a satisfaction guarantee", quotes: [{ page_key: "page0", quote: "Every job comes" }] })], page);
+    expect(notOnPage.rejected.map((x) => x.reason)).toEqual(["promise"]);
+    const otherField = groundFacts([fact({ field: "competitive_advantage", value: "Satisfaction guaranteed", quotes: q })], page);
+    expect(otherField.rejected.map((x) => x.reason)).toEqual(["promise"]);
+  });
+});
+
 describe("grounding", () => {
   it("finds quotes only in the page they cite, ignoring case and spacing", () => {
     expect(findQuote(pages, "page0", "we  CLEAR drains")?.url).toBe("https://sunrise.example/");
