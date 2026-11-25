@@ -101,7 +101,7 @@ test.describe("owner: Your plan and Business details", () => {
 });
 
 test.describe("member: sees the plan, cannot decide", () => {
-  test("a member of the business has no approve buttons on the plan or the details", async ({ page }, info) => {
+  test("a member of the business has no approve buttons on the plan or the details", async ({ page }) => {
     await login(page, "other-d@e2e.test", "", "/app/plan");
     await expect(page.getByRole("heading", { name: "Your plan", level: 1 })).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve this plan" })).toHaveCount(0);
