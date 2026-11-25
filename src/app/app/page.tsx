@@ -18,6 +18,7 @@ import {
   relativeDay,
 } from "@/lib/queries";
 import { FEATURES } from "@/config/features";
+import { createClient } from "@/lib/supabase/server";
 import { planName } from "@/config/pricing";
 import { stageCounts } from "@/lib/stages";
 
@@ -36,6 +37,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     getPendingApprovalCount(ws.organization.id),
     getEntitlements(ws.organization.id),
     getFreeUses(ws.organization.id),
+  ]);
+  // Pointers to the next steps of the journey, only where those screens exist (switches are off in Production).
+  const supabase = await createClient();
+  const [{ count: detailsToCheck }, { data: planRow }] = await Promise.all([
+    FEATURES.businessProfile
+      ? supabase.from("business_facts").select("id", { count: "exact", head: true }).eq("organization_id", ws.organization.id).eq("status", "proposed").not("value", "is", null)
+      : Promise.resolve({ count: 0 }),
+    FEATURES.strategy
+      ? supabase.from("marketing_plans").select("status").eq("organization_id", ws.organization.id).in("status", ["proposed", "approved"]).order("created_at", { ascending: false }).limit(1).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
   const open = openCards(cards);
   const stages = stageCounts(open);
@@ -68,6 +79,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               {free.remaining > 0 ? `${free.remaining} of ${free.limit} free uses left` : "Free uses used up"}
             </Link>
           )}
+          {FEATURES.businessProfile && ws.organization.role === "owner" && (detailsToCheck ?? 0) > 0 ? (
+            <Link href="/app/business" className="pill yellow" style={{ textDecoration: "none" }}>
+              {detailsToCheck} {detailsToCheck === 1 ? "detail" : "details"} about your business to check
+            </Link>
+          ) : null}
+          {FEATURES.strategy && lastComplete && (open.length > 0 || planRow) ? (
+            <Link href="/app/plan" className={planRow?.status === "proposed" ? "pill yellow" : "pill"} style={{ textDecoration: "none" }}>
+              {planRow?.status === "proposed" ? "Your plan is ready to review" : planRow ? "Your plan" : "Get your plan"}
+            </Link>
+          ) : null}
           {FEATURES.drafts && approvalsWaiting > 0 ? (
             <Link href="/app/approvals" className="pill yellow" style={{ textDecoration: "none" }}>
               {approvalsWaiting} {approvalsWaiting === 1 ? "draft" : "drafts"} to review

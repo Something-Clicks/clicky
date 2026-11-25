@@ -11,36 +11,63 @@ Commits: `c6da947` foundation · `1cef428` homepage, consent, legal · `489fa38`
 3. Checks before every commit: `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`.
 4. Journey tests (see "Journey tests") only ever run against **clicky-dev** (`ofstvbgaoznipsiqbjjp`), never production (`ysmwnxvyjougetdlpnba`).
 
-## Marketing Agent: verification status (Nov 25; details in `docs/agents/MARKETING_AGENT.md`, procedure in `docs/agents/EVALUATION.md`)
-Everything below is on branch `claude/ecstatic-curie-9shvjf`, behind feature switches that are always off in Production. **Nothing has been merged, deployed to Production, or applied to the Production database.**
+## LAUNCH STATUS (the one list; updated Nov 25; detailed notes and history are below it)
+Branch `claude/ecstatic-curie-9shvjf`; nothing is merged, deployed to Production, or applied to the Production database; Stripe untouched. Production has migrations 1–7 only (through `relink_billing_customer`).
 
-**Simulated (rules proven with hand-written inputs and test doubles; says nothing about model quality)**
-- 231 unit tests: grounding (quotes on the page, figures in the source, promises, generic advice), plan checking, quality screening, metering (reserve/settle, fail closed), orchestrator with a stub database.
-- 172 database tests on a throwaway Postgres: tenant isolation, owner-only approvals, evidence classes, key-gated usage, atomic caps (12 parallel reservations against one cap; a mutation check proves the test fails without the lock), the database off-switch for model-stored work, rollbacks restore the earlier behaviour.
+**Two launch scopes (your decision):**
+- **Scope A: launch the product without the model features.** Website check with fixed, evidence-backed findings, accounts, free uses, $49 report, billing, owner approvals for the work that exists. The Marketing Agent's model features (business understanding, model findings, drafts, plan) stay off and hidden, and the live Privacy Policy stays true as written ("no AI service"). Needs only the items marked **[A]** below.
+- **Scope B: Scope A plus the Marketing Agent's model features.** Needs everything marked **[A]** and **[B]**, and the agent must first meet the written quality standard on real sites (`docs/agents/EVALUATION.md`). Releasing is a code change plus your approval.
 
-**Real database (clicky-dev), no model**
-- Migrations 20261129, 20261130, 20261201 applied; in-transaction smoke checks as a real user; rollback proven inside a transaction; existing data kept (4 businesses, 42 cards). Advisor: only the expected "signed-in users can execute" notices for caller-checked functions.
-- Preview variables prepared (names only): `MODEL_USAGE_KEY` (generated; hash in clicky-dev), `MARKETING_MODEL_PROVIDER`, four `FEATURE_*`. Not set: `ANTHROPIC_API_KEY`.
+### 1. Completed and verified
+Real services (clicky-dev Supabase, Stripe TEST API, Vercel API) unless noted.
+- **Database:** every migration applies in order; rollback → re-apply passed for each new one; 172 database tests (local Postgres) cover isolation, owner-only approvals, evidence classes, key-gated usage, atomic caps, plan slots (10 simultaneous submissions → exactly one wins), admission limits, the off-switch; migrations through 20261202 applied to clicky-dev with in-transaction checks; existing data kept (4 businesses, 42 cards).
+- **Security hardening (Phase 2), three independent Opus review rounds on the earlier work, a fourth on the final hardening is in progress (see group 4):** usage cannot be forged (server key); caps cannot be passed by parallel requests (locked reservation); model-storing functions need the server key and a database switch that is 0 in Production; per-business hourly and per-person daily limits; one-plan-at-a-time slot in the database; one request-wide deadline for every model call; prompt text escaped everywhere; raw errors kept out of customer-visible records; no secrets in logs, responses or the browser.
+- **Auth, claim flow, isolation, funnel counts, consent gating, entitlements from real Stripe objects, Stripe TEST checkout configuration, environment separation, public pages at 390 px and desktop (axe 0 violations):** see "Item status" below.
+- **Agent screens in a real browser** (app running locally against clicky-dev, fixtures written by SQL, no model): Your plan, Business details, internal agent review, owner vs member vs admin, hidden in Production mode, 390 px and desktop, axe 0. `tests/e2e/agent-screens.spec.ts`.
+- **Local checks:** lint, types, 235 unit tests, 182 database tests, build.
+- **Cost control and admission limits by simulation:** metering unit tests (reserve before the call, settle after, fail closed), deadline test.
 
-**Browser-tested (app running locally against clicky-dev, signed in as real test accounts; the plan, details, usage and run shown were FIXTURES written by SQL, `tests/e2e/agent-seed.sql`)**
-- `tests/e2e/agent-screens.spec.ts` (run with `E2E_AGENT=1`): Your plan (content, order, dependency, "later", no side scroll at 390 px, axe 0 violations), owner approve, member sees no approve buttons, Business details confirm/reject and a broken evidence link no longer breaks the page, "Revise" without a model answers in plain words, internal agent review (platform admin only; contact details never shown; a business owner gets a 404), and with `VERCEL_ENV=production` the plan, details, review and their nav links are not there. Desktop: 7/7. Phone profile: 2/2 (owner steps run on desktop only because they change the data). The fixtures were removed and the test accounts disabled again afterwards.
+### 2. Implemented but not verified
+- **The real model's output (everything model-written: business understanding, findings, drafts, plans).** Never run; no Anthropic key on Preview and the sandbox cannot reach public sites. Verified only with test doubles and hand-written examples, which prove the checking rules, not usefulness. **[B]**
+- Home-page pointers to "details to check" and "your plan" (added Nov 25; unit/type checked, not yet in a browser run). **[B]**
+- Real website scan (only fixture HTML so far), plain-words scan failure messages against real failing sites. **[A]**
+- Real email: save-this → link → claim; sign-in and password-reset emails (Resend not run). **[A]**
+- Webhook delivery from Stripe to the deployed app; Stripe hosted checkout page; customer portal. **[A]**
+- Real iPhone/Safari run of the 10-step checklist; deployed Preview browsed end to end (behind Vercel login). **[A]**
+- Weekly worker (needs `SUPABASE_SECRET_KEY`). **[A]**
+- Drafts, edits and approving a version in a browser (database-tested; browser fixtures cover plan and details only). **[B]**
 
-**Real model: NOT DONE.** No Anthropic key on Preview; the sandbox cannot reach public sites. No business understanding, finding, draft or plan written by a real model has been inspected, so nothing can yet be said about accuracy, usefulness, generic advice or invented claims in real output. Procedure and release criteria: `docs/agents/EVALUATION.md`.
+### 3. Waiting for your action (I never ask for secrets in chat)
+1. **`ANTHROPIC_API_KEY`**: Vercel → `something-clicks` → Settings → Environment Variables → Add New; Sensitive; Environment: Preview; Git branch `claude/ecstatic-curie-9shvjf`; set a monthly spend limit in the Anthropic console first. Then redeploy the branch. (Already set by me: `MARKETING_MODEL_PROVIDER`, `MODEL_USAGE_KEY`, the four `FEATURE_*`.) **[B]**
+2. **Choose and run 3–5 real small-business sites** (yours or with permission) through Preview following `docs/agents/EVALUATION.md` section 3; tell me the business names. I then read the results from clicky-dev, compare them with the live sites, fix, and repeat until the written standard is met. **[B]**
+3. **`STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY`** on the same Preview branch (INTEGRATIONS: "Preview: two values only you can add"); plus optionally `PAGESPEED_API_KEY`. **[A]**
+4. **Attorney review** of `/privacy` and `/terms`. For Scope B also `docs/launch/LEGAL_AI_DRAFT.md` (the AI wording and the provider's data terms to confirm). **[A], [B]**
+5. **Approve the Production migrations and variables** (group 4, items 1–2) and, separately, the merge and deploy. **[A]**
+6. **Resend** sending domain and `EMAIL_FROM`; a test inbox you control. **[A]**
+7. **Stripe:** confirm the TEST customer portal is activated; decide the stray TEST webhook endpoints (inventory below); live products and live webhook endpoint when you choose to take real payments. **[A]**
+8. **Supabase dashboard:** Auth Site URL and redirect URLs, turn on leaked-password protection (advisor warning), confirm the project's backup plan (see "Backup and recovery"). **[A]**
+9. **GA4 and Clarity ids** (Production only, optional). **[A]**
+10. **Run the 10-step real-iPhone checklist** on the Preview. **[A]**
 
-**Independent reviews (Opus): done, findings fixed or recorded**
-- Round 1 (migration 20261129 and the plan/admin paths): global-cap exhaustion by one account bounded, plan shape validated in the database, promise exception tightened, admin review off by default in the database, no unmetered provider path, prompt escaping.
-- Round 2 (cost-control fixes and the whole implementation): usage can no longer be forged (key-gated functions) and parallel requests cannot pass a cap (locked reservation); failed calls are settled at the full reservation; input estimate cannot be undercut; owner now approves the exact draft version they saw; model-storing functions refuse unless `agent_functions_enabled` = 1; fences escaped; model steps only run where a switch needs them.
-- Round 3 (re-review of the fixes): estimate made stricter, tests made to prove their claims; remaining items recorded as known limits.
+### 4. Remaining pre-launch blockers
+**[A] Scope A**
+1. Apply the 9 pending Production migrations in this order, with your approval, then verify (runbook below): `20261124` launch redesign, `20261125` funnel events and local keys, `20261126` workflow, `20261127` evidence, `20261128` findings and draft versions, `20261129` usage and strategy, `20261130` reservations, `20261201` agent switch, `20261202` admission. All are additive; `agent_functions_enabled` and `agent_review_enabled` stay 0 and no `MODEL_USAGE_KEY` hash is stored until Scope B.
+2. Production variables (names in INTEGRATIONS; never any `ANTHROPIC_*`, `MARKETING_*`, `FEATURE_*` or `MODEL_USAGE_KEY` in Scope A).
+3. Items 3, 4, 6, 7, 8 and 10 of group 3.
+4. Error monitoring: Vercel runtime logs only today (structured `log.*` lines, no secrets). Decide whether to add alerting (Vercel log drain or an error service) before launch, or accept manual log checks for the first weeks.
+**[B] Scope B (in addition)**
+5. Real-model evaluation meeting the written quality standard in two consecutive rounds (group 3, items 1–2).
+6. The Opus review of the final hardening (running now) with its findings fixed.
+7. Attorney-approved AI wording published in the same release as the model features; Anthropic data terms confirmed.
+8. In Production: generate a separate `MODEL_USAGE_KEY`, store its hash, set `agent_functions_enabled` = 1 and the `FEATURE_*` switches (code change and your approval), keep `agent_review_enabled` = 0 (the admin review page stays a development tool).
 
-**Remaining blockers before any customer release (you decide; each is also in the docs)**
-1. Real-model evaluation on 3–5 real sites, improvement and a clean repeat (needs `ANTHROPIC_API_KEY` on Preview, then your runs).
-2. Server-held key on `add_model_findings`, `propose_business_facts`, `save_marketing_plan`, `complete_agent_run`, and an admission limit on plan and draft requests (a few dozen accounts could use up the $20 daily global cap).
-3. Atomic one-plan-at-a-time guard inside `reserve_model_call`; a request-wide deadline or background job for the website review (two model calls can pass the 120 s page limit).
-4. Privacy Policy and Terms reviewed by an attorney, with the model-provider disclosure.
-5. Production migrations 20261126–20261201 (approval needed; the app fails closed without them) and Production variables (none of the Agent variables belong in Production now).
-6. Stripe: `STRIPE_SECRET_KEY` and `SUPABASE_SECRET_KEY` on Preview (unrelated to the model).
+### 5. Post-launch improvements (not needed to launch)
+Market Research capability (needs a data source), Campaign Planning, Marketing Execution through authorized integrations, service-page/FAQ/Google Business Profile content, spend alerts and an owner-visible usage screen, a background job instead of in-request model calls, a second provider adapter (the interface is ready), Business Plus and Multi-Site plans, Marketing Assistant ($79) on hold.
 
-## Item status (every item is in exactly one group)
+### Backup and recovery (for the launch decision)
+Supabase holds all customer data. Daily backups exist on paid plans; **point-in-time recovery is a paid add-on**: confirm which the Production project has (Supabase dashboard → Database → Backups) before launch **[A]**. Every migration has a rollback in `supabase/rollback/` and was rehearsed on clicky-dev; rollbacks remove only the objects the migration added (a few delete data they created, listed in each file's header). Code recovery is a Vercel redeploy of a previous deployment (instant rollback). Stripe is the source of truth for billing; the webhook handler is idempotent, and billing events are kept in `integration_events`. Secrets live only in Vercel and Stripe; rotating a server key means a new value in Vercel plus a new hash row in `app_private.secrets`.
+
+## Item status (detailed notes behind the launch status above)
 
 "Real" means the actual service was exercised (real Supabase on clicky-dev, real Stripe TEST API). "Stand-in" items are listed in group 2 or 4, never in group 1.
 
