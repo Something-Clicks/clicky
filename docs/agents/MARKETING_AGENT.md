@@ -1,11 +1,12 @@
 # The Something Clicks Marketing Agent: architecture map and status
 
 The owner's specification (`AI_MARKETING_AGENT.docx`) is the architecture. This document maps each part
-of it to the code and says honestly what is built. Updated Nov 25 2026.
+of it to the code and says honestly what is built. Updated Nov 25 2026 (second pass).
 
 **Status words.** *Built*: runs in the app and is covered by unit and database tests (local Postgres; the
-migrations also on clicky-dev). *Not built*: designed, reports "blocked" if a workflow asks for it.
-Nothing below has yet been verified against real customer websites, and no language model is connected.
+migrations also on clicky-dev). *Built, not verified live*: the code path runs end to end with a test-double
+model in tests, but has never been run with a real model or on a real website (see Verification).
+*Not built*: designed, reports "blocked" if a workflow asks for it.
 
 ## How it fits together
 ```
@@ -26,16 +27,29 @@ Customer request ─► Orchestrator (src/lib/server/agent/orchestrator.ts)
 ## Capabilities (§2.2)
 | Capability | Module | Status |
 |---|---|---|
-| Business Intelligence (§3, §14) | `business-intelligence.ts` | **Built (deterministic part).** Proposes phone and email (verified: observed) and services (inferred, basis stated) from the website; `understand()` merges the owner's profile, confirmed facts and current proposals, lists what is missing, and sets aside stale website facts (older than 180 days). Facts are stored in `business_facts`. Model-derived facts (what the business does, audience, value proposition, brand voice) not built. No customer screen yet. |
-| Website Intelligence (§5) | `website-intelligence.ts` | **Built.** Safe discovery (SSRF defense, redirect/size/time limits) of the homepage and up to 4 key pages; metadata, text, link labels, email links; failures recorded; mobile speed when available. |
-| SEO Intelligence (§4.3) | `seo-intelligence.ts` | **Partly built.** On-page signals per page and SEO findings. Keyword and visibility data not connected (Semrush manual import planned). |
-| Marketing Analysis (§6) | `marketing-analysis.ts` | **Built for fixed checks.** Findings with category (seo / technical / conversion / content / local), evidence class, ranking (impact → evidence strength → confidence → owner-doable first). Messaging and conversion judgment needs a model: not built. |
-| Performance Intelligence (§11) | `performance-intelligence.ts` | **Partly built.** Verified fixed / still found / awaiting (verification runs in the database on each check). Traffic and search data not connected. |
-| Market Research (§4) | `unavailable.ts` | Not built (needs a model and a research source). |
+| Business Intelligence (§3, §14) | `business-intelligence.ts`, `business-understanding.ts` | **Built.** Fixed extraction (phone, email: verified; services: inferred with basis). **Model part built, not verified live:** what the business does, services, products, audience, customer problems, value proposition, voice and tone, each with quotes that Something Clicks checks against the page. Owner review screen `/app/business` (confirm, correct, reject, add) behind `businessProfile`. |
+| Website Intelligence (§5) | `website-intelligence.ts` | **Built.** Safe discovery of the homepage and up to 4 key pages; metadata, text, link labels, email links; failures recorded; mobile speed when available. |
+| SEO Intelligence (§4.3) | `seo-intelligence.ts` | **Partly built.** On-page signals and SEO findings. Keyword data not connected. |
+| Marketing Analysis (§6) | `marketing-analysis.ts`, `marketing-analysis-model.ts` | **Built for fixed checks.** **Model part built, not verified live:** messaging, conversion and content findings with quoted evidence, saved as Action Cards (origin `model`) behind `modelFindings`; never marked "verified fixed". |
+| Performance Intelligence (§11) | `performance-intelligence.ts` | **Partly built.** Verified fixed / still found / awaiting. Traffic and search data not connected. |
+| Content Creation (§8) | `content-creation.ts` | **Built, not verified live.** Homepage copy and SEO title/description from the business understanding and the card's evidence; content rules enforced; version 1 → edits as versions → owner approves a version. Behind `drafts`. |
+| Market Research (§4) | `unavailable.ts` | Not built. |
 | Marketing Strategy (§7) | `unavailable.ts` | Not built. |
-| Content Creation (§8) | `unavailable.ts` | Not built. Older draft code (`drafts.ts`) is dormant and will be ported onto the provider interface. |
 | Campaign Planning (§9) | `unavailable.ts` | Not built. |
 | Marketing Execution (§10) | `unavailable.ts` | Not built (needs authorized integrations). |
+
+## Feature switches
+`src/config/features.ts`: `drafts`, `businessProfile`, `modelFindings`. Off unless `FEATURE_<NAME>=1`; always off
+in Production. Customers in Production see none of the model-assisted work.
+
+## Verification
+| What | Status |
+|---|---|
+| Grounding and rejection rules, versions, owner-only approval, evidence classes, isolation | Verified by unit and database tests |
+| Database functions on clicky-dev | Verified (apply → checks → rollback → re-apply) |
+| Real model output quality (understanding, findings, drafts) | **Not verified.** This sandbox cannot hold an Anthropic key (Anthropic hosts cannot use saved network credentials). Needs `ANTHROPIC_API_KEY` as an environment variable in a cloud environment or Vercel Preview |
+| Real websites | **Not verified.** The sandbox cannot reach public websites |
+| Signed-in screens (`/app/business`, draft editing) in a browser | **Not verified.** Needs the Preview with test accounts |
 
 ## Orchestrator and workflows (§12)
 **Built:** `runWebsiteReview` runs for every website check (Check button, first check after setup, weekly
@@ -65,11 +79,10 @@ marketing history via cards, workflows and the activity log.
 screen for reviewing facts (functions `review_business_fact` and `add_business_fact` exist and are tested).
 
 ## Model providers (§15)
-Provider-neutral interface, no provider registered in the app, an API key alone enables nothing (tested).
-Temporary development provider (engineering decision): Claude Sonnet 5.5, development and Preview only, one
-replaceable adapter, not yet added. Selection rationale: already a project dependency, structured output
-verified against the official documentation, mid-tier price. The optional comparison tool is in
-`evals/providers/` and is not a prerequisite.
+Provider-neutral interface; one development adapter (`providers/anthropic-dev.ts`, Claude Sonnet 5.5) used only
+with `MARKETING_MODEL_PROVIDER=anthropic-dev` and a key, never in Production. Every model output is validated
+against its schema (one retry) and grounded by Something Clicks (`grounding.ts`) before it is stored. Model and
+token usage are recorded on each workflow and draft run.
 
 ## Security (§16)
 Server-side only; RLS on every table; tenant-isolation tests for every new table and function; owner-only
@@ -77,10 +90,10 @@ review of business facts and approvals; website text treated as data; audit log.
 and spend caps (needed before any model runs for customers).
 
 ## Next, in order
-1. Development provider adapter (Claude Sonnet 5.5) behind `provider.ts`, development and Preview only.
-2. Model-assisted Business Intelligence: what the business does, audience, value proposition, proposed with
-   evidence classes; the owner review screen (behind a feature flag until approved).
-3. Model-assisted Marketing Analysis: messaging, conversion, content findings (origin `model`).
-4. Content Creation: homepage copy and SEO titles/descriptions → editable versions → owner approval.
-5. Cost tracking and per-business caps for model calls.
-Later: research and strategy, campaign planning, authorized execution, performance data.
+1. Live verification on Preview: `ANTHROPIC_API_KEY`, `MARKETING_MODEL_PROVIDER=anthropic-dev` and the three
+   switches on Preview only; run on 3–5 real sites with test accounts; review the outputs.
+2. Cost tracking and per-business caps for model calls (usage is recorded; caps are not enforced yet beyond the
+   existing daily limits on checks and drafts).
+3. More Content Creation: service page copy, FAQs, Google Business Profile posts (§8.1–8.2).
+4. Marketing Strategy: a prioritized plan from the understanding and findings (§7).
+Later: research (manual Semrush import), campaign planning, authorized execution, performance data.

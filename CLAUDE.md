@@ -20,7 +20,7 @@ Something Clicks is building its own **Marketing Agent** for small businesses: i
   - `BILLING_WEBHOOK_KEY` → `billing_*` functions (Stripe webhook only).
   - `SITE_SERVER_KEY` → `site_*` functions (anonymous first result, feedback, funnel counts).
 - Analysis: `src/lib/server/analysis.ts` (`analyzeWebsite`) = safe fetch → scan → checks → optional wording. Shared by the workspace and the anonymous preview. Every card cites evidence labeled observed / measured / missing.
-- Drafts: `src/lib/server/drafts.ts`, draft-only, owner approves (`decide_approval`). Nothing is ever published for the customer.
+- Drafts: Content Creation module (`agent/modules/content-creation.ts`), draft-only; editable versions; the owner approves a version (`approve_draft_version`). Nothing is ever published for the customer.
 - Free uses: three per person/business (`app_config.free_run_limit`), enforced in `start_analysis` / `start_agent_run`. First use can be anonymous; Save this + `claim_preview` moves it into an account (works across browsers; same verified email + single-use token).
 - Prices and Stripe ids: only in `src/config/pricing.ts` (per mode; never borrow ids across modes). Paid access only from the verified webhook.
 - Homepage headline: only in `src/config/site.ts`.
@@ -43,17 +43,18 @@ Something Clicks is building its own **Marketing Agent** for small businesses: i
 ## Checks before every commit
 `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`, plus `pnpm e2e` when the customer journey changed (see the checklist for the local stack).
 
-## Model providers and drafts
-- Model calls go only through `src/lib/server/agent/provider.ts`. No provider is registered in the app; an API key alone never activates anything (`isAiConfigured()` checks the registry; tested). Never add a mock model or stand-in answers.
-- Temporary development provider (engineering decision, Nov 25 2026): Anthropic Claude Sonnet 5.5, development and Preview only, as one replaceable adapter. Not a product dependency; never enabled for Production customers without the owner's approval.
-- The older Anthropic-specific code (`src/lib/server/ai.ts`, `drafts.ts`) stays dormant until it is ported onto the provider interface; do not delete it.
-- `FEATURES.drafts` (`src/config/features.ts`) is `false`: draft creation, approvals and their screens/routes are hidden from customers. Recommendations come from fixed checks; never describe them as AI analysis.
+## Model providers, feature switches and drafts
+- Model calls go only through `src/lib/server/agent/provider.ts`. One temporary development adapter is registered (`anthropic-dev`, Claude Sonnet 5.5, `providers/anthropic-dev.ts`). It runs only with `MARKETING_MODEL_PROVIDER=anthropic-dev` and `ANTHROPIC_API_KEY`, and never in Production (`VERCEL_ENV=production` → no provider). An API key alone activates nothing (tested). Never add a mock model or stand-in answers.
+- Feature switches (`src/config/features.ts`): `drafts`, `businessProfile`, `modelFindings`. Off unless `FEATURE_<NAME>=1`, and always off in Production. Releasing one to customers is an owner decision and a code change. Server-only: pass booleans to client components.
+- Every model output is grounded by Something Clicks before it is stored (`agent/grounding.ts`): quotes must appear on the cited page, figures must be in the source, promises are refused.
+- The older Anthropic-specific code (`src/lib/server/ai.ts`, `drafts.ts`) is retired and dormant (needs `MARKETING_LEGACY_WORDING=1`, which nothing sets); do not delete it. Drafts now come from the Content Creation module.
 
 ## Marketing Agent
 - Map of the specification to the code, what is built and what is not: `docs/agents/MARKETING_AGENT.md`. Keep it current.
 - One orchestrator (`src/lib/server/agent/orchestrator.ts`) runs every website check and records it in `marketing_workflows`. It reaches capabilities only through the module registry (`src/lib/server/agent/modules/`), one module per capability in the specification. Unbuilt capabilities report "blocked" and never return placeholder output.
 - Four evidence classes (verified / inferred / estimated / unknown, `src/lib/evidence.ts`) on findings and business facts, enforced in the database.
-- Business Intelligence stores facts in `business_facts` with source, evidence class, basis and freshness. The agent only proposes; the owner confirms. Not shown to customers yet.
+- Business Intelligence stores facts in `business_facts` with source, evidence class, basis and freshness. The agent only proposes; the owner confirms (`/app/business`, behind `businessProfile`).
+- Drafts: Content Creation prepares version 1; edits are new versions (`draft_versions`); only the owner approves a specific version. Model findings never count as verified fixed.
 - Stages: prepared → approved (owner only) → completed (marked done, or verified fixed). Never mark generated work completed.
 - Internal identity is "the Something Clicks Marketing Agent". Customer-facing words stay simple and match the website; that copy rule governs wording, not what we build.
 - Plan names (app only; Stripe unchanged): Marketing Report $49; Marketing Assistant ($79/$756) is on hold and cannot be bought; Marketing Studio and Marketing Suite are planned tiers.
