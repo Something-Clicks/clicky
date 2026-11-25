@@ -110,6 +110,9 @@ with `MARKETING_MODEL_PROVIDER=anthropic-dev` and a key, never in Production. Ev
 against its schema (one retry) and grounded by Something Clicks (`grounding.ts`) before it is stored. Model and
 token usage are recorded on each workflow and draft run.
 
+### Replacing or adding a provider (checked Nov 25; Preview runs `anthropic-dev`)
+Capabilities never import a provider: they receive a `ModelProvider` (`id`, `model`, `generate`) and ask for a schema-validated answer through `generateStructured`. To switch: (1) add `providers/<name>.ts` implementing `generate` (structured output, per-request timeout, no SDK retries, report tokens and refusals); (2) register it in `PROVIDERS` in `provider.ts`; (3) add its model's published prices to `pricing.ts` (an unpriced model is never called); (4) set `MARKETING_MODEL_PROVIDER=<name>` and its key. Nothing else changes: grounding, metering, caps, slots, deadlines, screening and every screen are provider-independent. Tests that prove it: an unknown provider id and a key alone activate nothing; Production never has a provider; the metering and deadline tests use a provider that is not Anthropic's adapter.
+
 ## Security (§16)
 Server-side only; RLS on every table; tenant-isolation tests for every new table and function; owner-only
 review of business facts and approvals and plans; website text and owner notes treated as data; audit log; per-business
