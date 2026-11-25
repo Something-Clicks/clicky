@@ -11,6 +11,35 @@ Commits: `c6da947` foundation · `1cef428` homepage, consent, legal · `489fa38`
 3. Checks before every commit: `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm build`.
 4. Journey tests (see "Journey tests") only ever run against **clicky-dev** (`ofstvbgaoznipsiqbjjp`), never production (`ysmwnxvyjougetdlpnba`).
 
+## Marketing Agent: verification status (Nov 25; details in `docs/agents/MARKETING_AGENT.md`, procedure in `docs/agents/EVALUATION.md`)
+Everything below is on branch `claude/ecstatic-curie-9shvjf`, behind feature switches that are always off in Production. **Nothing has been merged, deployed to Production, or applied to the Production database.**
+
+**Simulated (rules proven with hand-written inputs and test doubles; says nothing about model quality)**
+- 231 unit tests: grounding (quotes on the page, figures in the source, promises, generic advice), plan checking, quality screening, metering (reserve/settle, fail closed), orchestrator with a stub database.
+- 172 database tests on a throwaway Postgres: tenant isolation, owner-only approvals, evidence classes, key-gated usage, atomic caps (12 parallel reservations against one cap; a mutation check proves the test fails without the lock), the database off-switch for model-stored work, rollbacks restore the earlier behaviour.
+
+**Real database (clicky-dev), no model**
+- Migrations 20261129, 20261130, 20261201 applied; in-transaction smoke checks as a real user; rollback proven inside a transaction; existing data kept (4 businesses, 42 cards). Advisor: only the expected "signed-in users can execute" notices for caller-checked functions.
+- Preview variables prepared (names only): `MODEL_USAGE_KEY` (generated; hash in clicky-dev), `MARKETING_MODEL_PROVIDER`, four `FEATURE_*`. Not set: `ANTHROPIC_API_KEY`.
+
+**Browser-tested (app running locally against clicky-dev, signed in as real test accounts; the plan, details, usage and run shown were FIXTURES written by SQL, `tests/e2e/agent-seed.sql`)**
+- `tests/e2e/agent-screens.spec.ts` (run with `E2E_AGENT=1`): Your plan (content, order, dependency, "later", no side scroll at 390 px, axe 0 violations), owner approve, member sees no approve buttons, Business details confirm/reject and a broken evidence link no longer breaks the page, "Revise" without a model answers in plain words, internal agent review (platform admin only; contact details never shown; a business owner gets a 404), and with `VERCEL_ENV=production` the plan, details, review and their nav links are not there. Desktop: 7/7. Phone profile: 2/2 (owner steps run on desktop only because they change the data). The fixtures were removed and the test accounts disabled again afterwards.
+
+**Real model: NOT DONE.** No Anthropic key on Preview; the sandbox cannot reach public sites. No business understanding, finding, draft or plan written by a real model has been inspected, so nothing can yet be said about accuracy, usefulness, generic advice or invented claims in real output. Procedure and release criteria: `docs/agents/EVALUATION.md`.
+
+**Independent reviews (Opus): done, findings fixed or recorded**
+- Round 1 (migration 20261129 and the plan/admin paths): global-cap exhaustion by one account bounded, plan shape validated in the database, promise exception tightened, admin review off by default in the database, no unmetered provider path, prompt escaping.
+- Round 2 (cost-control fixes and the whole implementation): usage can no longer be forged (key-gated functions) and parallel requests cannot pass a cap (locked reservation); failed calls are settled at the full reservation; input estimate cannot be undercut; owner now approves the exact draft version they saw; model-storing functions refuse unless `agent_functions_enabled` = 1; fences escaped; model steps only run where a switch needs them.
+- Round 3 (re-review of the fixes): estimate made stricter, tests made to prove their claims; remaining items recorded as known limits.
+
+**Remaining blockers before any customer release (you decide; each is also in the docs)**
+1. Real-model evaluation on 3–5 real sites, improvement and a clean repeat (needs `ANTHROPIC_API_KEY` on Preview, then your runs).
+2. Server-held key on `add_model_findings`, `propose_business_facts`, `save_marketing_plan`, `complete_agent_run`, and an admission limit on plan and draft requests (a few dozen accounts could use up the $20 daily global cap).
+3. Atomic one-plan-at-a-time guard inside `reserve_model_call`; a request-wide deadline or background job for the website review (two model calls can pass the 120 s page limit).
+4. Privacy Policy and Terms reviewed by an attorney, with the model-provider disclosure.
+5. Production migrations 20261126–20261201 (approval needed; the app fails closed without them) and Production variables (none of the Agent variables belong in Production now).
+6. Stripe: `STRIPE_SECRET_KEY` and `SUPABASE_SECRET_KEY` on Preview (unrelated to the model).
+
 ## Item status (every item is in exactly one group)
 
 "Real" means the actual service was exercised (real Supabase on clicky-dev, real Stripe TEST API). "Stand-in" items are listed in group 2 or 4, never in group 1.
@@ -95,6 +124,12 @@ Branch-scoped Preview variables for this branch point at clicky-dev and Stripe T
 | `STRIPE_WEBHOOK_SECRET` (sensitive) | signing secret of TEST endpoint `we_1Uf9ApFnFMCbDhHEbQoz3sYP` (preview URL) |
 
 **Not added (needs you; I never see secret values):** `STRIPE_SECRET_KEY` (test) and `SUPABASE_SECRET_KEY` (clicky-dev) — see INTEGRATIONS "Preview: two values only you can add". Not added on purpose: GA4, Clarity, Resend, cron, Anthropic, PageSpeed, any live Stripe value. This branch no longer has a `CRON_SECRET` (it only existed as a shared Production row).
+
+## Marketing Agent screens (clicky-dev, no model)
+1. Seed the e2e users (below), then write the fixtures: in the clicky-dev SQL editor run `set app.allow_e2e_seed = 'on';` then `tests/e2e/agent-seed.sql` (it re-enables `pat-d`, `other-d`, `admin-d`; re-run it to reset).
+2. Build with the clicky-dev `NEXT_PUBLIC_*` values; start `FEATURE_BUSINESS_PROFILE=1 FEATURE_MODEL_FINDINGS=1 FEATURE_DRAFTS=1 FEATURE_STRATEGY=1 pnpm exec next start -p 3100`, and a second server with `VERCEL_ENV=production` plus the same flags on port 3101.
+3. `E2E_AGENT=1 E2E_PROD_BASE=http://localhost:3101 pnpm exec playwright test tests/e2e/agent-screens.spec.ts --project=desktop-chromium --trace off` (and `--project=iphone-chromium`).
+4. Clean up: delete the fixtures (provider `e2e-fixture`, request `e2e fixture run`, the business details, the `other-d` membership) and disable the e2e accounts again.
 
 ## Journey tests (clicky-dev + Stripe TEST)
 1. clicky-dev has all migrations. Seed users: SQL editor, `set app.allow_e2e_seed = 'on';` then run `tests/e2e/dev-seed.sql`. Reset between runs: same guard, `tests/e2e/dev-reset.sql`. The 12 e2e accounts are **disabled** after each session (known throwaway password, one is an admin): re-enable with `update auth.users set banned_until = null where email like '%@e2e.test';` and disable again afterwards. Keep the GitHub repository private.
