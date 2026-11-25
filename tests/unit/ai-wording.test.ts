@@ -11,6 +11,11 @@ vi.mock("@anthropic-ai/sdk", () => ({
   },
 }));
 
+// The app enables model features only through the provider registry (empty in the app). These tests
+// switch the gate on explicitly to exercise the dormant wording code; the stub client is not a model.
+const providerEnabled = { value: true };
+vi.mock("@/lib/server/agent/provider", () => ({ getModelProvider: () => (providerEnabled.value ? { id: "unit-test-gate" } : null) }));
+
 import { log } from "@/lib/log";
 import { wordFindings } from "@/lib/server/ai";
 import type { Evidence, Finding } from "@/lib/server/checks";
@@ -26,7 +31,7 @@ const reply = (parsed: unknown, stop_reason = "end_turn") => parse.mockResolvedV
 
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
-  process.env.ANTHROPIC_API_KEY = "unit-test-stand-in";
+  providerEnabled.value = true;
   parse.mockReset();
   warn = vi.spyOn(log, "warn").mockImplementation(() => {});
   vi.spyOn(log, "info").mockImplementation(() => {});
@@ -35,12 +40,18 @@ afterEach(() => vi.restoreAllMocks());
 const reasons = () => warn.mock.calls.filter((c: unknown[]) => c[0] === "ai.fallback_template").map((c: unknown[]) => (c[1] as { reason: string }).reason);
 
 describe("wordFindings: records every fallback and never claims more than it delivered", () => {
-  it("without a key: template wording, reason recorded", async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+  it("an API key alone never activates the model: template wording, reason recorded", async () => {
+    providerEnabled.value = false;
+    process.env.ANTHROPIC_API_KEY = "set-for-an-evaluation";
+    process.env.OPENAI_API_KEY = "set-for-an-evaluation";
+    process.env.GEMINI_API_KEY = "set-for-an-evaluation";
     const r = await wordFindings([finding("a")], evidence, biz, 3);
     expect(r.wording).toBe("template");
     expect(reasons()).toEqual(["not_configured"]);
     expect(parse).not.toHaveBeenCalled();
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
   });
 
   it("every card rewritten: marked as model-worded, no fallback logged", async () => {

@@ -1,4 +1,11 @@
-# Provider evaluation (OpenAI, Anthropic, Gemini)
+# Provider evaluation (OpenAI, Anthropic, Gemini): optional tool
+
+**Status (Nov 25 2026, owner direction):** optional. A provider comparison is not a prerequisite for
+building the Marketing Agent; the provider is a replaceable implementation detail behind
+`src/lib/server/agent/provider.ts`. This tool has not been run. Known gap: the Gemini adapter uses
+`generateContent`, which Google's docs now call legacy (the Interactions API is their default).
+Update it before relying on Gemini results.
+
 
 Disclosure: this harness was written by Claude, an Anthropic model, and Anthropic is one of the
 providers being compared. To keep that from mattering, every provider gets identical inputs,

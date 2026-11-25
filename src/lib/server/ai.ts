@@ -6,15 +6,24 @@ import { z } from "zod";
 
 import { log } from "@/lib/log";
 
+import { getModelProvider } from "./agent/provider";
+
 import type { BusinessContext, Evidence, Finding } from "./checks";
 import { wordingProblem } from "./text-guard";
 
 export const AI_MODEL = "claude-opus-5-5";
 
-export const isAiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY);
+/**
+ * Model features in the app turn on only when a provider is registered and selected in
+ * src/lib/server/agent/provider.ts (the registry is empty until the owner approves a provider).
+ * An API key in the environment alone, such as ANTHROPIC_API_KEY set for an evaluation, never
+ * activates anything. This older Anthropic-specific code stays dormant until it is ported.
+ */
+export const isAiConfigured = () => getModelProvider() !== null;
 
 let client: Anthropic | null = null;
 export function getClient(): Anthropic {
+  if (!isAiConfigured()) throw new Error("No model provider is enabled for the app.");
   client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 90_000, maxRetries: 1 });
   return client;
 }
