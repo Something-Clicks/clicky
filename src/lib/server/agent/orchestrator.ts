@@ -120,11 +120,16 @@ async function closeRecord(db: WorkflowDb, id: string | null, status: "prepared"
  * the first check after setup, and the weekly re-check). The analysis row must already exist
  * (start_analysis enforces limits and free uses).
  */
+/** The model steps of a website check must be done by then, counted from the start of the workflow. */
+export const WORKFLOW_DEADLINE_MS = 105_000;
+
 export async function runWebsiteReview(
   db: WorkflowDb,
   input: { orgId: string; analysisId: string; business: BusinessInput; request?: string | null },
   deps: AnalysisDeps = {},
 ): Promise<WorkflowOutcome> {
+  // One deadline for the whole workflow (the request's limit is 120 s): the model steps get what is left of it.
+  const deadlineAt = Date.now() + WORKFLOW_DEADLINE_MS;
   const plan = planWorkflow("website_review", { modelProvider: getModelProvider() !== null });
   const steps: StepRecord[] = [];
   const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });
@@ -170,7 +175,7 @@ export async function runWebsiteReview(
   // never in Production, where all of these switches are off.
   const learns = FEATURES.businessProfile || FEATURES.modelFindings || FEATURES.strategy || FEATURES.drafts;
   const provider = learns ? meter("business_intelligence.understand") : null;
-  const bi = expectDone(await MODULES.business_intelligence.run({ profile, scan: r.scan, provider }), "business_intelligence");
+  const bi = expectDone(await MODULES.business_intelligence.run({ profile, scan: r.scan, provider, deadlineAt }), "business_intelligence");
   const modelRun = bi.output.model && !("failed" in bi.output.model) ? bi.output.model : null;
   const proposed = learns ? await proposeFacts(db, input.orgId, input.analysisId, bi.output.proposals) : 0;
   if (learns) {
@@ -191,6 +196,7 @@ export async function runWebsiteReview(
         businessName,
         known: bi.output.understanding.known,
         alreadyFound: r.findings.map((f) => f.title),
+        deadlineAt,
       });
       usage.inputTokens += mf.usage.inputTokens;
       usage.outputTokens += mf.usage.outputTokens;

@@ -1,5 +1,3 @@
-import { createHash, randomBytes } from "node:crypto";
-
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FACT_FIELDS } from "../../src/lib/business-profile";
@@ -26,7 +24,7 @@ const card = (check_key: string) => ({
   check_key, title: check_key, explanation: "x", why_it_matters: "x", recommended_action: "x", expected_benefit: "x",
   impact_priority: "high", confidence: "high", ai_capable: false, execution_type: "manual", approval_required: true, evidence_keys: ["w"],
 });
-const MODEL_KEY = randomBytes(32).toString("hex");
+let MODEL_KEY: string;
 /** One model call as the server records it: reserve the worst case, then settle with the actual cost. */
 const usage = async (o: string, cost: number, extra: Partial<{ cap: string; outcome: string; wf: string | null; run: string | null }> = {}) => {
   const [{ id }] = await q<{ id: string }>(owner, "select public.reserve_model_call($1,$2,$3,'anthropic-dev','claude-sonnet-5-5',$4,$5,$6) as id", [MODEL_KEY, o, extra.cap ?? "business_intelligence.understand", cost, extra.wf ?? null, extra.run ?? null]);
@@ -49,7 +47,7 @@ beforeAll(async () => {
   await db.admin.query("insert into public.platform_admins (user_id) values ($1)", [admin]);
   await db.grantPlan(org);
   await db.grantPlan(otherOrg);
-  await db.admin.query("insert into app_private.secrets (name, hash) values ('model_usage', $1)", [createHash("sha256").update(MODEL_KEY).digest()]);
+  MODEL_KEY = db.modelKey;
   [{ id: analysis }] = await q<{ id: string }>(owner, "select public.start_analysis($1) as id", [org]);
   await q(owner, "select public.complete_analysis($1,$2,$3,'{}','s','template')", [analysis, JSON.stringify(ev), JSON.stringify([card("meta.title_missing"), card("meta.description_missing")])]);
   const cards = await q<{ id: string; check_key: string }>(owner, "select id, check_key from public.action_cards where analysis_id = $1 order by check_key", [analysis]);

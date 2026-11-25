@@ -53,7 +53,7 @@ export function estimateInputTokens(text: string): number {
 }
 
 export const MAX_CALL_COST_MICRO = 5_000_000;
-const REASONS = new Set(["daily", "monthly", "global_daily"]);
+const REASONS = new Set(["daily", "monthly", "global_daily", "user_daily", "hourly"]);
 
 export function meteredProvider(inner: ModelProvider, ctx: MeterContext): ModelProvider {
   return {

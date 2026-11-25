@@ -14,7 +14,9 @@ export function createWorkerClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!url || !key) throw new Error("Worker is not configured: set SUPABASE_SECRET_KEY on the server.");
+  const agentKey = process.env.MODEL_USAGE_KEY?.trim();
   return createClient<Database>(url, key, {
+    global: agentKey ? { headers: { "x-agent-key": agentKey } } : undefined,
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }

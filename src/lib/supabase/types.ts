@@ -392,6 +392,8 @@ export type Database = {
       propose_business_facts: { Args: { p_org: string; p_analysis: string | null; p_facts: Json }; Returns: number };
       model_budget: { Args: { p_org: string }; Returns: Json };
       reserve_model_call: { Args: { p_key: string; p_org: string; p_capability: string; p_provider: string; p_model: string; p_max_cost_micro: number; p_workflow: string | null; p_agent_run: string | null }; Returns: string };
+      acquire_agent_slot: { Args: { p_key: string; p_org: string; p_name: string; p_seconds: number }; Returns: string };
+      release_agent_slot: { Args: { p_key: string; p_org: string; p_name: string; p_token: string }; Returns: undefined };
       settle_model_call: { Args: { p_key: string; p_reservation: string; p_model: string; p_input: number; p_output: number; p_cost_micro: number; p_outcome: string }; Returns: undefined };
       admin_model_usage: { Args: { p_days: number }; Returns: Json };
       save_marketing_plan: { Args: { p_org: string; p_analysis: string; p_plan: Json; p_provider: string; p_model: string }; Returns: string };

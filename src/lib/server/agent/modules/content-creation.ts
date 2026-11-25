@@ -68,6 +68,8 @@ export interface ContentInput {
   card: { title: string; explanation: string; recommendedAction: string };
   evidence: { url: string | null; observation: string; excerpt: string | null }[];
   ownerNotes: string | null;
+  /** When the whole request must be finished (epoch ms). */
+  deadlineAt?: number;
 }
 
 export interface ContentDraft {
@@ -111,6 +113,7 @@ export async function createContent(provider: ModelProvider, input: ContentInput
       ].join("\n"),
       schema: spec.schema as z.ZodType<Record<string, string>>,
       maxOutputTokens: 4000,
+      deadlineAt: input.deadlineAt,
     },
     provider,
   );

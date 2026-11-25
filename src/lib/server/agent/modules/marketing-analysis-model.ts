@@ -132,7 +132,7 @@ export function groundFindings(raw: ModelFindingOutput[], pages: SourcePage[], a
 
 export async function analyzeWithModel(
   provider: ModelProvider,
-  input: { pages: SourcePage[]; businessName: string; known: KnownFact[]; alreadyFound: string[] },
+  input: { pages: SourcePage[]; businessName: string; known: KnownFact[]; alreadyFound: string[]; deadlineAt?: number },
 ): Promise<ModelFindings> {
   const business = { name: input.businessName, details: input.known.map((k) => ({ [k.field]: k.value, confirmed_by_owner: k.confirmed })) };
   const r = await generateStructured(
@@ -142,6 +142,7 @@ export async function analyzeWithModel(
       input: `<business>${jsonForPrompt(business)}</business>\n<already_found>${jsonForPrompt(input.alreadyFound)}</already_found>\n${pagesForModel(input.pages)}`,
       schema: ModelFindingsSchema,
       maxOutputTokens: 8000,
+      deadlineAt: input.deadlineAt,
     },
     provider,
   );

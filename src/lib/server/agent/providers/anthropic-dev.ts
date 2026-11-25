@@ -31,13 +31,17 @@ export function anthropicDevProvider(env: Record<string, string | undefined> = p
     model: DEV_MODEL,
     async generate(req): Promise<ModelRawResponse> {
       const format = jsonSchemaOutputFormat(req.jsonSchema as { type: "object" } & Record<string, unknown>);
-      const response = await client.messages.create({
+      const response = await client.messages.create(
+        {
         model: DEV_MODEL,
         max_tokens: req.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         system: req.system,
         messages: [{ role: "user", content: typeof req.input === "string" ? req.input : JSON.stringify(req.input) }],
         output_config: { format: { type: "json_schema", schema: format.schema }, ...(effort ? { effort } : {}) },
-      });
+        },
+        // Never longer than the time left in the request.
+        { timeout: Math.min(req.timeoutMs ?? 75_000, 75_000) },
+      );
       const usage = { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
       if (response.stop_reason === "refusal") return { output: null, model: response.model, usage, refused: true };
       const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");

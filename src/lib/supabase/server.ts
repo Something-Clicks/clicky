@@ -14,7 +14,11 @@ import type { Database } from "./types";
 export async function createClient() {
   const { url, publishableKey } = getSupabaseEnv();
   const cookieStore = await cookies();
+  // The server key for model work goes with every request this server makes as the signed-in user (never to the browser):
+  // the database functions that store model-produced work refuse requests without it. See agent_key_ok in migration 20261202.
+  const agentKey = process.env.MODEL_USAGE_KEY?.trim();
   return createServerClient<Database>(url, publishableKey, {
+    global: agentKey ? { headers: { "x-agent-key": agentKey } } : undefined,
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll(cookiesToSet) {

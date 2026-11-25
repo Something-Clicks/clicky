@@ -145,6 +145,8 @@ export interface BusinessIntelligenceInput {
   scan?: SiteScan | null;
   /** When given (development and Preview only), the model reads the scan too. */
   provider?: ModelProvider | null;
+  /** When the whole request must be finished (epoch ms); the model call never runs past it. */
+  deadlineAt?: number;
   now?: Date;
 }
 
@@ -165,12 +167,12 @@ export interface BusinessIntelligence {
 
 export const businessIntelligence: CapabilityModule<BusinessIntelligenceInput, BusinessIntelligence> = {
   id: "business_intelligence",
-  async run({ profile, facts = [], scan = null, provider = null, now = new Date() }) {
+  async run({ profile, facts = [], scan = null, provider = null, deadlineAt, now = new Date() }) {
     const proposals = scan ? propose(scan) : [];
     let model: BusinessIntelligence["model"] = null;
     if (scan && provider) {
       try {
-        const m = await learnWithModel(provider, scan, profile);
+        const m = await learnWithModel(provider, scan, profile, deadlineAt);
         const have = new Set(proposals.map((p) => `${p.field}|${(p.value ?? "").toLowerCase()}`));
         for (const f of m.accepted) if (!have.has(`${f.field}|${(f.value ?? "").toLowerCase()}`)) proposals.push(f);
         model = { provider: m.provider, model: m.model, usage: m.usage, accepted: m.accepted.length, rejected: m.rejected };

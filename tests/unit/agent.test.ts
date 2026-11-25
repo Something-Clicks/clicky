@@ -56,6 +56,20 @@ describe("model provider", () => {
     expect(p.generate).toHaveBeenCalledTimes(2);
     await expect(generateStructured({ task: "t", system: "s", input: {}, schema }, double([{}, {}]))).rejects.toBeInstanceOf(ModelOutputInvalid);
   });
+
+  it("one request-wide deadline: each attempt gets only the time that is left, and none starts without enough", async () => {
+    const schema = z.object({ a: z.string() });
+    const seen: (number | undefined)[] = [];
+    const p: ModelProvider = { id: "t", generate: vi.fn(async (req) => { seen.push(req.timeoutMs); return { output: { a: "x" }, model: "m", usage: { inputTokens: 1, outputTokens: 1 } }; }) };
+    await generateStructured({ task: "t", system: "s", input: {}, schema, deadlineAt: Date.now() + 30_000 }, p);
+    expect(seen[0]).toBeLessThanOrEqual(30_000);
+    expect(seen[0]).toBeGreaterThan(20_000);
+    await generateStructured({ task: "t", system: "s", input: {}, schema }, p);
+    expect(seen[1]).toBe(75_000); // no deadline: the normal per-attempt limit
+    p.generate = vi.fn(async () => ({ output: { a: "x" }, model: "m", usage: { inputTokens: 1, outputTokens: 1 } }));
+    await expect(generateStructured({ task: "t", system: "s", input: {}, schema, deadlineAt: Date.now() + 5_000 }, p)).rejects.toMatchObject({ reason: "out_of_time" });
+    expect(p.generate).not.toHaveBeenCalled(); // the model is not called at all when there is no time to wait for it
+  });
 });
 
 describe("workflow selection (spec 12.2)", () => {

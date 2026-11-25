@@ -8,7 +8,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
 
 const root = join(__dirname, "..", "..");
@@ -35,7 +35,10 @@ export interface TestDb {
   /** Gives an organization an active subscription (as a verified webhook would). */
   grantPlan(orgId: string, plan?: string): Promise<void>;
   /** Runs `fn` in a transaction as the given user, anon (null), or the service role ("service"), then commits. */
-  as<T>(userId: string | null, fn: (c: pg.Client) => Promise<T>): Promise<T>;
+  /** The app server's key for model work (its hash is in app_private.secrets); `as` sends it as the x-agent-key request header. */
+  modelKey: string;
+  /** Pass { customer: true } to act like a customer calling the API directly: same sign-in, no server key header. */
+  as<T>(userId: string | null, fn: (c: pg.Client) => Promise<T>, opts?: { customer?: boolean }): Promise<T>;
   teardown(): Promise<void>;
 }
 
@@ -56,6 +59,9 @@ export async function setupTestDb(): Promise<TestDb> {
   // The functions that store model-produced work are off in a fresh database (as in Production); tests switch them on,
   // as on clicky-dev, and tests/db/agent-switch.test.ts covers the off state.
   await admin.query("update public.app_config set value = '1' where key = 'agent_functions_enabled'");
+
+  const modelKey = randomBytes(32).toString("hex");
+  await admin.query("insert into app_private.secrets (name, hash) values ('model_usage', $1)", [createHash("sha256").update(modelKey).digest()]);
 
   const user = new pg.Client(connectionConfig(name));
   await user.connect();
@@ -79,9 +85,11 @@ export async function setupTestDb(): Promise<TestDb> {
         [orgId, `sub_${randomUUID().replace(/-/g, "")}`, plan],
       );
     },
-    async as(userId, fn) {
+    modelKey,
+    async as(userId, fn, opts = {}) {
       await user.query("begin");
       try {
+        await user.query("select set_config('request.headers', $1, true)", [JSON.stringify(opts.customer ? {} : { "x-agent-key": modelKey })]);
         if (userId === "service") {
           await user.query("set local role service_role");
           await user.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ role: "service_role" })]);

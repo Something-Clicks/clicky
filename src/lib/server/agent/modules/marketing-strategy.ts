@@ -85,6 +85,8 @@ export interface PlanInput {
   /** The owner's own words when revising a plan (data, not instructions). */
   ownerNotes: string | null;
   provider?: ModelProvider | null;
+  /** When the whole request must be finished (epoch ms). */
+  deadlineAt?: number;
 }
 
 export const withRefs = (cards: Omit<PlanCard, "ref">[]): PlanCard[] => cards.slice(0, 25).map((c, i) => ({ ...c, ref: `a${i + 1}` }));
@@ -238,6 +240,7 @@ export async function createPlan(provider: ModelProvider, input: PlanInput): Pro
       input: `<business>${jsonForPrompt(business)}</business>\n<open_actions>${jsonForPrompt(open)}</open_actions>${notes}`,
       schema: PlanSchema,
       maxOutputTokens: 8000,
+      deadlineAt: input.deadlineAt,
     },
     provider,
   );

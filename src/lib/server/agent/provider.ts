@@ -40,6 +40,8 @@ export interface ModelRequest<T> {
   /** The shape the answer must have. */
   schema: z.ZodType<T>;
   maxOutputTokens?: number;
+  /** When the whole request must be finished (epoch ms). No attempt starts, and none is allowed to run, past it. */
+  deadlineAt?: number;
 }
 
 export interface ModelRawResponse {
@@ -55,7 +57,7 @@ export interface ModelProvider {
   readonly id: string;
   /** The model this adapter calls (used to price calls before they are made). */
   readonly model?: string;
-  generate(request: Omit<ModelRequest<unknown>, "schema"> & { jsonSchema: unknown }): Promise<ModelRawResponse>;
+  generate(request: Omit<ModelRequest<unknown>, "schema" | "deadlineAt"> & { jsonSchema: unknown; timeoutMs?: number }): Promise<ModelRawResponse>;
 }
 
 export interface ModelResult<T> {
@@ -64,6 +66,10 @@ export interface ModelResult<T> {
   model: string;
   usage: ModelUsage;
 }
+
+/** The longest one attempt may take, and the least time worth starting one with. */
+export const ATTEMPT_TIMEOUT_MS = 75_000;
+export const MIN_ATTEMPT_MS = 12_000;
 
 export class ModelProviderNotConfigured extends Error {
   constructor() {
@@ -119,16 +125,18 @@ export function getModelProvider(env: Record<string, string | undefined> = proce
  */
 export async function generateStructured<T>(request: ModelRequest<T>, provider: ModelProvider | null): Promise<ModelResult<T>> {
   if (!provider) throw new ModelProviderNotConfigured();
-  const { schema, ...rest } = request;
+  const { schema, deadlineAt, ...rest } = request;
   // The adapter passes this to the provider's structured-output feature; validation still happens here.
   const jsonSchema = z.toJSONSchema(schema);
   let lastReason = "unknown";
   const usage: ModelUsage = { inputTokens: 0, outputTokens: 0 };
   const started = Date.now();
   for (let attempt = 1; attempt <= 2; attempt++) {
-    // A retry only fits if the first answer came back quickly (adapter timeout 75 s + 40 s stays inside a 120 s request).
+    // A retry only fits if the first answer came back quickly, and no attempt may run past the request's deadline.
     if (attempt === 2 && Date.now() - started > 40_000) throw new ModelOutputInvalid("too_slow_to_retry");
-    const raw = await provider.generate({ ...rest, jsonSchema });
+    const remaining = deadlineAt === undefined ? ATTEMPT_TIMEOUT_MS : deadlineAt - Date.now();
+    if (remaining < MIN_ATTEMPT_MS) throw new ModelOutputInvalid("out_of_time");
+    const raw = await provider.generate({ ...rest, jsonSchema, timeoutMs: Math.min(ATTEMPT_TIMEOUT_MS, remaining) });
     usage.inputTokens += raw.usage.inputTokens;
     usage.outputTokens += raw.usage.outputTokens;
     if (raw.refused) throw new ModelOutputInvalid("refused");

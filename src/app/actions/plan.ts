@@ -15,6 +15,8 @@ import type { Json } from "@/lib/supabase/types";
 import type { FormState } from "@/lib/validation";
 
 const UUID = /^[0-9a-f-]{36}$/i;
+/** A plan request must be finished well inside the page's 120 s limit. */
+const REQUEST_DEADLINE_MS = 100_000;
 const IMPACT = { high: 0, medium: 1, low: 2 } as const;
 const LEVEL = (v: string) => IMPACT[v as keyof typeof IMPACT] ?? 3;
 
@@ -33,17 +35,6 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
   const orgId = ws.organization.id;
 
   const supabase = await createClient();
-  // One plan at a time: a model call for this business's plan that was reserved in the last three minutes and not
-  // settled yet means another request is still running (a second click, a second tab).
-  const { count: running } = await supabase
-    .from("model_usage")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", orgId)
-    .eq("capability", "marketing_strategy.plan")
-    .eq("outcome", "reserved")
-    .gt("created_at", new Date(Date.now() - 3 * 60_000).toISOString());
-  if ((running ?? 0) > 0) return { error: "Your plan is already being prepared. Give it a minute." };
-
   const { data: analysis } = await supabase
     .from("analyses")
     .select("id")
@@ -69,6 +60,15 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
   const profile = { businessName: b.businessName, website: b.website ?? "", serviceArea: b.serviceArea, primaryGoal: b.primaryGoal };
   const { understanding } = await loadUnderstanding(supabase, orgId, profile);
 
+  // One plan at a time per business, atomically in the database for the whole request (a second click or a second tab is
+  // told to wait). The slot expires on its own if this request dies.
+  const key = process.env.MODEL_USAGE_KEY?.trim();
+  if (!key) return { error: "Plans aren't switched on yet." };
+  const { data: slot, error: slotError } = await supabase.rpc("acquire_agent_slot", { p_key: key, p_org: orgId, p_name: "marketing_strategy.plan", p_seconds: 150 });
+  if (slotError || typeof slot !== "string") {
+    return { error: (slotError as { hint?: string } | null)?.hint === "busy" ? "Your plan is already being prepared. Give it a minute." : "We couldn't start your plan. Please try again." };
+  }
+
   try {
     const provider = meteredProvider(rawProvider, { db: supabase, orgId, capability: "marketing_strategy.plan" });
     const result = await createPlan(provider, {
@@ -81,6 +81,7 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
         impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown", stage: cardStage(c),
       })),
       ownerNotes: notes,
+      deadlineAt: Date.now() + REQUEST_DEADLINE_MS,
     });
     const { error } = await supabase.rpc("save_marketing_plan", {
       p_org: orgId, p_analysis: analysis.id, p_plan: result.plan as unknown as Json, p_provider: result.provider, p_model: result.model,
@@ -92,6 +93,9 @@ export async function preparePlan(_prev: FormState, form: FormData): Promise<For
     if (e instanceof ModelBudgetExceeded) return { error: "Planning has reached its usage limit for now. Please try again later." };
     if (e instanceof PlanRejected || e instanceof ModelOutputInvalid) return { error: "We couldn't prepare a usable plan this time. Please try again." };
     return { error: "We couldn't prepare the plan. Please try again." };
+  } finally {
+    const { error: releaseError } = await supabase.rpc("release_agent_slot", { p_key: key, p_org: orgId, p_name: "marketing_strategy.plan", p_token: slot });
+    if (releaseError) log.warn("plan.slot_release_failed", { orgId, error: releaseError.message });
   }
   revalidatePath("/app/plan");
   return { ok: true, message: notes ? "Here's the revised plan." : "Here's your plan." };

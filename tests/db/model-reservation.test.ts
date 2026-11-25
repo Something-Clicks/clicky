@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -16,7 +16,7 @@ let member: string;
 let outsider: string;
 let org: string;
 let otherOrg: string;
-const KEY = randomBytes(32).toString("hex");
+let KEY: string;
 const PERMISSION_DENIED = /permission denied/;
 const q = <T = Record<string, unknown>>(user: string | null, sql: string, params: unknown[] = []) =>
   db.as(user, async (c) => (await c.query(sql, params)).rows as [T, ...T[]]);
@@ -36,7 +36,7 @@ beforeAll(async () => {
   await db.admin.query("insert into public.organization_members values ($1,$2,'member',now())", [org, member]);
   await db.grantPlan(org);
   await db.grantPlan(otherOrg);
-  await db.admin.query("insert into app_private.secrets (name, hash) values ('model_usage', $1)", [createHash("sha256").update(KEY).digest()]);
+  KEY = db.modelKey;
 }, 60_000);
 afterAll(async () => db?.teardown());
 

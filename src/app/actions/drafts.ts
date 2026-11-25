@@ -63,6 +63,7 @@ export async function prepareDraft(_prev: FormState, form: FormData): Promise<Fo
     kind: card.execution_type as DraftKind,
     businessName: b.businessName,
     known: understanding.known,
+    deadlineAt: Date.now() + 100_000,
     card: { title: card.title, explanation: card.explanation, recommendedAction: card.recommended_action },
     evidence: card.action_card_evidence.map((x) => x.analysis_evidence).filter((e) => e !== null),
     ownerNotes: instructions,

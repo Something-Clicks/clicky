@@ -151,7 +151,7 @@ export interface ModelUnderstanding extends GroundingResult {
   usage: ModelUsage;
 }
 
-export async function learnWithModel(provider: ModelProvider, scan: SiteScan, business: { businessName: string; serviceArea: string | null }): Promise<ModelUnderstanding> {
+export async function learnWithModel(provider: ModelProvider, scan: SiteScan, business: { businessName: string; serviceArea: string | null }, deadlineAt?: number): Promise<ModelUnderstanding> {
   const pages = sourcePages(scan);
   const r = await generateStructured(
     {
@@ -160,6 +160,7 @@ export async function learnWithModel(provider: ModelProvider, scan: SiteScan, bu
       input: `<business name="${business.businessName.replace(/"/g, "'")}" service_area="${(business.serviceArea ?? "").replace(/"/g, "'")}" />\n${pagesForModel(pages)}`,
       schema: UnderstandingSchema,
       maxOutputTokens: 8000,
+      deadlineAt,
     },
     provider,
   );
