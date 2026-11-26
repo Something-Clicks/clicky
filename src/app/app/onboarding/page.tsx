@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 
+import { signOut } from "@/app/actions/auth";
 import { getWorkspace } from "@/lib/auth";
 import { getStartFlow } from "@/lib/start-flow";
 
@@ -29,6 +30,12 @@ export default async function OnboardingPage() {
           zipCode: start?.zipCode ?? "",
         }}
       />
+      {/* Before the business exists the signed-in sidebar is not shown on a phone, so this is the only way to sign out. */}
+      {!workspace.organization ? (
+        <form data-clarity-mask="true" action={signOut}>
+          <button className="btn small ghost" type="submit">Sign out</button>
+        </form>
+      ) : null}
     </div>
   );
 }
