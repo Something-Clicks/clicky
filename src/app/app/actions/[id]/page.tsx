@@ -18,6 +18,7 @@ import { getModelProvider } from "@/lib/server/agent/provider";
 import { approveDraftVersion } from "@/app/actions/drafts";
 import { EditDraftForm } from "@/components/edit-draft";
 import { createClient } from "@/lib/supabase/server";
+import { ExecutionPanel } from "@/components/execution-panel";
 
 import { CopyButton } from "./copy-button";
 
@@ -230,6 +231,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       </div>
+      {FEATURES.agent ? <ExecutionPanel card={{ id: card.id, status: card.status, effort: card.effort ?? null, depends_on: card.depends_on ?? [] }} isOwner={isOwner} /> : null}
     </>
   );
 }

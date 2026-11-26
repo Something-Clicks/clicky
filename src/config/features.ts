@@ -13,6 +13,9 @@
  *                     owner reviews, revises, approves or rejects.
  *   campaigns       - Research (compare with websites the owner names) and Campaigns (fixed playbooks, guided tasks the
  *                     owner approves, edits and marks done). Needs no model.
+ *   agent           - Ask (one request box; the orchestrator understands it and runs the right workflow), Results
+ *                     (supplied figures, outcomes, follow-ups), the Research Library keyword import, and execution
+ *                     records on each action (owner-authorized saving and recording; no publishing). Needs no model.
  *
  * Server-only: read these in server components and server actions, and pass plain booleans to client
  * components (client bundles never see these variables, so they would always read false).
@@ -36,5 +39,8 @@ export const FEATURES = {
   },
   get campaigns() {
     return on("CAMPAIGNS");
+  },
+  get agent() {
+    return on("AGENT");
   },
 };

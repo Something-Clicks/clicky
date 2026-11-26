@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProposedFact } from "@/lib/business-profile";
+import { FACT_LABEL, type FactField, type ProposedFact } from "@/lib/business-profile";
 import { EVIDENCE_CLASSES, type EvidenceClass } from "@/lib/evidence";
 import { log } from "@/lib/log";
 import type { Json } from "@/lib/supabase/types";
@@ -469,6 +469,8 @@ export function routeRequest(text: string, env = { modelProvider: getModelProvid
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** Missing business details in plain words, for workflow records the owner can read. */
+const missingWords = (fields: FactField[]) => (fields.length ? fields.map((f) => (FACT_LABEL[f] ?? f).toLowerCase()).join(", ") : "nothing");
 
 /** A next step from the owner's own keyword research: only fresh rows, only figures the source reported. */
 export function keywordNextStep(keywords: NonNullable<AgentContext["research"]>["keywords"]): string | null {
@@ -511,7 +513,7 @@ export async function runMarketingPlan(
 
   const ctx = await loadAgentContext(db, input.orgId, input.profile, "marketing_plan", deps.now);
   const u = ctx.understanding!;
-  step({ step: "understand_business", capability: "business_intelligence", status: "done", detail: `${plural(u.known.length, "confirmed or proposed detail")}; missing: ${u.missing.length ? u.missing.join(", ") : "nothing"}. ${plural(ctx.decisions!.dismissed.length, "earlier dismissed action")} remembered.` });
+  step({ step: "understand_business", capability: "business_intelligence", status: "done", detail: `${plural(u.known.length, "confirmed or proposed detail")}; missing: ${missingWords(u.missing)}. ${plural(ctx.decisions!.dismissed.length, "earlier dismissed action")} remembered.` });
   const r = ctx.research!;
   step({
     step: "research", capability: "market_research", status: "done",
@@ -667,7 +669,7 @@ export async function runHomepageHeadline(
   const workflowId = await openRecord(db, input.orgId, "homepage_headline", input.request ?? null, plan.capabilities, null);
   const ctx = await loadAgentContext(db, input.orgId, input.profile, "homepage_headline", deps.now);
   const u = ctx.understanding!;
-  step({ step: "understand_business", capability: "business_intelligence", status: "done", detail: `${plural(u.known.length, "detail")} known; missing: ${u.missing.join(", ") || "nothing"}.` });
+  step({ step: "understand_business", capability: "business_intelligence", status: "done", detail: `${plural(u.known.length, "detail")} known; missing: ${missingWords(u.missing)}.` });
   if (!ctx.latestAnalysis) {
     const reason = "Check your website first. The headline work starts from what is on your homepage now.";
     step({ step: "review_website", capability: "website_intelligence", status: "failed", detail: reason });
@@ -686,7 +688,7 @@ export async function runHomepageHeadline(
   const draftable = card.execution_type === "page_copy";
   if (!hasModel || !deps.draftsEnabled || !draftable) {
     const reason = !hasModel
-      ? "No language model is available yet, so no headline was written. The finding and its evidence are on the action."
+      ? "We can't write new headlines yet, so nothing was written. What we found, and the evidence, are on the action."
       : !draftable ? "This action needs a change only you or your web designer can make." : "Drafts are switched off here.";
     step({ step: "create_content", capability: "content_creation", status: "blocked", detail: reason });
     await closeRecord(db, workflowId, "blocked", steps, { card: ref }, reason);

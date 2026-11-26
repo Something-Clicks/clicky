@@ -209,6 +209,10 @@ describe("Performance Intelligence over supplied figures only", () => {
     const f = followUps({ summary: some, stillFound: [{ id: "c9", title: "Add a headline" }] });
     expect(f.map((x) => x.kind)).toEqual(["still_found", "worse", "verified"]);
     expect(f[1]!.why).toMatch(/do not say why/);
+    // An improvement is never credited to a piece of work.
+    const up = followUps({ summary: summarizePerformance({ cards: [], metrics: [m("calls", "2026-09-01", "2026-09-30", 40), m("calls", "2026-10-01", "2026-10-30", 52)] }), stillFound: [] });
+    expect(up[0]!.why).toMatch(/do not say why/);
+    expect(up[0]!.why).not.toMatch(/because|thanks to|worked/i);
   });
 });
 
@@ -302,7 +306,7 @@ describe("orchestrator: homepage headline", () => {
     const { db, rpc } = fakeDb({ analyses: [analysis], action_cards: [card("h1", "content.h1_missing")] });
     const out = await runHomepageHeadline(db, { orgId: ORG, profile, request: "Better headline" }, { draftsEnabled: true });
     expect(out).toMatchObject({ status: "blocked", card: { id: "h1" } });
-    expect(out.reason).toMatch(/No language model is available yet, so no headline was written/);
+    expect(out.reason).toMatch(/We can't write new headlines yet, so nothing was written/);
     expect(out.steps.at(-1)).toMatchObject({ capability: "content_creation", status: "blocked" });
     expect(rpc.mock.calls.map((c) => c[0])).not.toContain("start_agent_run");
   });

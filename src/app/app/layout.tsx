@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <Shell
       groups={[
         // "Business details", "Your plan", "Compare" and "Campaigns" appear only where their switches are on (never in Production).
-        { label: workspace.business?.businessName ?? "Your business", items: [...NAV.slice(0, 3), ...(FEATURES.businessProfile ? [{ href: "/app/business", label: "Business details" }] : []), ...(FEATURES.strategy ? [{ href: "/app/plan", label: "Your plan" }] : []), ...(FEATURES.campaigns ? [{ href: "/app/research", label: "Compare" }, { href: "/app/campaigns", label: "Campaigns" }] : []), ...NAV.slice(3)] },
+        { label: workspace.business?.businessName ?? "Your business", items: [...NAV.slice(0, 1), ...(FEATURES.agent ? [{ href: "/app/ask", label: "Ask" }] : []), ...NAV.slice(1, 3), ...(FEATURES.businessProfile ? [{ href: "/app/business", label: "Business details" }] : []), ...(FEATURES.strategy ? [{ href: "/app/plan", label: "Your plan" }] : []), ...(FEATURES.campaigns ? [{ href: "/app/research", label: "Compare" }, { href: "/app/campaigns", label: "Campaigns" }] : []), ...(FEATURES.agent ? [{ href: "/app/library", label: "Research" }, { href: "/app/results", label: "Results" }] : []), ...NAV.slice(3)] },
         ...(isAdmin === true ? [{ label: "Platform", items: [{ href: "/admin", label: "Admin" }] }] : []),
       ]}
       tabs={TABS}

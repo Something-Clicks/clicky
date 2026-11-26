@@ -183,7 +183,7 @@ export function followUps(input: { summary: PerformanceSummary; stillFound: { id
     out.push({ kind: "worse", metric: c.metric, title: `Check why ${c.label.toLowerCase()} dropped`, why: `${c.note} The figures alone do not say why.` });
   }
   for (const c of input.summary.comparisons.filter((x) => x.direction === "better")) {
-    out.push({ kind: "better", metric: c.metric, title: `${c.label} improved`, why: `${c.note} Keep the work that was done around this period going.` });
+    out.push({ kind: "better", metric: c.metric, title: `${c.label} improved`, why: `${c.note} The figures alone do not say why; note what changed in that period.` });
   }
   if (input.summary.verified_fixed) {
     out.push({ kind: "verified", title: `${input.summary.verified_fixed} fix${input.summary.verified_fixed === 1 ? "" : "es"} confirmed on your website`, why: "A website check no longer finds these issues." });
