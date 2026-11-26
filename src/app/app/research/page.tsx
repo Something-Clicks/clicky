@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { removeComparison } from "@/app/actions/campaigns";
@@ -33,6 +34,7 @@ export default async function ResearchPage() {
         <h1 className="h1">Compare</h1>
         <p className="sub">See what other websites show on their homepage that yours doesn&apos;t. We only read public pages.</p>
       </div>
+      {!own && others.length === 0 && !ws.business?.website ? <p className="notice">Add your website first so we can compare it. <Link className="link" href="/app/onboarding">Add it</Link></p> : null}
       <section className="card stack"><h2 style={{ marginTop: 0 }}>{others.length ? "Compare again" : "Pick websites to compare with"}</h2><CompareForm /></section>
 
       {table.length && read.length ? (
@@ -53,14 +55,19 @@ export default async function ResearchPage() {
             </table>
           </div>
           <p className="small muted">Observed on each public homepage. &ldquo;Yes&rdquo; means the page shows or mentions it; it doesn&apos;t mean the claim is true.</p>
-          {table.some((r) => r.gap) ? <p>{table.filter((r) => r.gap).length} thing{table.filter((r) => r.gap).length === 1 ? "" : "s"} they show that you don&apos;t. Turn them into tasks on the Campaigns page.</p> : <p>You show everything the compared sites show.</p>}
+          {table.some((r) => r.gap) ? (
+            <>
+              <p>{table.filter((r) => r.gap).length} thing{table.filter((r) => r.gap).length === 1 ? "" : "s"} they show that you don&apos;t.</p>
+              <div><Link className="btn" href="/app/campaigns">Turn this into tasks</Link></div>
+            </>
+          ) : <p>You show everything the compared sites show. <Link className="link" href="/app/campaigns">See your campaigns</Link></p>}
         </section>
       ) : null}
 
       {others.length ? (
         <section className="card stack" aria-labelledby="cmp-sites">
           <h2 id="cmp-sites" style={{ margin: 0 }}>Websites</h2>
-          <ul className="stack">
+          <ul className="stack" style={{ listStyle: "none", paddingLeft: 0 }}>
             {others.map((s) => (
               <li key={s.id} className="row between">
                 <span>{s.host} {s.status === "failed" ? <span className="small muted">· couldn&apos;t be read{s.failure ? `: ${s.failure}` : ""}</span> : <span className="small muted">· read {new Date(s.scanned_at).toLocaleDateString()}</span>}</span>

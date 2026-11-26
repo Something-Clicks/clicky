@@ -40,14 +40,19 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   ]);
   // Pointers to the next steps of the journey, only where those screens exist (switches are off in Production).
   const supabase = await createClient();
-  const [{ count: detailsToCheck }, { data: planRow }] = await Promise.all([
+  const [{ count: detailsToCheck }, { data: planRow }, { data: campaignRows }] = await Promise.all([
     FEATURES.businessProfile
       ? supabase.from("business_facts").select("id", { count: "exact", head: true }).eq("organization_id", ws.organization.id).eq("status", "proposed").not("value", "is", null)
       : Promise.resolve({ count: 0 }),
     FEATURES.strategy
       ? supabase.from("marketing_plans").select("status").eq("organization_id", ws.organization.id).in("status", ["proposed", "approved"]).order("created_at", { ascending: false }).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
+    FEATURES.campaigns
+      ? supabase.from("marketing_campaigns").select("status").eq("organization_id", ws.organization.id).in("status", ["proposed", "approved"]).limit(20)
+      : Promise.resolve({ data: [] as { status: string }[] }),
   ]);
+  const campaignsToReview = (campaignRows ?? []).filter((c) => c.status === "proposed").length;
+  const campaignsActive = (campaignRows ?? []).filter((c) => c.status === "approved").length;
   const open = openCards(cards);
   const stages = stageCounts(open);
   const running = latest?.status === "running";
@@ -90,6 +95,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             <Link href="/app/plan" className={planRow?.status === "proposed" ? "pill yellow" : "pill"} style={{ textDecoration: "none" }}>
               {planRow?.status === "proposed" ? "Your plan is ready to review" : planRow ? "Your plan" : "Get your plan"}
             </Link>
+          ) : null}
+          {FEATURES.campaigns && lastComplete ? (
+            <>
+              <Link href="/app/campaigns" className={campaignsToReview > 0 ? "pill yellow" : "pill"} style={{ textDecoration: "none" }}>
+                {campaignsToReview > 0 ? `${campaignsToReview} ${campaignsToReview === 1 ? "campaign" : "campaigns"} to review` : campaignsActive > 0 ? `${campaignsActive} in progress` : "Campaigns"}
+              </Link>
+              <Link href="/app/research" className="pill" style={{ textDecoration: "none" }}>Compare</Link>
+            </>
           ) : null}
           {FEATURES.drafts && approvalsWaiting > 0 ? (
             <Link href="/app/approvals" className="pill yellow" style={{ textDecoration: "none" }}>

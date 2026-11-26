@@ -45,7 +45,10 @@ export default async function CampaignsPage() {
           </section>
         );
       })}
-      {!list.length ? <p className="muted">Nothing here yet. Check your website first, and compare it with a few others if you like.</p> : null}
+      {!list.length ? (
+        <p className="muted">Nothing here yet. We build campaigns from your <Link className="link" href="/app">website check</Link>, and from what you <Link className="link" href="/app/research">compare it with</Link>. Press the button above once you have a check.</p>
+      ) : null}
+      {FEATURES.businessProfile ? <p className="small muted">Tip: confirm where you work and what you offer in <Link className="link" href="/app/business">Business details</Link>. Some campaigns, like your Google profile, need them.</p> : null}
     </div>
   );
 }

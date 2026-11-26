@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
-import { readSignals, type SiteSignals } from "@/lib/research";
+import { parseSiteList, readSignals, type SiteSignals } from "@/lib/research";
 import { loadUnderstanding } from "@/lib/server/agent/context";
 import { runCampaignPlanning, runCompetitorResearch } from "@/lib/server/agent/orchestrator";
 import { cardStage } from "@/lib/stages";
@@ -19,7 +19,9 @@ export async function compareWebsites(_prev: FormState, form: FormData): Promise
   if (!FEATURES.campaigns) return { error: "Comparing isn't available yet." };
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };
-  const urls = String(form.get("sites") ?? "").split(/[\s,]+/).map((s) => s.trim()).filter(Boolean).slice(0, 5);
+  // One website per line (or separated by commas). A line with spaces in it is one bad entry, not several words.
+  const urls = parseSiteList(String(form.get("sites") ?? ""));
+  if (urls.length > 5) return { error: "That's more than 5. Pick the 5 that matter most." };
   const supabase = await createClient();
   const out = await runCompetitorResearch(supabase, { orgId: ws.organization.id, ownWebsite: ws.business.website ?? "", urls });
   revalidatePath("/app/research");
@@ -56,9 +58,10 @@ export async function prepareCampaigns(_prev: FormState, _form: FormData): Promi
   const cards = (rows ?? []).filter((c) => cardStage(c) !== "completed").map((c) => ({
     id: c.id, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action, impact: c.impact_priority, evidence_class: c.evidence_class ?? "unknown",
   }));
-  const serviceArea = b.serviceArea ?? "";
   const primaryGoal = b.primaryGoal ?? "";
-  const { facts } = await loadUnderstanding(supabase, orgId, { businessName: b.businessName, website: b.website ?? "", serviceArea, primaryGoal });
+  const { facts } = await loadUnderstanding(supabase, orgId, { businessName: b.businessName, website: b.website ?? "", serviceArea: b.serviceArea ?? "", primaryGoal });
+  const confirmedArea = facts.find((f) => f.field === "service_area" && f.status === "confirmed" && f.value)?.value ?? "";
+  const serviceArea = b.serviceArea || confirmedArea;
   const confirmedServices = facts.filter((f) => f.field === "service" && f.status === "confirmed" && f.value).map((f) => f.value as string);
   const done = (scans ?? []).filter((s) => s.status === "done").map((s) => ({ host: s.host, own: s.is_self, signals: readSignals(s.signals) })).filter((s): s is { host: string; own: boolean; signals: SiteSignals } => s.signals !== null);
   const own = done.find((s) => s.own)?.signals ?? null;

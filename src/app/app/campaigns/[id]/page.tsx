@@ -7,6 +7,7 @@ import { CopyButton } from "@/app/app/actions/[id]/copy-button";
 import { FEATURES } from "@/config/features";
 import { requireOrganization } from "@/lib/auth";
 import { campaignResults } from "@/lib/campaigns";
+import { EvidenceLine } from "@/components/intelligence";
 import { EVIDENCE_CLASS_LABEL, isEvidenceClass } from "@/lib/evidence";
 import { createClient } from "@/lib/supabase/server";
 
@@ -27,7 +28,10 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     .eq("campaign_id", id).order("position");
   const list = tasks ?? [];
   const cardIds = list.flatMap((t) => (t.card_id ? [t.card_id] : []));
-  const { data: cards } = cardIds.length ? await supabase.from("action_cards").select("id, verification").in("id", cardIds) : { data: [] as { id: string; verification: string | null }[] };
+  const { data: cards } = cardIds.length ? await supabase.from("action_cards").select("id, verification, status").in("id", cardIds) : { data: [] as { id: string; verification: string | null; status: string }[] };
+  const { data: ev } = cardIds.length
+    ? await supabase.from("action_card_evidence").select("action_card_id, analysis_evidence ( id, kind, source, url, observation, excerpt )").in("action_card_id", cardIds)
+    : { data: [] as { action_card_id: string; analysis_evidence: { id: string; kind: string; source: string; url: string | null; observation: string; excerpt: string | null } | null }[] };
   const results = campaignResults(list, new Map((cards ?? []).map((x) => [x.id, x])));
   const isOwner = ws.organization.role === "owner";
   const approved = c.status === "approved" || c.status === "completed";
@@ -56,6 +60,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         <section className="card stack" aria-labelledby="camp-results">
           <h2 id="camp-results" style={{ margin: 0 }}>How it&apos;s going</h2>
           <p>{results.done} of {results.total} tasks done{results.skipped ? `, ${results.skipped} skipped` : ""}.</p>
+          {results.open > 0 ? <p className="small">Next: {list.find((t) => t.status === "approved")?.title ?? "finish the remaining tasks"}.</p> : <p className="small">All done. Check your website again to see what changed.</p>}
           {results.fixesLinked ? <p className="small muted">Website fixes: {results.verifiedFixed} confirmed fixed by a website check, {results.stillFound} still found, {results.awaitingCheck} waiting for the next check.</p> : null}
         </section>
       )}
@@ -69,12 +74,17 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
             <li key={t.id} className="card stack">
               <div className="row between">
                 <h2 style={{ margin: 0 }}>{t.position}. {t.title}</h2>
-                {closed ? <span className="pill green">{t.status === "done" ? "Done" : "Skipped"}</span> : t.status === "approved" ? <span className="pill">To do</span> : <span className="pill yellow">Not approved yet</span>}
+                {closed ? <span className="pill green">{t.status === "done" ? "Done" : "Skipped"}</span> : t.status === "approved" ? <span className="pill">Ready to do</span> : <span className="pill yellow">Not approved yet</span>}
               </div>
               <p>{t.why}</p>
               <p className="small muted">{isEvidenceClass(t.evidence_class) ? EVIDENCE_CLASS_LABEL[t.evidence_class] : t.evidence_class}{t.basis ? ` · ${t.basis}` : ""}</p>
               {steps.length ? <ol>{steps.map((s) => <li key={s}>{s}</li>)}</ol> : null}
-              {t.card_id ? <p className="small"><Link className="link" href={`/app/actions/${t.card_id}`}>See the evidence for this fix</Link></p> : null}
+              {t.card_id ? (
+                <div className="stack">
+                  {(ev ?? []).filter((x) => x.action_card_id === t.card_id && x.analysis_evidence).slice(0, 2).map((x) => <EvidenceLine key={x.analysis_evidence!.id} e={x.analysis_evidence!} />)}
+                  <p className="small"><Link className="link" href={`/app/actions/${t.card_id}`}>Open the full recommendation</Link></p>
+                </div>
+              ) : null}
               {draft ? (
                 <form action={editTaskDraft} className="stack" data-clarity-mask="true">
                   <input type="hidden" name="task" value={t.id} /><input type="hidden" name="campaign" value={c.id} />

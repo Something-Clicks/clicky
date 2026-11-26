@@ -1,4 +1,7 @@
-# Local end-to-end stack (not run yet — needs the owner's go-ahead)
+# Local end-to-end stack
+
+**Update Nov 26:** `local-up.sh` builds and runs this stack (PostgREST release binary; GoTrue built from its Go module; no Docker, no Mailpit, auto-confirmed sign-ups) and `tests/e2e/campaigns.spec.ts` ran on it: 7/7 desktop and 7/7 iPhone. The text below is the original plan.
+
 
 The full customer journey (Save this → email link → claim in another browser) needs Supabase Auth and the
 Supabase REST API. Docker images could not be pulled in the build environment, so the plan is a small

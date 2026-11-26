@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { campaignResults, planCampaigns, type CampaignInput } from "@/lib/campaigns";
-import { compareSignals, readSignals, siteSignals } from "@/lib/research";
+import { compareSignals, parseSiteList, readSignals, siteSignals } from "@/lib/research";
 import { MODULES } from "@/lib/server/agent/modules";
 import { runCampaignPlanning, runCompetitorResearch } from "@/lib/server/agent/orchestrator";
 import { extractFacts } from "@/lib/server/site-scan";
@@ -48,6 +48,13 @@ describe("site signals (observed on the homepage)", () => {
     expect(rows.find((r) => r.key === "clickToCall")).toMatchObject({ yours: false, gap: true, showing: ["plumber.example"], compared: 1 });
     expect(compareSignals(sig("plumber.html"), [{ host: "joes-lawn.example", signals: own }]).some((r) => r.gap)).toBe(false);
     expect(compareSignals(null, [])).toEqual([]);
+  });
+});
+
+describe("website list parsing", () => {
+  it("keeps a line with spaces as one entry instead of splitting it into words", () => {
+    expect(parseSiteList("pypi.org\n  nodejs.org , huggingface.co;not a site at all\r\n\n")).toEqual(["pypi.org", "nodejs.org", "huggingface.co", "not a site at all"]);
+    expect(parseSiteList("   ")).toEqual([]);
   });
 });
 

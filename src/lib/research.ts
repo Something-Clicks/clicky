@@ -75,3 +75,8 @@ export function compareSignals(own: SiteSignals | null, competitors: { host: str
     return { key, yours: own[key], showing, compared: competitors.length, gap: !own[key] && showing.length > 0 };
   });
 }
+
+/** One website per line (or separated by commas or semicolons). A line with spaces in it stays one entry, so it is reported whole. */
+export function parseSiteList(raw: string): string[] {
+  return raw.split(/[\n\r,;]+/).map((s) => s.trim()).filter(Boolean);
+}

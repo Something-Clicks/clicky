@@ -174,6 +174,11 @@ Branch-scoped Preview variables for this branch point at clicky-dev and Stripe T
 3. `E2E_AGENT=1 E2E_PROD_BASE=http://localhost:3101 pnpm exec playwright test tests/e2e/agent-screens.spec.ts --project=desktop-chromium --trace off` (and `--project=iphone-chromium`).
 4. Clean up: delete the fixtures (provider `e2e-fixture`, request `e2e fixture run`, the business details, the `other-d` membership) and disable the e2e accounts again.
 
+## Compare and Campaigns (local stack, no model, nothing outside this machine)
+1. `tests/e2e/stack/local-up.sh` (throwaway Postgres `sc_e2e`, every migration, local sign-in and API; never clicky-dev or Production).
+2. Build with the `NEXT_PUBLIC_*` values it prints; start `FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 NODE_USE_ENV_PROXY=1 pnpm exec next start -p 3100`, and a second server on 3101 with `VERCEL_ENV=production` plus the same flags.
+3. `E2E_CAMPAIGNS=1 E2E_PROD_BASE=http://localhost:3101 E2E_DB=postgres://postgres:postgres@localhost:5432/sc_e2e pnpm exec playwright test tests/e2e/campaigns.spec.ts --project=desktop-chromium` (and `--project=iphone-chromium`). It reads real public sites (nodejs.org as the business; pypi.org and huggingface.co compared), so it needs outbound access to them.
+
 ## Journey tests (clicky-dev + Stripe TEST)
 1. clicky-dev has all migrations. Seed users: SQL editor, `set app.allow_e2e_seed = 'on';` then run `tests/e2e/dev-seed.sql`. Reset between runs: same guard, `tests/e2e/dev-reset.sql`. The 12 e2e accounts are **disabled** after each session (known throwaway password, one is an admin): re-enable with `update auth.users set banned_until = null where email like '%@e2e.test';` and disable again afterwards. Keep the GitHub repository private.
 2. Insert the dev server-key hashes (INTEGRATIONS S2 pattern for `site_server` and `billing_webhook`).
