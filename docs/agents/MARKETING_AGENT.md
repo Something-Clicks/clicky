@@ -116,7 +116,7 @@ marketing history via cards, workflows and the activity log.
 screen for reviewing facts (functions `review_business_fact` and `add_business_fact` exist and are tested).
 
 ## Model providers (§15)
-Provider-neutral interface with **no adapter registered** (the Anthropic development adapter was removed Nov 25 2026; Something Clicks uses no hosted AI provider). The planned first adapter serves an open-weight model we host ourselves (`OWN_MODEL_PLAN.md`). Never in Production until released. Every model output is validated
+Provider-neutral interface with **one adapter, `self-hosted`** (built Nov 26 2026): the chat-completions protocol to an open-weight model server Something Clicks operates (`providers/self-hosted.ts`; configuration in `.env.example`). It is inert until our server is configured, never runs in Production, fails closed when unpriced, follows no redirects, caps response size, never puts the token or server text in an error, and estimates token use high if the server omits it. **Verified so far: protocol, limits and metering with a local stand-in server (unit tests). Not verified: any real model, ever.** The Anthropic adapter was removed Nov 25; Something Clicks uses no hosted AI provider (`OWN_MODEL_PLAN.md`). Every model output is validated
 against its schema (one retry) and grounded by Something Clicks (`grounding.ts`) before it is stored. Model and
 token usage are recorded on each workflow and draft run.
 

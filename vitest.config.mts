@@ -16,6 +16,11 @@ export default defineConfig({
         test: { name: "sitecheck", include: ["evals/sitecheck/**/*.eval.ts"], environment: "node", fileParallelism: false },
       },
       {
+        // Our model server, no database, no customer data. Run explicitly: pnpm modelcheck (see evals/model/modelcheck.eval.ts).
+        resolve: { alias: { ...alias, "server-only": fileURLToPath(new URL("./tests/unit/server-only-stub.ts", import.meta.url)) } },
+        test: { name: "modelcheck", include: ["evals/model/**/*.eval.ts"], environment: "node", fileParallelism: false },
+      },
+      {
         resolve: { alias: { ...alias, "server-only": fileURLToPath(new URL("./tests/unit/server-only-stub.ts", import.meta.url)) } },
         test: { name: "db", include: ["tests/db/**/*.test.ts"], environment: "node", testTimeout: 30_000, fileParallelism: false },
       },

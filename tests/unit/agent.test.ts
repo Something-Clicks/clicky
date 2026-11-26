@@ -24,8 +24,8 @@ import { FetchBlockedError, type FetchedPage } from "@/lib/server/safe-fetch";
 import { cardStage, completionBasis, stageCounts } from "@/lib/stages";
 
 describe("model provider", () => {
-  it("has no adapter registered: no key or setting can switch a model on", () => {
-    expect(registeredProviders()).toEqual([]);
+  it("has only the self-hosted adapter, which stays inert until our own server is configured: no hosted-AI key or other setting switches a model on", () => {
+    expect(registeredProviders()).toEqual(["self-hosted"]);
     expect(getModelProvider({})).toBeNull();
     for (const id of ["anthropic", "anthropic-dev", "openai", "gemini", "self-hosted", "test-double"]) {
       expect(getModelProvider({ MARKETING_MODEL_PROVIDER: id, ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "x", GEMINI_API_KEY: "x" })).toBeNull();

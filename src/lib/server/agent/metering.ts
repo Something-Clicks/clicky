@@ -59,6 +59,7 @@ export function meteredProvider(inner: ModelProvider, ctx: MeterContext): ModelP
   return {
     id: inner.id,
     model: inner.model,
+    attemptTimeoutMs: inner.attemptTimeoutMs,
     async generate(req) {
       const key = process.env.MODEL_USAGE_KEY?.trim();
       if (!key) {

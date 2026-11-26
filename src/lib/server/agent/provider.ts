@@ -4,14 +4,16 @@ import { z } from "zod";
 
 import { log } from "@/lib/log";
 
+import { selfHostedProvider } from "./providers/self-hosted";
 
 /**
  * Provider-neutral interface for language-model calls made by the marketing agent.
  *
- * STATUS: no adapter is registered, so `getModelProvider()` always returns null and every capability that needs a
- * language model reports "blocked" (never placeholder output). Something Clicks does not use an external hosted AI
- * provider (owner decision, Nov 25 2026; docs/agents/OWN_MODEL_PLAN.md). The planned adapter talks to an open-weight
- * model that Something Clicks hosts itself. Adding one means one file in ./providers and one entry in PROVIDERS.
+ * STATUS: one adapter is registered, "self-hosted" (providers/self-hosted.ts): it speaks the common chat-completions
+ * HTTP protocol to an open-weight model server that Something Clicks runs itself. It is inert unless the server's URL, token
+ * and model id are configured, it never runs in Production, and an unpriced model is never called, so with nothing
+ * configured `getModelProvider()` returns null and every capability that needs a model reports "blocked" (never
+ * placeholder output). No external hosted AI provider is used (owner decision, Nov 25 2026; docs/agents/OWN_MODEL_PLAN.md).
  *
  * Rules every adapter must keep:
  * - Server-side only; keys come from server environment variables, never NEXT_PUBLIC_.
@@ -52,6 +54,8 @@ export interface ModelProvider {
   readonly id: string;
   /** The model this adapter calls (used to price calls before they are made). */
   readonly model?: string;
+  /** Longest one attempt may run. Slower self-hosted models declare more than the default; the request deadline still wins. */
+  readonly attemptTimeoutMs?: number;
   generate(request: Omit<ModelRequest<unknown>, "schema" | "deadlineAt"> & { jsonSchema: unknown; timeoutMs?: number }): Promise<ModelRawResponse>;
 }
 
@@ -81,10 +85,12 @@ export class ModelOutputInvalid extends Error {
 }
 
 /**
- * Registered adapters: none. A self-hosted adapter is the planned first entry (phase 1 of OWN_MODEL_PLAN.md).
- * Tests register stand-ins explicitly to prove the checking rules; a stand-in is never evidence of model capability.
+ * Registered adapters: the self-hosted one only. Tests use stand-ins to prove the checking rules; a stand-in is never
+ * evidence of model capability.
  */
-const PROVIDERS: Record<string, (env: Record<string, string | undefined>) => ModelProvider | null> = {};
+const PROVIDERS: Record<string, (env: Record<string, string | undefined>) => ModelProvider | null> = {
+  "self-hosted": (env) => selfHostedProvider(env),
+};
 
 export const registeredProviders = () => Object.keys(PROVIDERS);
 
@@ -126,10 +132,11 @@ export async function generateStructured<T>(request: ModelRequest<T>, provider: 
   const started = Date.now();
   for (let attempt = 1; attempt <= 2; attempt++) {
     // A retry only fits if the first answer came back quickly, and no attempt may run past the request's deadline.
-    if (attempt === 2 && Date.now() - started > 40_000) throw new ModelOutputInvalid("too_slow_to_retry");
-    const remaining = deadlineAt === undefined ? ATTEMPT_TIMEOUT_MS : deadlineAt - Date.now();
+    if (attempt === 2 && Date.now() - started > (provider.attemptTimeoutMs ? provider.attemptTimeoutMs / 2 : 40_000)) throw new ModelOutputInvalid("too_slow_to_retry");
+    const attemptCap = provider.attemptTimeoutMs ?? ATTEMPT_TIMEOUT_MS;
+    const remaining = deadlineAt === undefined ? attemptCap : deadlineAt - Date.now();
     if (remaining < MIN_ATTEMPT_MS) throw new ModelOutputInvalid("out_of_time");
-    const raw = await provider.generate({ ...rest, jsonSchema, timeoutMs: Math.min(ATTEMPT_TIMEOUT_MS, remaining) });
+    const raw = await provider.generate({ ...rest, jsonSchema, timeoutMs: Math.min(attemptCap, remaining) });
     usage.inputTokens += raw.usage.inputTokens;
     usage.outputTokens += raw.usage.outputTokens;
     if (raw.refused) throw new ModelOutputInvalid("refused");

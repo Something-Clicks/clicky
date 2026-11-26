@@ -1,0 +1,178 @@
+/**
+ * Model check: drives the REAL Marketing Agent capabilities (business understanding, model findings, strategy plan,
+ * drafts) against a model server through the self-hosted adapter, on websites it is given, and records the AUTOMATIC
+ * measurements (answers usable, retries, time, tokens, how much survives our grounding checks, estimated compute cost).
+ * Quality (is it true, useful, well written) is judged by people from the saved raw outputs (MODEL_EVALUATION_PLAN.md);
+ * nothing here grades a model. No database, no customer data, nothing is stored in the app.
+ */
+import { learnWithModel } from "@/lib/server/agent/modules/business-understanding";
+import { sourcePages } from "@/lib/server/agent/modules/business-understanding";
+import type { KnownFact } from "@/lib/server/agent/modules/business-intelligence";
+import { ContentRejected, createContent, type ContentInput, type DraftKind } from "@/lib/server/agent/modules/content-creation";
+import { analyzeWithModel } from "@/lib/server/agent/modules/marketing-analysis-model";
+import { createPlan, PlanRejected } from "@/lib/server/agent/modules/marketing-strategy";
+import { ModelOutputInvalid, type ModelProvider } from "@/lib/server/agent/provider";
+import type { AnalysisDeps } from "@/lib/server/analysis";
+
+import { checkSite, type SiteReport } from "../sitecheck/run";
+
+export interface CallRecord { task: string; ms: number; inputTokens: number; outputTokens: number; refused: boolean; error: string | null }
+
+export interface TaskResult {
+  site: string;
+  task: string;
+  ok: boolean;
+  /** Why it did not produce usable output: a typed reason, never a raw server message. */
+  failure: string | null;
+  ms: number;
+  /** Model calls this task needed (2 or more means the first answer was unusable). */
+  attempts: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** Counts of what the model proposed and what survived Something Clicks' grounding checks. */
+  yield: { proposed: number; kept: number; rejectedReasons: Record<string, number> } | null;
+  /** The raw material for a person to score. */
+  output: unknown;
+}
+
+export interface ModelCheckReport {
+  provider: string;
+  model: string;
+  startedAt: string;
+  sites: string[];
+  tasks: TaskResult[];
+  summary: ReturnType<typeof summarize>;
+}
+
+/** Wraps a provider to record every attempt (a retry is a second attempt). */
+export function instrument(inner: ModelProvider): { provider: ModelProvider; calls: CallRecord[] } {
+  const calls: CallRecord[] = [];
+  return {
+    calls,
+    provider: {
+      id: inner.id,
+      model: inner.model,
+      attemptTimeoutMs: inner.attemptTimeoutMs,
+      async generate(req) {
+        const t0 = Date.now();
+        try {
+          const r = await inner.generate(req);
+          calls.push({ task: req.task, ms: Date.now() - t0, inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens, refused: Boolean(r.refused), error: null });
+          return r;
+        } catch (error) {
+          calls.push({ task: req.task, ms: Date.now() - t0, inputTokens: 0, outputTokens: 0, refused: false, error: error instanceof Error ? error.name : "error" });
+          throw error;
+        }
+      },
+    },
+  };
+}
+
+const histogram = (reasons: string[]) => reasons.reduce<Record<string, number>>((h, r) => ((h[r] = (h[r] ?? 0) + 1), h), {});
+const failureOf = (e: unknown) =>
+  e instanceof ModelOutputInvalid ? `unusable:${e.reason}` : e instanceof ContentRejected ? "draft_rejected_by_content_rules" : e instanceof PlanRejected ? `plan_rejected:${e.reason}` : e instanceof Error ? `error:${e.name}` : "error";
+
+async function timed(site: string, task: string, inner: ModelProvider, run: (p: ModelProvider) => Promise<{ yield: TaskResult["yield"]; output: unknown }>): Promise<TaskResult> {
+  const { provider, calls } = instrument(inner);
+  const t0 = Date.now();
+  let ok = true, failure: string | null = null, y: TaskResult["yield"] = null, output: unknown = null;
+  try {
+    ({ yield: y, output } = await run(provider));
+  } catch (error) {
+    ok = false;
+    failure = failureOf(error);
+  }
+  return {
+    site, task, ok, failure, ms: Date.now() - t0, attempts: calls.length,
+    inputTokens: calls.reduce((n, c) => n + c.inputTokens, 0), outputTokens: calls.reduce((n, c) => n + c.outputTokens, 0), yield: y, output,
+  };
+}
+
+export async function runSite(inner: ModelProvider, website: string, biz: { businessName: string; serviceArea: string | null; primaryGoal: string | null }, deps: AnalysisDeps = {}, ownerNotes: string | null = null): Promise<{ site: SiteReport; tasks: TaskResult[] }> {
+  const site = await checkSite(website, biz, deps);
+  if (!site.ok || !site.scan) return { site, tasks: [{ site: website, task: "scan", ok: false, failure: "site_not_scanned", ms: 0, attempts: 0, inputTokens: 0, outputTokens: 0, yield: null, output: site.reason ?? null }] };
+  const scan = site.scan;
+  const known: KnownFact[] = [];
+  const tasks: TaskResult[] = [];
+
+  tasks.push(await timed(website, "understanding", inner, async (p) => {
+    const r = await learnWithModel(p, scan, { businessName: biz.businessName, serviceArea: biz.serviceArea });
+    return { yield: { proposed: r.accepted.length + r.rejected.length, kept: r.accepted.length, rejectedReasons: histogram(r.rejected.map((x) => x.reason)) }, output: { accepted: r.accepted, rejected: r.rejected } };
+  }));
+
+  tasks.push(await timed(website, "findings", inner, async (p) => {
+    const r = await analyzeWithModel(p, { pages: sourcePages(scan), businessName: biz.businessName, known, alreadyFound: site.findings.map((f) => f.title) });
+    return { yield: { proposed: r.cards.length + r.rejected.length, kept: r.cards.length, rejectedReasons: histogram(r.rejected.map((x) => x.reason)) }, output: { cards: r.cards, evidence: r.evidence, rejected: r.rejected } };
+  }));
+
+  tasks.push(await timed(website, ownerNotes ? "plan_with_notes" : "plan", inner, async (p) => {
+    const r = await createPlan(p, {
+      businessName: biz.businessName, serviceArea: biz.serviceArea, primaryGoal: biz.primaryGoal, known, ownerNotes,
+      cards: site.findings.map((f) => ({ id: f.id, title: f.title, why_it_matters: f.why_it_matters, recommended_action: f.recommended_action, impact: f.impact, confidence: f.confidence, evidence_class: f.evidence_class, stage: "prepared" })),
+    });
+    return { yield: { proposed: r.plan.priorities.length + r.rejected.length, kept: r.plan.priorities.length, rejectedReasons: histogram(r.rejected.map((x) => x.reason)) }, output: r.plan };
+  }));
+
+  const card = site.findings[0];
+  for (const kind of ["meta", "page_copy"] as DraftKind[]) {
+    tasks.push(await timed(website, `draft_${kind}`, inner, async (p) => {
+      const input: ContentInput = {
+        kind, businessName: biz.businessName, known, ownerNotes: null,
+        card: { title: card?.title ?? "Say clearly what the business does", explanation: card?.explanation ?? "", recommendedAction: card?.recommended_action ?? "" },
+        evidence: (card?.evidence ?? []).map((e) => ({ url: e.url, observation: e.observation, excerpt: e.excerpt })),
+      };
+      const r = await createContent(p, input);
+      return { yield: null, output: r.fields };
+    }));
+  }
+  return { site, tasks };
+}
+
+const pct = (xs: number[], q: number) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(q * xs.length))]! : 0);
+
+export function summarize(tasks: TaskResult[], gpuUsdPerHour: number | null) {
+  const ran = tasks.filter((t) => t.task !== "scan");
+  const sites = [...new Set(ran.map((t) => t.site))];
+  const proposed = ran.reduce((n, t) => n + (t.yield?.proposed ?? 0), 0);
+  const kept = ran.reduce((n, t) => n + (t.yield?.kept ?? 0), 0);
+  const secondsBySite = sites.map((s) => ran.filter((t) => t.site === s).reduce((n, t) => n + t.ms, 0) / 1000);
+  const outTok = ran.reduce((n, t) => n + t.outputTokens, 0);
+  const totalSec = ran.reduce((n, t) => n + t.ms, 0) / 1000;
+  return {
+    tasks: ran.length,
+    usable: ran.filter((t) => t.ok).length,
+    usablePct: ran.length ? Math.round((1000 * ran.filter((t) => t.ok).length) / ran.length) / 10 : 0,
+    firstAttemptPct: ran.length ? Math.round((1000 * ran.filter((t) => t.attempts === 1 && t.ok).length) / ran.length) / 10 : 0,
+    failures: histogram(ran.filter((t) => !t.ok).map((t) => t.failure ?? "error")),
+    groundedYieldPct: proposed ? Math.round((1000 * kept) / proposed) / 10 : null,
+    taskSecondsP50: pct(ran.map((t) => t.ms / 1000), 0.5),
+    taskSecondsP95: pct(ran.map((t) => t.ms / 1000), 0.95),
+    businessSeconds: secondsBySite.map((s) => Math.round(s)),
+    outputTokensPerSecond: totalSec ? Math.round((10 * outTok) / totalSec) / 10 : 0,
+    inputTokens: ran.reduce((n, t) => n + t.inputTokens, 0),
+    outputTokens: outTok,
+    // Compute cost if the GPU were busy the whole time (100% utilization), per business: seconds × hourly price.
+    estimatedComputeUsdPerBusiness: gpuUsdPerHour && secondsBySite.length ? Math.round((1e4 * (secondsBySite.reduce((a, b) => a + b, 0) / secondsBySite.length) * gpuUsdPerHour) / 3600) / 1e4 : null,
+  };
+}
+
+export function toMarkdown(r: ModelCheckReport): string {
+  const s = r.summary;
+  return [
+    `# Model check: ${r.provider} / ${r.model}`, "",
+    `Started ${r.startedAt}. Sites: ${r.sites.join(", ")}. These are AUTOMATIC measurements only; quality is judged by people from the saved outputs.`, "",
+    "| Measure | Value |", "|---|---|",
+    `| Tasks run / usable | ${s.tasks} / ${s.usable} (${s.usablePct}%) |`,
+    `| Usable on the first attempt | ${s.firstAttemptPct}% |`,
+    `| Failures | ${Object.entries(s.failures).map(([k, v]) => `${k}: ${v}`).join(", ") || "none"} |`,
+    `| Survives our grounding checks | ${s.groundedYieldPct === null ? "n/a" : `${s.groundedYieldPct}%`} of proposed items |`,
+    `| Seconds per task (p50 / p95) | ${s.taskSecondsP50} / ${s.taskSecondsP95} |`,
+    `| Seconds per business | ${s.businessSeconds.join(", ")} |`,
+    `| Output tokens per second | ${s.outputTokensPerSecond} |`,
+    `| Tokens in / out | ${s.inputTokens} / ${s.outputTokens} |`,
+    `| Estimated compute per business at 100% GPU use | ${s.estimatedComputeUsdPerBusiness === null ? "set MODELCHECK_GPU_USD_PER_HOUR" : `$${s.estimatedComputeUsdPerBusiness}`} |`,
+    "", "## Per task", "| Site | Task | OK | Attempts | Seconds | Kept / proposed | Failure |", "|---|---|---|---|---|---|---|",
+    ...r.tasks.map((t) => `| ${t.site} | ${t.task} | ${t.ok ? "yes" : "no"} | ${t.attempts} | ${Math.round(t.ms / 100) / 10} | ${t.yield ? `${t.yield.kept} / ${t.yield.proposed}` : "–"} | ${t.failure ?? ""} |`),
+    "",
+  ].join("\n");
+}

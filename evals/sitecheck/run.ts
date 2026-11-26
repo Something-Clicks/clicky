@@ -17,7 +17,7 @@ export interface SiteReport {
   reason?: string;
   pagesReviewed: number;
   pagesUnreachable: string[];
-  findings: { id: string; check_key: string; title: string; impact: string; confidence: string; evidence_class: string; evidence: { kind: string; url: string | null; excerpt: string | null; observation: string }[] }[];
+  findings: { id: string; check_key: string; title: string; explanation: string; why_it_matters: string; recommended_action: string; impact: string; confidence: string; evidence_class: string; ai_capable: boolean; execution_type: string; evidence: { kind: string; url: string | null; excerpt: string | null; observation: string }[] }[];
   facts: ProposedFact[];
   missing: string[];
   plan: StoredPlan | null;
@@ -33,7 +33,7 @@ export async function checkSite(website: string, biz: { businessName: string; se
   }
   const byKey = new Map(r.evidence.map((e) => [e.key, e]));
   const findings = r.findings.map((f, i) => ({
-    id: `f${i + 1}`, check_key: f.check_key, title: f.title, impact: f.impact_priority, confidence: f.confidence, evidence_class: f.evidence_class,
+    id: `f${i + 1}`, check_key: f.check_key, title: f.title, explanation: f.explanation, why_it_matters: f.why_it_matters, recommended_action: f.recommended_action, ai_capable: f.ai_capable, execution_type: f.execution_type, impact: f.impact_priority, confidence: f.confidence, evidence_class: f.evidence_class,
     evidence: f.evidence_keys.map((k) => byKey.get(k)).filter(Boolean).map((e) => ({ kind: e!.kind, url: e!.url ?? null, excerpt: e!.excerpt ?? null, observation: e!.observation })),
   }));
   const facts = propose(r.scan);
