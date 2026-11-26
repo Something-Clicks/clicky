@@ -162,6 +162,9 @@ begin
       set value = excluded.value, note = excluded.note, recorded_by = excluded.recorded_by, recorded_at = now();
     v_n := v_n + 1;
   end loop;
+  if (select count(*) from public.performance_metrics where organization_id = p_org) > 5000 then
+    raise exception 'Performance history holds up to 5,000 figures' using errcode = 'P0001', hint = 'performance_limit';
+  end if;
   perform app_private.log_activity(p_org, 'performance.recorded', 'performance_metrics', null,
     jsonb_build_object('source', p_source, 'rows', v_n));
   return v_n;
@@ -246,6 +249,10 @@ begin
   select id into v_id from public.execution_records where organization_id = p_org and idempotency_key = p_key;
   if v_id is not null then return v_id; end if;
   if num_nonnulls(p_card, p_task) <> 1 then raise exception 'Name one action or one task' using errcode = '22023'; end if;
+  -- Usage control: at most 100 execution requests per business per day.
+  if (select count(*) from public.execution_records where organization_id = p_org and requested_at > now() - interval '1 day') >= 100 then
+    raise exception 'Too many requests today' using errcode = 'P0001', hint = 'daily_limit';
+  end if;
   if p_card is not null and not exists (select 1 from public.action_cards where id = p_card and organization_id = p_org) then
     raise exception 'Forbidden' using errcode = '42501';
   end if;

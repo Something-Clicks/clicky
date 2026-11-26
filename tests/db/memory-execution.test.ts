@@ -105,6 +105,13 @@ describe("performance history", () => {
     expect(rows.map((r) => Number(r.value))).toEqual([41, 50]);
   });
 
+  it("usage control: performance history is capped per business", async () => {
+    await db.admin.query(`insert into public.performance_metrics (organization_id, metric, period_start, period_end, value, source)
+      select $1, 'website_visits', date '2000-01-01' + g, date '2000-01-01' + g, 1, 'owner_entered' from generate_series(1, 5000) g`, [org]);
+    await expect(q(owner, "select public.record_performance_metrics($1,'owner_entered',$2)", [org, JSON.stringify([metric("calls", "2026-08-01", "2026-08-31", 1)])])).rejects.toThrow(/up to 5,000/);
+    await db.admin.query("delete from public.performance_metrics where metric = 'website_visits' and period_start < '2001-01-01'");
+  });
+
   it("refuses future periods, unknown metrics, negative values and outsiders", async () => {
     const rec = (user: string, rows: unknown[], source = "owner_entered") => q(user, "select public.record_performance_metrics($1,$2,$3)", [org, source, JSON.stringify(rows)]);
     await expect(rec(owner, [metric("calls", "2026-11-01", "2999-01-01", 1)])).rejects.toThrow(/future/);
@@ -181,6 +188,13 @@ describe("execution records: requested, authorized, executed and verified are se
     expect(await q(outsider, "select 1 from public.execution_records where organization_id = $1", [org])).toHaveLength(0);
     await expect(q(owner, "insert into public.execution_records (organization_id,action,card_id,status,idempotency_key) values ($1,'record_completed',$2,'succeeded','abcdefgh12')", [org, cardTitle])).rejects.toThrow(PERMISSION_DENIED);
     await expect(q(owner, "update public.execution_records set status = 'succeeded'")).rejects.toThrow(PERMISSION_DENIED);
+  });
+
+  it("usage control: at most 100 execution requests per business per day", async () => {
+    await db.admin.query(`insert into public.execution_records (organization_id, action, card_id, status, idempotency_key, requested_at)
+      select $1, 'publish_website', $2, 'unsupported', 'bulk-key-' || g, now() from generate_series(1, 100) g`, [org, cardTitle]);
+    await expect(request(member, "send_email", cardTitle)).rejects.toThrow(/Too many requests today/);
+    await db.admin.query("delete from public.execution_records where idempotency_key like 'bulk-key-%'");
   });
 
   it("a request can be cancelled before it runs", async () => {

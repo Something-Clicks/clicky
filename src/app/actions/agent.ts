@@ -125,6 +125,7 @@ export async function recordMetric(_prev: FormState, form: FormData): Promise<Fo
   if (error) {
     const hint = (error as { hint?: string }).hint;
     if (hint === "future_period") return { error: "The period can't end in the future." };
+    if (hint === "performance_limit") return { error: "You've saved the most numbers we keep (5,000). Remove some first." };
     log.error("performance.record_failed", { error: error.message });
     return { error: "We couldn't save that. Check the dates and the number." };
   }
@@ -189,6 +190,7 @@ const EXEC_ERRORS: Record<string, string> = {
   owner_only: "Only the account owner can authorize this.",
   not_requested: "This isn't waiting for authorization any more.",
   not_authorized: "This hasn't been authorized.",
+  daily_limit: "Too many requests today. Try again tomorrow.",
 };
 
 /** Any member asks for an action to be carried out; a repeated submit (same key) is the same request. */

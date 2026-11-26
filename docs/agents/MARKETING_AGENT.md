@@ -1,7 +1,7 @@
 # The Something Clicks Marketing Agent: architecture map and status
 
 The owner's specification (`AI_MARKETING_AGENT.docx`) is the architecture. This document maps each part
-of it to the code and says honestly what is built. Updated Nov 25 2026 (second pass).
+of it to the code and says honestly what is built. Updated Nov 26 2026 (request understanding, memory, execution, results).
 
 **Status words.** *Built*: runs in the app and is covered by unit and database tests (local Postgres; the
 migrations also on clicky-dev). *Built, not verified live*: the code path runs end to end with a test-double
@@ -18,7 +18,8 @@ Something Clicks uses no external hosted AI. Plan to run our own: `docs/agents/O
 | Marketing Strategy | **Rules-based plan** (fixed rules; no prose generation; no notes) | Yes (unit + database) | n/a (it is not a model) | n/a |
 | Language understanding of a site; model findings; plan wording; Content Creation (drafts) | **Blocked** (needs a model) | Checking rules only, with test doubles | **No** | **No** |
 | Market Research (named public homepages), Campaign Planning (fixed playbooks), guided task tracking | **Complete** (behind `FEATURE_CAMPAIGNS`, never Production) | Yes (unit + database; fixtures, not real sites; screens not yet browser-tested) | n/a | n/a |
-| Execution that publishes or sends | Not implemented (needs authorized integrations; the owner does the work and marks it done) | No | No | No |
+| Request understanding (Ask), all six workflows through the orchestrator, Research Library (keyword imports), Performance History (supplied figures), execution records (save approved draft, record done), effort and dependencies | **Complete** (behind `FEATURE_AGENT`, never Production) | Yes (unit + database + browser on the local stack, desktop and phone, real public site) | n/a | n/a |
+| Execution that publishes or sends | Not implemented (no authorized integration exists; requests are recorded as "unsupported" and never run) | Refusal verified | No | No |
 
 
 ```
@@ -41,14 +42,14 @@ Customer request ─► Orchestrator (src/lib/server/agent/orchestrator.ts)
 |---|---|---|
 | Business Intelligence (§3, §14) | `business-intelligence.ts`, `business-understanding.ts` | **Built.** Fixed extraction (phone, email: verified; services: inferred with basis). **Model part built, not verified live:** what the business does, services, products, audience, customer problems, value proposition, voice and tone, positioning, trust signals, price positioning, buyer objections and decision factors (no guessing: an honest "unknown" beats a guess), each with quotes that Something Clicks checks against the page. Owner review screen `/app/business` (confirm, correct, reject, add) behind `businessProfile`. |
 | Website Intelligence (§5) | `website-intelligence.ts` | **Built.** Safe discovery of the homepage and up to 4 key pages; metadata, text, link labels, email links; failures recorded; mobile speed when available. |
-| SEO Intelligence (§4.3) | `seo-intelligence.ts` | **Partly built.** On-page signals and SEO findings. Keyword data not connected. |
+| SEO Intelligence (§4.3) | `seo-intelligence.ts`, `lib/research-import.ts` | **Built for on-page signals and supplied keyword data.** Keyword research comes from the owner's existing manual Semrush workflow (CSV export) or a Search Console Queries export, parsed as untrusted data and stored in `research_items` with source, measured date and evidence class (Semrush volumes/difficulty = *estimated*, with the basis; Search Console = *verified* measurement; own list = the owner's terms, no figures). No keyword API is connected. |
 | Marketing Analysis (§6) | `marketing-analysis.ts`, `marketing-analysis-model.ts` | **Built for fixed checks.** **Model part built, not verified live:** messaging, conversion and content findings with quoted evidence, saved as Action Cards (origin `model`) behind `modelFindings`; never marked "verified fixed". |
-| Performance Intelligence (§11) | `performance-intelligence.ts` | **Partly built.** Verified fixed / still found / awaiting. Traffic and search data not connected. |
+| Performance Intelligence (§11) | `performance-intelligence.ts` | **Built on real data only.** Outcomes (verified fixed / still found / awaiting), executed work and whether a check verified it, and figures the owner supplies (`performance_metrics`: per period and source). Compares a metric only with the adjacent earlier period of the same length and source; "meaningful" needs ≥10% and a minimum absolute change; always states it cannot attribute a change to a piece of work or account for seasons. Follow-ups: reopen work still found, look at drops, ask for data when there is none. No traffic integration. |
 | Content Creation (§8) | `content-creation.ts` | **Built, not verified live.** Homepage copy and SEO title/description from the business understanding and the card's evidence; content rules enforced; version 1 → edits as versions → owner approves a version. Behind `drafts`. |
 | Market Research (§4) | `market-research.ts`, `lib/research.ts` | **Built (no model).** Reads the public homepage of up to 5 sites the owner names and the owner's own; records what each visibly shows (phone, tap-to-call, service area, reviews, prices, search markup) as verified-as-observed signals; comparison table on `/app/research`; saved in `competitor_scans` (re-read keeps the earlier result). Does not find competitors, and has no keyword or traffic data. |
 | Marketing Strategy (§7) | `marketing-strategy.ts` | **Built, not verified live.** A proposed plan from the business understanding and the open Action Cards: summary, ≤3 objectives, ≤8 ordered priorities that point at real open actions (by short reference, never ids the model could invent), effort, dependencies that must come earlier, next steps, questions for the owner, what to leave for later. Grounding drops unknown or repeated actions, promises, figures not in the material and generic advice. Owner reviews, revises (adds notes → a new proposal), approves or rejects at `/app/plan` behind `strategy`. Approval = agreement, never completion. Market research is not connected, so plans use only the business's own details and website findings. |
 | Campaign Planning (§9) | `campaign-planning.ts`, `lib/campaigns.ts` | **Built (no model).** Four fixed playbooks (fix what visitors notice first, close gaps other sites show, ask for reviews, Google Business Profile), each offered only when something observed calls for it. Tasks carry a reason, an evidence class and a basis, with fixed-template drafts filled only from owner-given or confirmed facts (unknowns stay `[blanks]`). The owner approves a campaign (`decide_campaign`, owner only), edits drafts (original kept), does each task and marks it done (`set_task_status`, only after approval); a campaign completes when every task is done or skipped. Results: tasks done, and for fixes what the next website check verified. Migration 20261203120000. |
-| Marketing Execution (§10) | `unavailable.ts` | Not built (needs authorized integrations). Guided task tracking above is not execution: nothing is published or sent. |
+| Marketing Execution (§10) | `marketing-execution.ts`, `execution_records` | **Built for what the application itself can do.** `save_to_workspace` (copies the exact approved draft version into the record) and `record_completed` (the team did it; reported until a check verifies it). Requested by any member → authorized by the owner only → carried out → verified by the next website check (trigger on `action_cards.verification`): five separate recorded events. Idempotency key per request, one open request per action and target, 100 requests per business per day. `publish_website`, `send_email`, `schedule_social`, `spend_ads` have no integration: recorded as *unsupported*, never authorized or run. |
 
 ## Feature switches
 `src/config/features.ts`: `drafts`, `businessProfile`, `modelFindings`, `strategy`, `campaigns` (Compare and Campaigns screens; needs no model). Off unless `FEATURE_<NAME>=1`; always off
@@ -90,12 +91,27 @@ beside their evidence, the flags, and model spend. Generation-time safeguards (g
 | Signed-in screens (`/app/business`, draft editing) in a browser | **Not verified.** Needs the Preview with test accounts |
 
 ## Orchestrator and workflows (§12)
-**Built:** `runWebsiteReview` runs for every website check (Check button, first check after setup, weekly
-re-check): understand business → plan → Website Intelligence → Marketing Analysis → SEO Intelligence →
-Business Intelligence proposals → rank → prepare Action Cards → drafts (recorded "blocked") → owner review.
-If the workflow record or the fact proposals cannot be saved, the customer's check still completes.
-**Not built:** the other five request kinds (homepage headline, competitor research, marketing plan,
-promotional campaign, results review) are planned and record themselves as blocked.
+**Request understanding** (`intake.ts`, `routeRequest`): fixed phrase rules pick one of the six workflows; a tie or no match
+returns a choice for the customer (never a guess); web addresses in the request are extracted for comparison. The text only
+selects a workflow and is never executed or passed on as instructions. A model can replace `scoreKinds` later behind the same
+result type. **Workflow planning** records, per capability, how it runs: `checks`, `model`, `rules` (Marketing Strategy's labelled
+fixed-rules path when no model exists) or `unavailable` (Content Creation without a model).
+**Context** (`context.ts`, `loadAgentContext`): each kind loads only the memory it needs (`CONTEXT_NEEDS`): business facts,
+open/tracked cards, previous decisions (dismissed actions with notes, rejected plans, dismissed campaigns), the Research Library
+(older than 90 days is flagged and not used as current), performance figures and executions, the approved plan. Always as the
+signed-in user, so RLS bounds it.
+**All six kinds run and are recorded in `marketing_workflows`:**
+- `website_review` (`runWebsiteReview`): understand → plan → Website Intelligence → Marketing Analysis → SEO → BI proposals →
+  rank → **effort and order saved on the cards** (`card-dependencies.ts` → `annotate_action_cards`) → Action Cards → drafts → owner.
+- `marketing_plan` (`runMarketingPlan`; `preparePlan` and Ask both use it through `plan-run.ts`): BI + decisions → Research
+  Library → latest check → open actions with dependencies → Marketing Strategy (model, metered against the workflow; or fixed
+  rules that order by dependencies, do not push previously dismissed advice again, ask for fresher research, and add a next step
+  from the owner's own keyword data) → saved proposal → owner decides.
+- `results_review` (`runResultsReview`): Performance Intelligence → follow-ups → next action and approved-plan progress.
+- `homepage_headline` (`runHomepageHeadline`): BI → latest check → the homepage-messaging action → Content Creation (a draft on
+  that action when a model and drafts exist; otherwise recorded as blocked and nothing is written).
+- `competitor_research`, `promotional_campaign`: as before (no model).
+`ask` (`src/app/actions/agent.ts`) is the customer entry point for all of them.
 
 ## Evidence and confidence (§6.3)
 **Built.** Four classes in `src/lib/evidence.ts`, enforced in the database (migration 20261127120000):
@@ -107,14 +123,16 @@ promotional campaign, results review) are planned and record themselves as block
 
 ## Action Cards, approvals, execution (§10, §13)
 **Built:** card fields, stages prepared → approved (owner only) → completed (marked done or verified fixed),
-evidence class per card. Generated work is never "completed".
-**Not built:** effort, dependencies, link to the prepared deliverable, editable drafts with versions.
+evidence class per card, **effort and dependencies** (fixed rules: HTTPS and viewport before speed, title before description,
+headline and service area before homepage content), editable drafts with versions, and the execution record on each card
+(`ExecutionPanel`). Generated work is never "completed".
 
 ## Customer context and memory (§14)
-**Built:** Business, Brand and Customer profile store (`business_facts`) with provenance and freshness;
-marketing history via cards, workflows and the activity log.
-**Not built:** Research Library, Marketing Strategy store, Performance History beyond verification; the owner
-screen for reviewing facts (functions `review_business_fact` and `add_business_fact` exist and are tested).
+**Built:** Business, Brand and Customer profile (`business_facts`, provenance and freshness, owner review at `/app/business`);
+Research Library (`research_items` + `competitor_scans` + website checks, `/app/library`); Marketing Strategy store
+(`marketing_plans`); Marketing History (cards, workflows, execution records, activity log); Performance History
+(`performance_metrics`, `/app/results`); previous decisions read back into planning.
+**Not built:** detecting *conflicting* facts between sources and asking the owner to resolve them (stale research is flagged).
 
 ## Model providers (§15)
 Provider-neutral interface with **one adapter, `self-hosted`** (built Nov 26 2026): the chat-completions protocol to an open-weight model server Something Clicks operates (`providers/self-hosted.ts`; configuration in `.env.example`). It is inert until our server is configured, never runs in Production, fails closed when unpriced, follows no redirects, caps response size, never puts the token or server text in an error, and estimates token use high if the server omits it. **Verified so far: protocol, limits and metering with a local stand-in server (unit tests). Not verified: any real model, ever.** The Anthropic adapter was removed Nov 25; Something Clicks uses no hosted AI provider (`OWN_MODEL_PLAN.md`). Every model output is validated
@@ -130,9 +148,10 @@ review of business facts and approvals and plans; website text and owner notes t
 and global model spend caps (see Cost control). Not built: alerting on spend, a customer-visible usage screen.
 
 ## Next, in order
-1. (Superseded: no external provider.) Deterministic path on real sites on Preview (no key needed); then `OWN_MODEL_PLAN.md` phases 1–2. Old text follows: `MARKETING_MODEL_PROVIDER` and the four
-   switches (`FEATURE_BUSINESS_PROFILE`, `FEATURE_MODEL_FINDINGS`, `FEATURE_DRAFTS`, `FEATURE_STRATEGY` = 1) on Preview only; run on 3–5 real
-   sites with test accounts; review the outputs on `/admin/agent-review`, improve weak prompts and rules, repeat.
-2. More Content Creation: service page copy, FAQs, Google Business Profile posts (§8.1–8.2).
-3. Spend alerts and a usage view for owners; atomic budget reservation if parallel calls ever matter.
-Later: research (manual Semrush import), campaign planning, authorized execution, performance data.
+1. Turn `FEATURE_AGENT` on for Preview (owner decision) and run the Ask → Research → Execute → Results loop on 3–5 permissioned
+   real small-business sites with test accounts; record defects.
+2. Conflict detection in business memory (two sources disagree → ask the owner), and a decisions note on dismiss.
+3. More execution only where a real, authorized integration exists (for example, a Google Business Profile connection after the
+   owner approves the integration and its permissions); until then nothing publishes or sends.
+4. `OWN_MODEL_PLAN.md` phases 1–2: connect our own model server to the existing provider interface; Content Creation and the
+   model plan path then light up with no workflow changes.

@@ -15,10 +15,13 @@ export NEXT_PUBLIC_SITE_URL=http://localhost:3100 NEXT_PUBLIC_SUPABASE_URL=http:
 export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$(cat "$W/anon.key")"
 # Placeholder analytics ids (not real accounts): the tag requests are intercepted by the tests and never leave this machine.
 export CLARITY_ID="$CLARITY_TEST_ID" NEXT_PUBLIC_GA_MEASUREMENT_ID="$GA_TEST_ID"
+# A throwaway server key for this local database only (plan slots need it); only its hash is stored, in sc_e2e.
+MODEL_USAGE_KEY="$(openssl rand -hex 32)"; export MODEL_USAGE_KEY
+psql -q "postgres://postgres:postgres@localhost:5432/sc_e2e" -c "insert into app_private.secrets (name, hash) values ('model_usage', digest('$MODEL_USAGE_KEY','sha256')) on conflict (name) do update set hash = excluded.hash"
 pnpm build
 pkill -f "next start -p 3100" 2>/dev/null || true; pkill -f "next start -p 3101" 2>/dev/null || true
-FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 FEATURE_STRATEGY=1 NODE_USE_ENV_PROXY=1 nohup pnpm exec next start -p 3100 > "$W/next.log" 2>&1 &
-VERCEL_ENV=production FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 FEATURE_STRATEGY=1 NODE_USE_ENV_PROXY=1 nohup pnpm exec next start -p 3101 > "$W/next-prod.log" 2>&1 &
+FEATURE_AGENT=1 FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 FEATURE_STRATEGY=1 NODE_USE_ENV_PROXY=1 nohup pnpm exec next start -p 3100 > "$W/next.log" 2>&1 &
+VERCEL_ENV=production FEATURE_AGENT=1 FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 FEATURE_STRATEGY=1 NODE_USE_ENV_PROXY=1 nohup pnpm exec next start -p 3101 > "$W/next-prod.log" 2>&1 &
 trap 'pkill -f "next start -p 3100" 2>/dev/null || true; pkill -f "next start -p 3101" 2>/dev/null || true' EXIT
 sleep 6
 E2E_SUITE=1 E2E_PORT=3100 E2E_PROD_BASE=http://localhost:3101 E2E_CLARITY_ID="$CLARITY_TEST_ID" E2E_GA_ID="$GA_TEST_ID" \

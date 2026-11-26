@@ -5,6 +5,14 @@ Built from: `claude/fervent-knuth-0fo94q` (the app, 21 commits; fast-forward, no
 Vercel production branch: `main` (confirmed in Vercel project settings). Nothing here was ever pushed to `main` or the app branch.
 Commits: `c6da947` foundation · `1cef428` homepage, consent, legal · `489fa38` migration header · `ed7a445` Stripe TEST ids · later commits are listed in `git log`.
 
+## Nov 26 2026: memory, execution, all workflows (branch `claude/awesome-mendel-qreli5`)
+- Migration **20261204120000** (agent memory and execution) + rollback. **Applied only to local throwaway databases.** Not on
+  clicky-dev or Production: applying it to clicky-dev is the next step (owner approval per the database rules above).
+- New switch `FEATURE_AGENT` (Ask, Research, Results, execution panel). Off everywhere until the owner turns it on for Preview.
+- Verified here: `pnpm lint`, `pnpm typecheck`, `pnpm test` (unit), `pnpm test:db` (local Postgres), `pnpm build`, and the
+  browser suite on the local stack (`pnpm test:e2e:local`: 55 passed desktop; spec 10 also on the phone project).
+- Not verified: real small-business sites (the suite reads nodejs.org), clicky-dev, any model (none exists).
+
 ## How to resume
 1. `git checkout claude/ecstatic-curie-9shvjf && pnpm install && service postgresql start`
 2. Read "Status" and "Needs the owner" below.

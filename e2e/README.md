@@ -13,7 +13,8 @@ throwaway database. They never use real customer accounts, clicky-dev, Productio
 
 Layout: `e2e/setup` (creates the throwaway owner and runs the first website check), `e2e/fixtures` (sign-up and login helpers, the
 local-database guard), `e2e/specs` (01 homepage, 02 signup and login, 03 website analysis, 04 recommendations, 05 action board,
-06 compare, 07 campaigns and owner approval, 08 mobile, 09 analytics consent). Specs run in order and share the owner account.
+06 compare, 07 campaigns and owner approval, 08 mobile, 09 analytics consent, 10 Ask / Research / execution / Results with
+`FEATURE_AGENT=1` and a throwaway local `MODEL_USAGE_KEY`, both set by `run-local.sh`). Specs run in order and share the owner account.
 
 Browsers: Chromium (desktop and iPhone-sized) always. Firefox and WebKit are added with `PW_FIREFOX=1` / `PW_WEBKIT=1` once
 `pnpm exec playwright install firefox webkit` has worked (it needs network access to Playwright's download host).
