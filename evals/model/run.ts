@@ -162,7 +162,7 @@ export function summarize(tasks: TaskResult[], gpuUsdPerHour: number | null) {
   const sites = [...new Set(ran.map((t) => t.site))];
   const proposed = ran.reduce((n, t) => n + (t.yield?.proposed ?? 0), 0);
   const kept = ran.reduce((n, t) => n + (t.yield?.kept ?? 0), 0);
-  const secondsBySite = sites.map((s) => ran.filter((t) => t.site === s).reduce((n, t) => n + t.ms, 0) / 1000);
+  const secondsBySite = sites.map((s) => ran.filter((t) => t.site === s && !t.task.startsWith("plan_notes:")).reduce((n, t) => n + t.ms, 0) / 1000);
   const outTok = ran.reduce((n, t) => n + t.outputTokens, 0);
   const totalSec = ran.reduce((n, t) => n + t.ms, 0) / 1000;
   return {

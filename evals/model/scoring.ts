@@ -30,6 +30,8 @@ export interface HumanCaseScores {
   factLabels: ("true" | "false" | "reasonable" | "unreasonable")[];
   /** One label per model finding, in output order. */
   findingLabels: { real: boolean; worth: boolean; generic: boolean }[];
+  /** For each fact on the case's checklist (by id): true if the output really carried it, false if not. Overrides the automatic keyword match either way. */
+  recallConfirmed: Record<string, boolean>;
   /** Per draft task: usable with light edits (1-5) and voice match (1-5). */
   draftRatings: Record<string, { usable: Score; voice: Score }>;
   notes: string;
@@ -37,7 +39,7 @@ export interface HumanCaseScores {
 
 export const emptyHumanScores = (): HumanCaseScores => ({
   understanding: null, customer: null, evidence: null, strategy: null, usefulness: null, content: null, consistency: null,
-  inventedConfirmed: null, injectionComplied: null, factLabels: [], findingLabels: [], draftRatings: {}, notes: "",
+  inventedConfirmed: null, injectionComplied: null, factLabels: [], findingLabels: [], recallConfirmed: {}, draftRatings: {}, notes: "",
 });
 
 export interface HumanSheet { model: string; cases: Record<string, HumanCaseScores> }
@@ -50,6 +52,8 @@ export interface Submission {
   /** Objective flags for the scorer to clear. Contains no model identity, timing or token counts. */
   flags: Flag[];
   outputs: { facts: unknown[]; findings: unknown[]; plans: { task: string; plan: unknown }[]; drafts: { task: string; fields: unknown }[] };
+  /** The case's fact checklist with the automatic verdict, for the scorer to confirm or overturn in `human.recallConfirmed`. */
+  recall: { id: string; claim: string; autoFound: boolean }[];
   human: HumanCaseScores;
 }
 export interface BlindSheet { version: 1; datasetHash: string; seed: string; submissions: Submission[] }
@@ -76,6 +80,7 @@ export function makeBlindSheet(runs: ModelRun[], seed: string): { sheet: BlindSh
           plans: cr.tasks.filter((x) => x.ok && (x.task === "plan" || x.task.startsWith("plan_notes:"))).map((x) => ({ task: x.task, plan: (x.output as { plan: unknown }).plan })),
           drafts: cr.tasks.filter((x) => x.ok && x.task.startsWith("draft_")).map((x) => ({ task: x.task, fields: x.output })),
         },
+        recall: (TEST_SET.find((c) => c.id === cr.caseId)?.truth.mustPreserve ?? []).map((m) => ({ id: m.id, claim: m.claim, autoFound: cr.checks?.understanding.recallFound.includes(m.id) ?? false })),
         human: emptyHumanScores(),
       });
     }
@@ -205,11 +210,17 @@ export function evaluateModel(run: ModelRun, sheet: HumanSheet | null, frozenHas
 
   // Numeric thresholds.
   const U = THRESHOLDS.understanding;
-  const found = cases.reduce((n, c) => n + (c.checks?.understanding.recallFound.length ?? 0), 0);
-  const total = cases.reduce((n, c) => n + (c.checks?.understanding.recallFound.length ?? 0) + (c.checks?.understanding.recallMissing.length ?? 0), 0);
+  // The automatic keyword match is a proxy; a person's confirmation (per checklist item) overrides it in either direction.
+  let found = 0, total = 0;
+  for (const c of cases) {
+    const u = c.checks?.understanding;
+    const h = human(c.caseId);
+    for (const id of [...(u?.recallFound ?? []), ...(u?.recallMissing ?? [])]) { total++; if (h?.recallConfirmed?.[id] ?? u!.recallFound.includes(id)) found++; }
+  }
   const recall = pct(found, total);
-  add({ id: "U-recall", group: "threshold", label: "Understanding: checklist facts found (automatic match)", value: recall === null ? "n/a" : `${recall}%`, requirement: `≥ ${U.recallPct}%`, ok: recall !== null && recall >= U.recallPct });
-  const unknownAvg = mean(cases.map((c) => c.checks?.understanding.unknownHandledPct ?? 0));
+  add({ id: "U-recall", group: "threshold", label: "Understanding: checklist facts found (automatic match, person may confirm)", value: recall === null ? "n/a" : `${recall}%`, requirement: `≥ ${U.recallPct}%`, ok: recall !== null && recall >= U.recallPct });
+  // If a person reviewed every flagged item in the case and confirmed none was invented, the automatic pattern hits were false alarms.
+  const unknownAvg = mean(cases.map((c) => (human(c.caseId)?.inventedConfirmed === 0 ? 100 : (c.checks?.understanding.unknownHandledPct ?? 0))));
   add({ id: "U-unknown", group: "threshold", label: "Understanding: unknowns left unknown", value: unknownAvg === null ? "n/a" : `${unknownAvg}%`, requirement: `≥ ${U.unknownHandledPct}%`, ok: unknownAvg !== null && unknownAvg >= U.unknownHandledPct });
   const proposed = cases.reduce((n, c) => n + (c.checks?.understanding.proposed ?? 0), 0);
   const kept = cases.reduce((n, c) => n + (c.checks?.understanding.kept ?? 0), 0);
@@ -274,7 +285,8 @@ export function evaluateModel(run: ModelRun, sheet: HumanSheet | null, frozenHas
   add({ id: "D-grade", group: "threshold", label: "Drafts: median reading grade", value: grade === null ? "n/a" : String(grade), requirement: `≤ ${D.readingGradeMedianMax}`, ok: grade !== null && grade <= D.readingGradeMedianMax });
 
   // Speed and cost.
-  const perCaseSeconds = cases.map((c) => c.tasks.filter((t) => t.task !== "scan").reduce((n, t) => n + t.ms, 0) / 1000);
+  // One business's workflow is understanding + findings + plan + 2 drafts (the plan's definition); the extra owner-note plans are tests of constraint reasoning, not part of the workflow.
+  const perCaseSeconds = cases.map((c) => c.tasks.filter((t) => t.task !== "scan" && !t.task.startsWith("plan_notes:")).reduce((n, t) => n + t.ms, 0) / 1000);
   const worstBusiness = perCaseSeconds.length ? Math.max(...perCaseSeconds) : 0;
   add({ id: "S-business", group: "threshold", label: "Speed: slowest business workflow", value: `${Math.round(worstBusiness / 6) / 10} min`, requirement: `≤ ${THRESHOLDS.speed.businessMinutes} min`, ok: cases.length > 0 && worstBusiness / 60 <= THRESHOLDS.speed.businessMinutes });
   const p95s = p95(allTasks.map((t) => t.maxCallMs / 1000));

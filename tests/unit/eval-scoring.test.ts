@@ -262,3 +262,66 @@ describe("reading grade (plain-language check)", () => {
     expect(readingGrade("Hi")).toBeNull();
   });
 });
+
+describe("fairness fixes made before any model ran (no threshold or frozen case changed)", () => {
+  it("matching ignores formatting that does not change meaning, the same way for every model", async () => {
+    const { norm } = await import("../../evals/model/checks");
+    expect(norm("Financing over $3,000")).toBe(norm("financing over 3000"));
+    expect(norm("3 to 5 business days")).toBe(norm("3-5 business days"));
+    expect(norm("a 14-day free trial")).toBe(norm("a 14 day free trial"));
+    expect(norm("(385) 555-0152")).toContain(norm("555-0152"));
+    expect(norm("The #1 rated shop")).toContain("#1");
+  });
+
+  it("a person's confirmation of the fact checklist overrides the automatic match in either direction, and changes nothing else", () => {
+    const r = clone(run);
+    const t1 = r.cases.find((c) => c.caseId === "T1")!.checks!.understanding;
+    const keep = t1.recallFound.slice(1);
+    // Make 4 of T1's 9 items look missing to the automatic match: recall falls below 80%.
+    r.cases.find((c) => c.caseId === "T1")!.checks!.understanding = { ...t1, recallFound: keep.slice(0, 4), recallMissing: [t1.recallFound[0]!, ...keep.slice(4)] };
+    const s = sheetFor(r, 5);
+    const before = evaluateModel(r, s, FROZEN);
+    const recall = (e: Evaluation) => e.criteria.find((c) => c.id === "U-recall")!;
+    expect(recall(before).value).not.toBe("100%");
+    // The person looks at the outputs and confirms every item really was carried.
+    s.cases.T1!.recallConfirmed = Object.fromEntries([...r.cases.find((c) => c.caseId === "T1")!.checks!.understanding.recallFound, ...r.cases.find((c) => c.caseId === "T1")!.checks!.understanding.recallMissing].map((id) => [id, true]));
+    expect(recall(evaluateModel(r, s, FROZEN)).value).toBe("100%");
+    // And the person can overturn a false automatic match the other way.
+    const s2 = sheetFor(run, 5);
+    s2.cases.T1!.recallConfirmed = Object.fromEntries(run.cases.find((c) => c.caseId === "T1")!.checks!.understanding.recallFound.map((id) => [id, false]));
+    s2.cases.T2!.recallConfirmed = Object.fromEntries(run.cases.find((c) => c.caseId === "T2")!.checks!.understanding.recallFound.map((id) => [id, false]));
+    s2.cases.T3!.recallConfirmed = Object.fromEntries(run.cases.find((c) => c.caseId === "T3")!.checks!.understanding.recallFound.map((id) => [id, false]));
+    const e2 = evaluateModel(run, s2, FROZEN);
+    expect(recall(e2).status).toBe("fail");
+    expect(recall(e2).requirement).toBe("≥ 80%"); // the requirement itself is untouched
+  });
+
+  it("pattern hits on 'unknowns' that a person reviewed and confirmed were not invented stop counting against the model", () => {
+    const r = clone(run);
+    r.cases.forEach((c) => { c.checks!.understanding.unknownHandledPct = 60; });
+    const noReview = evaluateModel(r, { ...sheetFor(r, 5), cases: Object.fromEntries(Object.entries(sheetFor(r, 5).cases).map(([k, v]) => [k, { ...v, inventedConfirmed: null }])) }, FROZEN);
+    expect(noReview.criteria.find((c) => c.id === "U-unknown")!.status).toBe("fail");
+    expect(evaluateModel(r, sheetFor(r, 5), FROZEN).criteria.find((c) => c.id === "U-unknown")!.status).toBe("pass"); // reviewed: inventedConfirmed is 0 everywhere
+    const s = sheetFor(r, 5);
+    for (const h of Object.values(s.cases)) h.inventedConfirmed = 1; // reviewed and found real inventions: the automatic value stands
+    expect(evaluateModel(r, s, FROZEN).criteria.find((c) => c.id === "U-unknown")!.status).toBe("fail");
+  });
+
+  it("one business's workflow and cost count understanding + findings + plan + 2 drafts, not the extra owner-note plans", () => {
+    const r = clone(run);
+    for (const c of r.cases) for (const t of c.tasks) t.ms = t.task.startsWith("plan_notes:") ? 400_000 : 30_000; // 5 base tasks = 2.5 min
+    const e = evaluateModel(r, sheetFor(r, 5), FROZEN);
+    expect(e.criteria.find((c) => c.id === "S-business")!.status).toBe("pass");
+    const slow = clone(run);
+    for (const c of slow.cases) for (const t of c.tasks) t.ms = t.task.startsWith("plan_notes:") ? 1 : 150_000; // 5 base tasks = 12.5 min
+    expect(evaluateModel(slow, sheetFor(slow, 5), FROZEN).criteria.find((c) => c.id === "S-business")!.status).toBe("fail");
+  });
+
+  it("the blind sheet carries the fact checklist (and the automatic verdict) so the scorer can confirm it, with no model identity", async () => {
+    const { sheet } = makeBlindSheet([run], "recall-seed");
+    const t1 = sheet.submissions.find((s) => s.caseId === "T1")!;
+    expect(t1.recall.map((x) => x.id)).toEqual(expect.arrayContaining(["phone", "nate", "club", "second"]));
+    expect(t1.recall.every((x) => typeof x.claim === "string" && typeof x.autoFound === "boolean")).toBe(true);
+    expect(JSON.stringify(sheet)).not.toContain("answer-key-model");
+  });
+});

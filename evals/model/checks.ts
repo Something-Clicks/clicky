@@ -64,6 +64,8 @@ export function hitsIn(text: string, patterns: string[]): { hits: string[]; nega
 }
 
 const lc = (s: string) => s.toLowerCase();
+/** Matching ignores formatting that does not change meaning: case, "$" and thousands commas, hyphens, and the word "to" in ranges (so "3,000" = "$3000" and "3 to 5" = "3-5"). Applied identically to every model. */
+export const norm = (s: string) => lc(s).replace(/[$,]/g, "").replace(/[-\u2013\u2014]/g, " ").replace(/\bto\b/g, " ").replace(/\s+/g, " ").trim();
 const anyOf = (text: string, words: string[]) => words.some((w) => lc(text).includes(lc(w)));
 const pct = (n: number, d: number) => (d ? Math.round((1000 * n) / d) / 10 : 0);
 
@@ -127,7 +129,7 @@ export function checkCase(c: EvalCase, tasks: TaskResult[], allBusinessNames: st
   const factText = (f: ProposedFact) => lc(`${f.value ?? ""} ${f.basis ?? ""} ${f.evidence.map((e) => e.excerpt ?? "").join(" ")}`);
   // The agent's understanding is the fixed extraction (contact details, structured data) plus what the model added; recall counts both.
   const pool = [...accepted, ...deterministicFacts];
-  const found = c.truth.mustPreserve.filter((m) => pool.some((f) => m.keywords.every((k) => factText(f).includes(lc(k)))));
+  const found = c.truth.mustPreserve.filter((m) => pool.some((f) => m.keywords.every((k) => norm(factText(f)).includes(norm(k)))));
   const missing = c.truth.mustPreserve.filter((m) => !found.includes(m));
   const factHits = accepted.filter((f) => patterns.some(({ p }) => hitsIn(`${f.value ?? ""} ${f.basis ?? ""}`, [p]).hits.length > 0));
   const guessedVerified = factHits.filter((f) => f.evidence_class === "verified").length;
@@ -212,7 +214,7 @@ export function checkCase(c: EvalCase, tasks: TaskResult[], allBusinessNames: st
   }
   const conflicts = (c.truth.conflicts ?? []).map((k) => {
     // A value counts as stated if any detail (the fixed extraction or the model's, under any field) carries it.
-    const present = k.values.filter((v) => pool.some((f) => factText(f).includes(v))).length;
+    const present = k.values.filter((v) => pool.some((f) => norm(factText(f)).includes(norm(v)))).length;
     const hasWords = texts.statement.some((s) => /\b(conflict\w*|inconsisten\w*|differs?|disagree\w*|mismatch\w*|different (phone )?numbers?|two (phone )?numbers|three (phone )?numbers|does(n't| not) match)\b/i.test(s.text));
     return { what: k.what, silentChoice: present > 0 && present < k.values.length && !hasWords };
   });

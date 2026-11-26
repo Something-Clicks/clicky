@@ -42,7 +42,9 @@ const clean = (s: string | undefined | null) => (s ?? "").replace(/\s+/g, " ").t
 const PHONE = /(\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/;
 
 export function extractFacts(page: FetchedPage): PageFacts {
-  const root = parse(page.body, { blockTextElements: { script: false, style: false, noscript: false } });
+  // Text from separate blocks must not run together ("ServicesCleaningsFillings"): minified pages have no whitespace between tags.
+  const spaced = page.body.replace(/<\/(p|li|h[1-6]|div|section|article|header|footer|nav|ul|ol|table|thead|tbody|tr|td|th|blockquote|dd|dt|figcaption|main|aside|form|label|button|summary|details|address|pre)>|<br\s*\/?>/gi, (m) => `${m} `);
+  const root = parse(spaced, { blockTextElements: { script: false, style: false, noscript: false } });
   const base = new URL(page.url);
   const meta = (name: string) =>
     clean(root.querySelector(`meta[name="${name}"]`)?.getAttribute("content")) || null;

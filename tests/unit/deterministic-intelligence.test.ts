@@ -185,3 +185,16 @@ describe("Marketing Strategy by fixed rules", () => {
     expect(effortOf("something.new")).toBe("medium");
   });
 });
+
+describe("page text keeps blocks apart (found by the independent-review packets)", () => {
+  it("minified HTML with no whitespace between tags does not run words together", () => {
+    const f = page("<html><head><title>T</title></head><body><h1>Services</h1><ul><li>Cleanings</li><li>Fillings</li><li>Crowns</li></ul><p>We welcome new patients.</p><p>Call us.<br>Today.</p></body></html>");
+    expect(f.text).toBe("Services Cleanings Fillings Crowns We welcome new patients. Call us. Today.");
+    expect(f.text).not.toMatch(/ServicesCleanings|CleaningsFillings/);
+    expect(f.wordCount).toBe(11);
+  });
+
+  it("inline markup inside a sentence is not split", () => {
+    expect(page("<p>We are <b>family</b>-owned and <a href='/x'>local</a>.</p>").text).toBe("We are family-owned and local.");
+  });
+});
