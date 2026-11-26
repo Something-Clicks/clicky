@@ -30,6 +30,13 @@ test.describe("signup and login", () => {
 
   test("signing out ends the session; the workspace then needs a login", async ({ page }) => {
     await logIn(page, email);
+    // A person who has only signed up is still on business setup, which has no Sign out on a phone. Finish setup first
+    // (no website needed), then sign out from Account.
+    if (page.url().includes("/onboarding")) {
+      await page.getByLabel("Business name").fill("Sign Out Cafe");
+      await page.getByRole("button", { name: "Check my website" }).click();
+      await page.waitForURL((u) => !u.pathname.includes("onboarding"), { timeout: 60_000 });
+    }
     await page.goto("/app/settings");
     await page.getByRole("button", { name: /sign out/i }).first().click();
     await page.goto("/app");
@@ -44,7 +51,9 @@ test.describe("signup and login", () => {
     await expect(page.getByRole("alert")).toBeVisible();
     await expect(page.getByRole("alert")).not.toContainText(INTERNALS);
     await expect(page).toHaveURL(/login/);
-    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+    // The form clears the password after a refused attempt; wait for that before typing the right one.
+    await expect(page.locator("#f-password")).toHaveValue("");
+    await page.locator("#f-password").fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL((u) => !u.pathname.startsWith("/login"));
     await expect(page).toHaveURL(/\/app\/settings/); // back where they were going
