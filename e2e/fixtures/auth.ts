@@ -33,3 +33,25 @@ export async function logIn(page: Page, email: string, next = "/app") {
 
 export const noSideScroll = async (page: Page) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+/**
+ * Types the password and signs in. A refused sign-in is reported at once with the page's own message: it is never retried.
+ * The only thing retried is the input being wiped before submit: after a refused attempt the form resets its fields (React
+ * clears uncontrolled inputs when an action finishes), which can empty a password typed straight afterwards. That shows up as
+ * the field's own "Enter your password" error, not as a refusal, so it is the only case that is safe to repeat.
+ */
+export async function signInWithPassword(page: Page, password: string = PASSWORD) {
+  const field = page.locator("#f-password");
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await field.fill(password);
+    await expect(field).toHaveValue(password); // what is about to be sent really is the password
+    await page.getByRole("button", { name: "Sign in" }).click();
+    const left = await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 15_000 }).then(() => true, () => false);
+    if (left) return;
+    if (!(await page.locator("#f-password-error").isVisible())) {
+      const message = await page.getByRole("alert").first().innerText().catch(() => "(no message shown)");
+      throw new Error(`Sign-in was refused: ${message}`);
+    }
+  }
+  throw new Error("The password field was emptied before submit on every attempt");
+}

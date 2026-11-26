@@ -7,8 +7,11 @@ import { consent } from "./auth";
 
 export interface OwnerMeta { email: string; orgId: string }
 export const AUTH_DIR = join(__dirname, "..", ".auth");
-export const OWNER_STATE = join(AUTH_DIR, "owner.json");
-export const OWNER_META = join(AUTH_DIR, "owner.meta.json");
+/** Each browser project has its own throwaway owner, so projects never share (or depend on) each other's data. */
+export const ownerFiles = (project: string) => ({
+  state: join(AUTH_DIR, `owner-${project}.json`),
+  meta: join(AUTH_DIR, `owner-${project}.meta.json`),
+});
 
 /**
  * `test` for the suite. Pages start with analytics consent declined. Signed-in projects start from the owner session the
@@ -21,8 +24,8 @@ export const test = base.extend<{ owner: OwnerMeta; consentChoice: "yes" | "no" 
     if (consentChoice) await consent(page, consentChoice);
     await provide(page);
   },
-  owner: async ({}, provide) => {
-    await provide(JSON.parse(readFileSync(OWNER_META, "utf8")) as OwnerMeta);
+  owner: async ({}, provide, testInfo) => {
+    await provide(JSON.parse(readFileSync(ownerFiles(testInfo.project.name.replace(/^e2e-/, "")).meta, "utf8")) as OwnerMeta);
   },
 });
 export { expect } from "@playwright/test";

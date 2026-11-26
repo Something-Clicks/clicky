@@ -3,7 +3,7 @@
  * CLARITY_ID and NEXT_PUBLIC_GA_MEASUREMENT_ID set (any value; the tag requests are intercepted and never leave this machine).
  */
 import { consent } from "../fixtures/auth";
-import { expect, OWNER_STATE, signedOut, test } from "../fixtures";
+import { expect, ownerFiles, signedOut, test } from "../fixtures";
 
 const CLARITY_ID = process.env.E2E_CLARITY_ID ?? "";
 const GA_ID = process.env.E2E_GA_ID ?? "";
@@ -81,8 +81,8 @@ test.describe("analytics consent (Clarity and GA4)", () => {
     expect(seen.clarity).toEqual([]);
   });
 
-  test("signed-in workspace pages never expose the account to the tag", async ({ browser, owner }) => {
-    const ctx = await browser.newContext({ storageState: OWNER_STATE });
+  test("signed-in workspace pages never expose the account to the tag", async ({ browser, owner }, testInfo) => {
+    const ctx = await browser.newContext({ storageState: ownerFiles(testInfo.project.name.replace(/^e2e-/, "")).state });
     const page = await ctx.newPage();
     const seen = await watch(page);
     await consent(page, "yes");

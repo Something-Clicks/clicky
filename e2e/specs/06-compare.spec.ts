@@ -2,7 +2,8 @@ import { COMPARE_SITES, INTERNALS } from "../fixtures/env";
 import { expect, test } from "../fixtures";
 import { noSideScroll } from "../fixtures/auth";
 
-const [A, B] = COMPARE_SITES as [string, string];
+const SITES = COMPARE_SITES;
+const LAST = SITES[SITES.length - 1]!;
 
 test.describe("compare", () => {
   test("the page explains what it does and what it will not do", async ({ page }) => {
@@ -15,13 +16,12 @@ test.describe("compare", () => {
 
   test("reads real public homepages, reports an unreadable entry whole, and shows a plain table", async ({ page }) => {
     await page.goto("/app/research");
-    await page.getByLabel(/Websites to compare/).fill(`${A}\n${B}\nnot a site at all`);
+    await page.getByLabel(/Websites to compare/).fill(`${SITES.join("\n")}\nnot a site at all`);
     await page.getByRole("button", { name: "Compare" }).click();
-    await expect(page.getByText(/Compared 2 websites\./)).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText(new RegExp(`Compared ${SITES.length} websites?\\.`))).toBeVisible({ timeout: 90_000 });
     await expect(page.getByText(/couldn't read not a site at all/)).toBeVisible();
     const table = page.getByRole("table");
-    await expect(table.getByRole("columnheader", { name: A })).toBeVisible();
-    await expect(table.getByRole("columnheader", { name: B })).toBeVisible();
+    for (const site of SITES) await expect(table.getByRole("columnheader", { name: site })).toBeVisible();
     await expect(table.getByRole("row", { name: /phone number/i }).first()).toBeVisible();
     await expect(page.getByText(/doesn't mean the claim is true/)).toBeVisible();
     await expect(page.locator("main")).not.toContainText(INTERNALS);
@@ -37,11 +37,11 @@ test.describe("compare", () => {
 
   test("a site can be removed, and the next step leads to campaigns when there are gaps", async ({ page }) => {
     await page.goto("/app/research");
-    await page.getByRole("button", { name: `Remove ${B}` }).click();
-    await expect(page.getByRole("columnheader", { name: B })).toHaveCount(0);
-    await page.getByLabel(/Websites to compare/).fill(B);
+    await page.getByRole("button", { name: `Remove ${LAST}` }).click();
+    await expect(page.getByRole("columnheader", { name: LAST })).toHaveCount(0);
+    await page.getByLabel(/Websites to compare/).fill(LAST);
     await page.getByRole("button", { name: "Compare" }).click();
-    await expect(page.getByRole("columnheader", { name: B })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("columnheader", { name: LAST })).toBeVisible({ timeout: 90_000 });
     const next = page.getByRole("link", { name: /Turn this into tasks|See your campaigns/ });
     await expect(next).toBeVisible();
     await next.click();

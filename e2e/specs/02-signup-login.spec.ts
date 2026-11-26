@@ -1,12 +1,10 @@
 import { expect, signedOut, test } from "../fixtures";
-import { logIn, noSideScroll, signUp } from "../fixtures/auth";
-import { INTERNALS, PASSWORD, uniqueEmail } from "../fixtures/env";
+import { logIn, noSideScroll, signInWithPassword, signUp } from "../fixtures/auth";
+import { INTERNALS, PASSWORD, projectEmail, uniqueEmail } from "../fixtures/env";
 
 test.use(signedOut);
 
 test.describe("signup and login", () => {
-  const email = uniqueEmail("auth");
-
   test("signup asks for what it needs, explains problems in plain words, and fits the screen", async ({ page }) => {
     await page.goto("/signup");
     await noSideScroll(page);
@@ -22,28 +20,32 @@ test.describe("signup and login", () => {
     await expect(page).toHaveURL(/signup/);
   });
 
-  test("a new person can sign up and lands on setting up their business", async ({ page }) => {
-    await signUp(page, email, "Pat Tester");
+  test("a new person can sign up and lands on setting up their business", async ({ page }, testInfo) => {
+    await signUp(page, projectEmail("auth", testInfo.project.name), "Pat Tester");
     await expect(page).toHaveURL(/\/app\/onboarding/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 
-  test("signing out ends the session; the workspace then needs a login", async ({ page }) => {
-    await logIn(page, email);
-    // A person who has only signed up is still on business setup, which has no Sign out on a phone. Finish setup first
-    // (no website needed), then sign out from Account.
-    if (page.url().includes("/onboarding")) {
-      await page.getByLabel("Business name").fill("Sign Out Cafe");
-      await page.getByRole("button", { name: "Check my website" }).click();
-      await page.waitForURL((u) => !u.pathname.includes("onboarding"), { timeout: 60_000 });
-    }
+  test("signing out ends the session and leads to the login page", async ({ page }, testInfo) => {
+    await logIn(page, projectEmail("auth", testInfo.project.name));
+    // Someone who has only signed up has no business yet, so Account sends them to setup. Sign out must be reachable there,
+    // on a phone too (no sidebar), so use the button in the page itself, not the sidebar's.
     await page.goto("/app/settings");
-    await page.getByRole("button", { name: /sign out/i }).first().click();
-    await page.goto("/app");
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL(/\/app\/onboarding$/);
+    expect((await page.context().cookies()).some((c) => /auth-token/.test(c.name))).toBe(true); // signed in before
+    await page.locator("main").getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Welcome back" })).toBeVisible();
+    expect((await page.context().cookies()).some((c) => /auth-token/.test(c.name))).toBe(false); // session cleared
+    for (const path of ["/app", "/app/onboarding", "/app/settings"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/login/);
+      expect(new URL(page.url()).searchParams.get("next")).toBe(path);
+    }
   });
 
-  test("login works, remembers where you were going, and refuses a wrong password without detail", async ({ page }) => {
+  test("login works, remembers where you were going, and refuses a wrong password without detail", async ({ page }, testInfo) => {
+    const email = projectEmail("auth", testInfo.project.name);
     await page.goto("/login?next=/app/settings");
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Password", { exact: true }).fill("Wrong-Passw0rd!1");
@@ -51,11 +53,7 @@ test.describe("signup and login", () => {
     await expect(page.getByRole("alert")).toBeVisible();
     await expect(page.getByRole("alert")).not.toContainText(INTERNALS);
     await expect(page).toHaveURL(/login/);
-    // The form clears the password after a refused attempt; wait for that before typing the right one.
-    await expect(page.locator("#f-password")).toHaveValue("");
-    await page.locator("#f-password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL((u) => !u.pathname.startsWith("/login"));
+    await signInWithPassword(page);
     await expect(page).toHaveURL(/\/app\/settings/); // back where they were going
   });
 

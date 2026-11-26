@@ -7,7 +7,7 @@ export const DB = process.env.E2E_DB ?? "postgres://postgres:postgres@localhost:
 /** The public website the "business" under test points at (a real site, read the way a customer's would be). */
 export const SITE = process.env.E2E_SITE ?? "nodejs.org";
 /** Public sites the Compare tests read. */
-export const COMPARE_SITES = (process.env.E2E_COMPARE ?? "pypi.org,huggingface.co").split(",");
+export const COMPARE_SITES = (process.env.E2E_COMPARE ?? "pypi.org,huggingface.co").split(",").map((x) => x.trim()).filter(Boolean);
 /** Words that must never reach a customer's screen. */
 export const INTERNALS = /ENOTFOUND|ECONN|fetch failed|stack trace|TypeError|supabase|postgres|rpc\b|undefined|\[object|NaN/i;
 
@@ -18,3 +18,8 @@ export function sql(query: string): string {
 }
 
 export const uniqueEmail = (prefix: string) => `${prefix}${Date.now()}${Math.floor(Math.random() * 1000)}@local.test`;
+
+/** Stable for the whole run, across worker restarts. */
+export const RUN_ID = process.env.E2E_RUN_ID ?? String(Date.now());
+/** A dedicated throwaway account name for one project in this run (never a real customer). */
+export const projectEmail = (prefix: string, projectName: string) => `${prefix}-${projectName.replace(/^e2e-/, "")}-${RUN_ID}@local.test`;

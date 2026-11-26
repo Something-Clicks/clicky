@@ -31,6 +31,8 @@ test.describe("action board (To do)", () => {
     await expect(page.locator("main .list")).toContainText(title);
     await page.locator("main .list").getByRole("link", { name: /See why it matters/ }).first().click();
     await page.getByRole("button", { name: "Reopen" }).click();
+    // Wait for the reopen to finish (the open-state buttons come back) before leaving the page, or the request is cut off.
+    await expect(page.getByRole("button", { name: "Dismiss" })).toBeVisible();
     await page.goto("/app/actions");
     await expect(page.locator("main .list")).toContainText(title);
   });

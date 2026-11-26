@@ -13,8 +13,11 @@ const port = Number(process.env.E2E_PORT ?? 3100);
 const iphone = devices["iPhone 13"];
 /** E2E_SUITE=1 selects the organized suite in e2e/ (needs the local stack); otherwise the existing tests in tests/e2e run as before. */
 const suite = process.env.E2E_SUITE === "1";
+/** One id per run, inherited by every worker (a worker restarts after a failed test, so it must not live in a test file). */
+process.env.E2E_RUN_ID ??= String(Date.now());
 const SUITE_SPECS = "e2e/specs/**/*.spec.ts";
-const SIGNED_IN = { storageState: "e2e/.auth/owner.json" };
+const signedIn = (name: string) => ({ storageState: `e2e/.auth/owner-${name}.json` });
+const setupFor = (name: string, device: object) => ({ name: `e2e-setup-${name}`, testDir: "e2e/setup", testMatch: /.*\.setup\.ts/, use: device });
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -26,16 +29,19 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${port}`, trace: "off" },
   projects: suite
     ? [
-        // Creates the throwaway owner account and runs the first website check; the other projects start from its session.
-        { name: "e2e-setup", testDir: "e2e/setup", testMatch: /.*\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
-        { name: "e2e-chromium", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup"], use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, ...SIGNED_IN } },
-        { name: "e2e-mobile", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup"], use: { ...iphone, defaultBrowserType: "chromium", browserName: "chromium" as const, ...SIGNED_IN } },
+        // Each browser project first creates its OWN throwaway owner account and runs its first website check.
+        setupFor("chromium", { ...devices["Desktop Chrome"] }),
+        setupFor("mobile", { ...iphone, defaultBrowserType: "chromium", browserName: "chromium" as const }),
+        { name: "e2e-chromium", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup-chromium"], use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, ...signedIn("chromium") } },
+        { name: "e2e-mobile", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup-mobile"], use: { ...iphone, defaultBrowserType: "chromium", browserName: "chromium" as const, ...signedIn("mobile") } },
         // Firefox and WebKit run where the browsers are installed (pnpm exec playwright install firefox webkit).
-        ...(process.env.PW_FIREFOX === "1" ? [{ name: "e2e-firefox", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup"], use: { ...devices["Desktop Firefox"], ...SIGNED_IN } }] : []),
+        ...(process.env.PW_FIREFOX === "1" ? [setupFor("firefox", { ...devices["Desktop Firefox"] }), { name: "e2e-firefox", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup-firefox"], use: { ...devices["Desktop Firefox"], ...signedIn("firefox") } }] : []),
         ...(process.env.PW_WEBKIT === "1"
           ? [
-              { name: "e2e-webkit", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup"], use: { ...devices["Desktop Safari"], ...SIGNED_IN } },
-              { name: "e2e-mobile-safari", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup"], use: { ...iphone, ...SIGNED_IN } },
+              setupFor("webkit", { ...devices["Desktop Safari"] }),
+              setupFor("mobile-safari", { ...iphone }),
+              { name: "e2e-webkit", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup-webkit"], use: { ...devices["Desktop Safari"], ...signedIn("webkit") } },
+              { name: "e2e-mobile-safari", testDir: "e2e", testMatch: SUITE_SPECS, dependencies: ["e2e-setup-mobile-safari"], use: { ...iphone, ...signedIn("mobile-safari") } },
             ]
           : []),
       ]
