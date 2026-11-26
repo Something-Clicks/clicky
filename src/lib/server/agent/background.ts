@@ -5,6 +5,7 @@ import { tasks } from "@trigger.dev/sdk";
 import { log } from "@/lib/log";
 
 import type { Db } from "../analysis";
+import { BACKGROUND_DEADLINE_MS } from "./deadline";
 import { runWebsiteReview, type BackgroundRun, type BusinessInput } from "./orchestrator";
 
 /**
@@ -106,7 +107,7 @@ export async function runWebsiteReviewJob(db: WorkerDb, job: WebsiteReviewJob, r
   if (run.attempt > 1) await closeStaleWorkflows(db, job.analysisId);
   const out = await runWebsiteReview(
     db,
-    { orgId: job.organizationId, analysisId: job.analysisId, business: job.business, request: job.request, background: run },
+    { orgId: job.organizationId, analysisId: job.analysisId, business: job.business, request: job.request, background: run, deadlineMs: BACKGROUND_DEADLINE_MS },
     job.notify ? { notifyOrg: job.organizationId } : {},
   );
   return { status: out.status, workflowId: out.workflowId };

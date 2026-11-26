@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
+import { deadlineMs, REQUEST_DEADLINE_MS } from "@/lib/server/agent/deadline";
 import { planThroughAgent } from "@/lib/server/agent/plan-run";
 import { getModelProvider } from "@/lib/server/agent/provider";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +13,6 @@ import type { FormState } from "@/lib/validation";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 /** A plan request must be finished well inside the page's 120 s limit. */
-const REQUEST_DEADLINE_MS = 100_000;
 
 /**
  * Prepares a proposed marketing plan (Marketing Strategy), or a revised one when the owner adds notes.
@@ -21,7 +21,7 @@ const REQUEST_DEADLINE_MS = 100_000;
  * every call is metered per business.
  */
 export async function preparePlan(_prev: FormState, form: FormData): Promise<FormState> {
-  const deadlineAt = Date.now() + REQUEST_DEADLINE_MS; // counted from the start of the request
+  const deadlineAt = Date.now() + deadlineMs(REQUEST_DEADLINE_MS); // counted from the start of the request
   if (!FEATURES.strategy) return { error: "Plans aren't available yet." };
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };

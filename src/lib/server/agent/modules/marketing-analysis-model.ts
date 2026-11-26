@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { KnownFact } from "./business-intelligence";
+import { hasConcreteAction } from "@/lib/agent-quality";
 import { claimProblemIn, findQuote, genericPhraseIn, jsonForPrompt, pagesForModel, UNTRUSTED_CONTENT_RULE, unsupportedNumbers, type SourcePage } from "../grounding";
 import { generateStructured, type ModelProvider, type ModelUsage } from "../provider";
 
@@ -36,6 +37,23 @@ const Finding = z
   })
   .strict();
 
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** True when the finding only repeats what the page says (or labels like "Title:" the fixed checks already report). */
+export function restatesEvidence(f: Pick<ModelFindingOutput, "title" | "what_was_observed" | "quotes">): boolean {
+  const title = norm(f.title);
+  if (!title) return true;
+  // A title that starts with an evidence label ("Title: ...") is the page's own text, never a finding.
+  if (/^\s*(page title|title|meta description|meta|heading|h1)\s*:/i.test(f.title)) return true;
+  if (/^(title|meta description|meta|page title|heading)\b/.test(title) && f.quotes.some((q) => title.includes(norm(q.quote).slice(0, 20)))) return true;
+  if (title === norm(f.what_was_observed)) return true;
+  // The title is (or is contained in) one of its own quotes: the "finding" is a quotation.
+  return f.quotes.some((q) => {
+    const quote = norm(q.quote);
+    return quote.length >= 8 && (title === quote || quote.includes(title) || (title.includes(quote) && title.length - quote.length < 12));
+  });
+}
+
 export const ModelFindingsSchema = z.object({ findings: z.array(Finding) }).strict();
 export type ModelFindingOutput = z.infer<typeof Finding>;
 
@@ -70,6 +88,7 @@ export function groundFindings(raw: ModelFindingOutput[], pages: SourcePage[], a
   const evidence: ModelFindings["evidence"] = [];
   const cards: ModelFindings["cards"] = [];
   const rejected: ModelFindings["rejected"] = [];
+  const seenAdvice = new Set<string>();
   const source = pages.map((p) => p.text).join("\n");
   const slugs = new Set<string>();
   const already = new Set(alreadyFound.map((t) => t.toLowerCase()));
@@ -93,6 +112,13 @@ export function groundFindings(raw: ModelFindingOutput[], pages: SourcePage[], a
       reject("duplicate_of_check");
       continue;
     }
+    // A finding is a judgement about the page, not the page's own words. Reject one whose title just restates its quote or its
+    // own observation, one about the page title or description (fixed checks own those), or the same boilerplate repeated.
+    if (restatesEvidence(f)) {
+      reject("restates_evidence");
+      continue;
+    }
+
     const found = f.quotes.map((q) => ({ q, page: findQuote(pages, q.page_key, q.quote) })).filter((x) => x.page).slice(0, 3);
     const basis = f.basis.trim().slice(0, 1000);
     if ((f.evidence_class === "verified" || f.evidence_class === "inferred") && !found.length) {
@@ -103,6 +129,18 @@ export function groundFindings(raw: ModelFindingOutput[], pages: SourcePage[], a
       reject("basis_missing");
       continue;
     }
+    // A recommendation says what to change. "The homepage should be reviewed" is not one.
+    if (!hasConcreteAction(f.recommended_action)) {
+      reject("not_actionable");
+      continue;
+    }
+    // Boilerplate repeated across findings (the same reason and action under different titles) is one finding at most.
+    const advice = norm(`${f.why_it_matters} ${f.recommended_action}`);
+    if (seenAdvice.has(advice)) {
+      reject("repeated_text");
+      continue;
+    }
+    seenAdvice.add(advice);
     const slug = (f.slug.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "finding").slice(0, 50);
     if (slugs.has(slug)) continue;
     slugs.add(slug);

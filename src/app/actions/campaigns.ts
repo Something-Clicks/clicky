@@ -7,6 +7,7 @@ import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { parseSiteList, readSignals, type SiteSignals } from "@/lib/research";
 import { loadUnderstanding } from "@/lib/server/agent/context";
+import { CAMPAIGN_DEADLINE_MS, deadlineMs } from "@/lib/server/agent/deadline";
 import { writeCampaignDraftsFor } from "@/lib/server/agent/drafts-run";
 import { runCampaignPlanning, runCompetitorResearch } from "@/lib/server/agent/orchestrator";
 import { cardStage } from "@/lib/stages";
@@ -129,7 +130,7 @@ export async function writeCampaignDrafts(_prev: FormState, form: FormData): Pro
   const ws = await getWorkspace();
   const id = String(form.get("campaign") ?? "");
   if (!ws.organization || !ws.business || !UUID.test(id)) return { error: "That campaign could not be found." };
-  const out = await writeCampaignDraftsFor(ws.organization.id, ws.business, id, Date.now() + 280_000);
+  const out = await writeCampaignDraftsFor(ws.organization.id, ws.business, id, Date.now() + deadlineMs(CAMPAIGN_DEADLINE_MS));
   back(id);
   return out;
 }

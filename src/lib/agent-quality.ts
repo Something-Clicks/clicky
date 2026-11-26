@@ -64,7 +64,7 @@ const mean = (xs: (number | null)[]) => {
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
 };
 const clip = (s: string) => (s.length > 70 ? `${s.slice(0, 67)}...` : s);
-const hasConcreteAction = (s: string) => /^\s*(add|write|rewrite|change|replace|put|move|create|include|list|name|show|link|update|fix|remove|publish|ask|call|send|set|use|make|reduce|compress|resize|claim|respond|reply|collect|display|state|describe|explain|split|combine|shorten|expand|check)\b/i.test(s) && s.trim().split(/\s+/).length >= 5;
+export const hasConcreteAction = (s: string) => /^\s*(add|write|rewrite|change|replace|put|move|create|include|list|name|show|link|update|fix|remove|publish|ask|call|send|set|use|make|reduce|compress|resize|claim|respond|reply|collect|display|state|describe|explain|split|combine|shorten|expand|check)\b/i.test(s) && s.trim().split(/\s+/).length >= 5;
 
 export function reviewQuality(input: ReviewInput): QualityReport {
   const flags: QualityFlag[] = [];

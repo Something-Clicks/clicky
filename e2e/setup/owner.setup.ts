@@ -20,7 +20,7 @@ setup("create the owner and run the first website check", async ({ page }, testI
   const email = uniqueEmail("owner");
   await signUp(page, email, "Sam Owner");
   await expect(page).toHaveURL(/onboarding/);
-  await page.getByLabel("Business name").fill("Walkthrough Plumbing");
+  await page.getByLabel("Business name").fill(process.env.E2E_BUSINESS ?? "Walkthrough Plumbing");
   await page.getByLabel("Website").fill(SITE);
   await page.getByLabel("ZIP code").fill("84601");
   await page.getByRole("button", { name: "Check my website" }).click();

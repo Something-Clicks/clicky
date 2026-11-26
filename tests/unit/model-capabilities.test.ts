@@ -166,7 +166,7 @@ describe("Marketing Analysis: grounding model findings", () => {
     expect(r.rejected.map((x) => x.reason)).toEqual(["figure_not_in_source", "promise", "quote_not_found", "basis_missing"]);
     expect(groundFindings([finding({ recommended_action: "Leverage best practices to improve your SEO." })], pages, []).rejected.map((x) => x.reason)).toEqual(["generic_advice"]);
     expect(groundFindings([finding({ title: "Add a page title" })], pages, ["Add a page title"]).rejected.map((x) => x.reason)).toEqual(["duplicate_of_check"]);
-    expect(groundFindings(Array.from({ length: 7 }, (_, i) => finding({ slug: `s${i}` })), pages, []).cards).toHaveLength(5);
+    expect(groundFindings(Array.from({ length: 7 }, (_, i) => finding({ slug: `s${i}`, why_it_matters: `Reason ${"abcdefg"[i]}.`, recommended_action: `Name your main service ${"abcdefg"[i]} in the headline.` })), pages, []).cards).toHaveLength(5);
     expect(r.cards).toEqual([expect.objectContaining({ check_key: "model.f", evidence_class: "estimated", execution_type: "manual", evidence_keys: [] })]);
   });
 });
@@ -241,5 +241,43 @@ describe("orchestrator with model-assisted findings (test double provider)", () 
       expect(names.filter((n) => n === "settle_model_call").length, "each reservation settled").toBe(on ? 2 : 1);
       if (on) expect(out.steps.find((s) => s.step === "analyze_marketing_model")).toMatchObject({ status: "done" });
     }
+  });
+});
+
+describe("Marketing Analysis: findings that only restate the page (seen from a real 1.5B model run on a real site)", () => {
+  // The model returned five of these, each quoting the page and repeating the same boilerplate; each passed the quote check.
+  const junk = (title: string, quote: string) => finding({
+    slug: `t_${title.length}`, title, what_was_observed: title, quotes: [{ page_key: "page0", quote }], evidence_class: "verified", basis: "",
+    why_it_matters: "The title is clear and directly states the business's name and what they do.", recommended_action: "The title should be replaced with a more concise description.",
+  });
+  const real = [{ key: "page0", url: "https://sunrise.example/", title: "Sunrise", text: "Plumbing you can count on. Plumbing you can count on.", headings: [], links: [] }] as never;
+
+  it("drops a finding whose title is its own quote, labelled 'Title:', or the whole observation", () => {
+    const r = groundFindings([junk("Title: Plumbing you can count on", "Plumbing you can count on"), junk("Plumbing you can count on", "Plumbing you can count on")], real, []);
+    expect(r.cards).toEqual([]);
+    expect(r.rejected.map((x) => x.reason)).toEqual(["restates_evidence", "restates_evidence"]);
+  });
+
+  it("drops a labelled title even when its quote is other text, and an action that says nothing to change (the finding the real model kept)", () => {
+    const kept = finding({
+      slug: "about", title: "Title: About | Something Clicks", evidence_class: "verified", basis: "",
+      what_was_observed: "The homepage clearly states that the business is called Something Clicks.",
+      why_it_matters: "The homepage messaging is clear and straightforward.",
+      recommended_action: "The homepage should be reviewed to ensure that the messaging is consistent.",
+    });
+    expect(groundFindings([kept], pages, []).rejected.map((x) => x.reason)).toEqual(["restates_evidence"]);
+    expect(groundFindings([{ ...kept, title: "Clarify the about page" }], pages, []).rejected.map((x) => x.reason)).toEqual(["not_actionable"]);
+  });
+
+  it("drops the same boilerplate repeated across findings", () => {
+    const a = finding({ slug: "a", title: "Name your main service up top" });
+    const b = finding({ slug: "b", title: "Add a clear next step" });
+    const r = groundFindings([a, b], pages, []);
+    expect(r.cards.map((c) => c.check_key)).toEqual(["model.a"]);
+    expect(r.rejected).toEqual([{ title: "Add a clear next step", reason: "repeated_text" }]);
+  });
+
+  it("still keeps a genuine finding", () => {
+    expect(groundFindings([finding({})], pages, []).cards).toHaveLength(1);
   });
 });

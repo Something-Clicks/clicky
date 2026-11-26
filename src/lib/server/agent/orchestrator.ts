@@ -17,6 +17,7 @@ import { sourcePages } from "./modules/business-understanding";
 import { annotateCards } from "./modules/card-dependencies";
 import { analyzeWithModel } from "./modules/marketing-analysis-model";
 import { expectDone } from "./modules/types";
+import { deadlineMs, REQUEST_DEADLINE_MS } from "./deadline";
 import { loadAgentContext, RESEARCH_STALE_DAYS, type AgentContext } from "./context";
 import { understandRequest, type RequestUnderstanding } from "./intake";
 import { meteredProvider, ModelBudgetExceeded } from "./metering";
@@ -137,15 +138,15 @@ async function closeRecord(db: WorkflowDb, id: string | null, status: "prepared"
  * (start_analysis enforces limits and free uses).
  */
 /** The model steps of a website check must be done by then, counted from the start of the workflow. */
-export const WORKFLOW_DEADLINE_MS = 105_000;
+export { REQUEST_DEADLINE_MS as WORKFLOW_DEADLINE_MS } from "./deadline";
 
 export async function runWebsiteReview(
   db: WorkflowDb,
-  input: { orgId: string; analysisId: string; business: BusinessInput; request?: string | null; background?: BackgroundRun | null },
+  input: { orgId: string; analysisId: string; business: BusinessInput; request?: string | null; background?: BackgroundRun | null; deadlineMs?: number },
   deps: AnalysisDeps = {},
 ): Promise<WorkflowOutcome> {
   // One deadline for the whole workflow (the request's limit is 120 s): the model steps get what is left of it.
-  const deadlineAt = Date.now() + WORKFLOW_DEADLINE_MS;
+  const deadlineAt = Date.now() + (input.deadlineMs ?? deadlineMs(REQUEST_DEADLINE_MS));
   const plan = planWorkflow("website_review", { modelProvider: getModelProvider() !== null });
   const steps: StepRecord[] = [];
   const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });

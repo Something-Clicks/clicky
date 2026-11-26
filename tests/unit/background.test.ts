@@ -156,3 +156,19 @@ describe("retries and schedulers", () => {
     expect(readFileSync("vercel.json", "utf8")).toMatch(/\/api\/cron\/weekly-analysis/);
   });
 });
+
+describe("deadlines depend on where the work runs", () => {
+  it("Vercel requests keep their fixed deadline whatever is set; elsewhere AGENT_DEADLINE_MS applies within bounds; background jobs run long", async () => {
+    const { deadlineMs, REQUEST_DEADLINE_MS, BACKGROUND_DEADLINE_MS } = await import("@/lib/server/agent/deadline");
+    expect(deadlineMs(REQUEST_DEADLINE_MS, { VERCEL: "1", AGENT_DEADLINE_MS: "500000" })).toBe(REQUEST_DEADLINE_MS);
+    expect(deadlineMs(REQUEST_DEADLINE_MS, {})).toBe(REQUEST_DEADLINE_MS);
+    expect(deadlineMs(REQUEST_DEADLINE_MS, { AGENT_DEADLINE_MS: "500000" })).toBe(500_000);
+    for (const bad of ["10", "9999999", "abc", ""]) expect(deadlineMs(REQUEST_DEADLINE_MS, { AGENT_DEADLINE_MS: bad })).toBe(REQUEST_DEADLINE_MS);
+    expect(BACKGROUND_DEADLINE_MS).toBeLessThan(600_000); // inside the Trigger.dev task limit in trigger.config.ts
+  });
+
+  it("a background run passes its long deadline to the orchestrator", async () => {
+    const src = (await import("node:fs")).readFileSync("src/lib/server/agent/background.ts", "utf8");
+    expect(src).toMatch(/deadlineMs: BACKGROUND_DEADLINE_MS/);
+  });
+});

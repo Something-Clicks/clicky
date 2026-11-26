@@ -8,6 +8,7 @@ import { FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { isResearchSource, parseResearch } from "@/lib/research-import";
+import { deadlineMs, REQUEST_DEADLINE_MS } from "@/lib/server/agent/deadline";
 import { REQUEST_CHOICES, understandRequest } from "@/lib/server/agent/intake";
 import { isExecutionAction } from "@/lib/server/agent/modules/marketing-execution";
 import { isMetric } from "@/lib/server/agent/modules/performance-intelligence";
@@ -74,7 +75,7 @@ export async function ask(_prev: AskState, form: FormData): Promise<AskState> {
     }
     case "marketing_plan": {
       if (!FEATURES.strategy) return { error: "Plans aren't available yet." };
-      const out = await planThroughAgent(orgId, b, null, Date.now() + 100_000, request || null);
+      const out = await planThroughAgent(orgId, b, null, Date.now() + deadlineMs(REQUEST_DEADLINE_MS), request || null);
       revalidatePath("/app/plan");
       return out.error ? out : { ...out, redirectTo: "/app/plan" };
     }
