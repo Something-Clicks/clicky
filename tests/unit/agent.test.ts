@@ -72,17 +72,20 @@ describe("model provider", () => {
 describe("workflow selection (spec 12.2)", () => {
   it("selects only the capabilities each request needs", () => {
     expect(WORKFLOWS.homepage_headline.capabilities).toEqual(["business_intelligence", "website_intelligence", "marketing_analysis", "content_creation"]);
-    expect(WORKFLOWS.competitor_research.capabilities).toEqual(["business_intelligence", "market_research", "marketing_analysis"]);
+    expect(WORKFLOWS.competitor_research.capabilities).toEqual(["business_intelligence", "market_research"]);
     expect(WORKFLOWS.results_review.capabilities).toEqual(["performance_intelligence", "marketing_analysis", "marketing_strategy"]);
   });
 
   it("the website review runs on checks alone; the rest are blocked without a provider", () => {
     const env = { modelProvider: false };
     expect(planWorkflow("website_review", env).blocked).toBeNull();
-    for (const kind of ["homepage_headline", "competitor_research", "marketing_plan", "promotional_campaign", "results_review"] as const) {
+    for (const kind of ["homepage_headline", "marketing_plan", "results_review"] as const) {
       expect(planWorkflow(kind, env).blocked).toMatch(/No language model is available yet/);
     }
     expect(planWorkflow("homepage_headline", { modelProvider: true }).blocked).toBeNull();
+    // Competitor research and campaigns are built on fixed code and need no model.
+    expect(planWorkflow("competitor_research", env).blocked).toBeNull();
+    expect(planWorkflow("promotional_campaign", env).blocked).toBeNull();
   });
 
   it("execution is never available: no integration exists", () => {

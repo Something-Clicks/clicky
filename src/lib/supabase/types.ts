@@ -325,6 +325,28 @@ export type Database = {
         },
         "organization_id" | "plan"
       >;
+      competitor_scans: Table<
+        {
+          id: string; organization_id: string; url: string; host: string; status: string; is_self: boolean; signals: Json; previous_signals: Json | null;
+          failure: string | null; scanned_at: string; created_by: string | null;
+        },
+        "organization_id" | "url" | "host" | "status"
+      >;
+      marketing_campaigns: Table<
+        {
+          id: string; organization_id: string; playbook: string; title: string; goal: string; summary: string; status: string; basis: Json;
+          created_by: string | null; decided_by: string | null; decided_at: string | null; created_at: string;
+        },
+        "organization_id" | "playbook" | "title" | "goal" | "summary"
+      >;
+      campaign_tasks: Table<
+        {
+          id: string; campaign_id: string; organization_id: string; position: number; kind: string; title: string; why: string; steps: Json;
+          deliverable: string | null; deliverable_edited: string | null; card_id: string | null; evidence_class: string; basis: string | null;
+          status: string; done_at: string | null; done_by: string | null; note: string | null;
+        },
+        "campaign_id" | "organization_id" | "position" | "kind" | "title" | "why" | "evidence_class"
+      >;
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -398,6 +420,12 @@ export type Database = {
       admin_model_usage: { Args: { p_days: number }; Returns: Json };
       save_marketing_plan: { Args: { p_org: string; p_analysis: string; p_plan: Json; p_provider: string; p_model: string }; Returns: string };
       decide_marketing_plan: { Args: { p_plan: string; p_decision: string }; Returns: undefined };
+      save_competitor_scan: { Args: { p_org: string; p_url: string; p_host: string; p_status: string; p_signals: Json; p_failure: string | null; p_is_self: boolean }; Returns: string };
+      remove_competitor_scan: { Args: { p_id: string }; Returns: undefined };
+      save_campaign: { Args: { p_org: string; p_campaign: Json }; Returns: string };
+      decide_campaign: { Args: { p_campaign: string; p_decision: string }; Returns: undefined };
+      edit_task_deliverable: { Args: { p_task: string; p_text: string }; Returns: undefined };
+      set_task_status: { Args: { p_task: string; p_status: string; p_note: string | null }; Returns: undefined };
       admin_agent_review: { Args: { p_limit: number }; Returns: Json };
       review_business_fact: { Args: { p_fact: string; p_decision: string; p_value: string | null }; Returns: string };
       add_business_fact: { Args: { p_org: string; p_category: string; p_field: string; p_value: string }; Returns: string };

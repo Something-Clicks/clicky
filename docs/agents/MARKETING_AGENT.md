@@ -17,7 +17,8 @@ Something Clicks uses no external hosted AI. Plan to run our own: `docs/agents/O
 | Business Intelligence: contact details, services from links, schema.org data, quoted trust statements, review screen | Complete | Yes | n/a | n/a |
 | Marketing Strategy | **Rules-based plan** (fixed rules; no prose generation; no notes) | Yes (unit + database) | n/a (it is not a model) | n/a |
 | Language understanding of a site; model findings; plan wording; Content Creation (drafts) | **Blocked** (needs a model) | Checking rules only, with test doubles | **No** | **No** |
-| Market Research, Campaign Planning, Execution | Not implemented | No | No | No |
+| Market Research (named public homepages), Campaign Planning (fixed playbooks), guided task tracking | **Complete** (behind `FEATURE_CAMPAIGNS`, never Production) | Yes (unit + database; fixtures, not real sites; screens not yet browser-tested) | n/a | n/a |
+| Execution that publishes or sends | Not implemented (needs authorized integrations; the owner does the work and marks it done) | No | No | No |
 
 
 ```
@@ -44,13 +45,13 @@ Customer request ─► Orchestrator (src/lib/server/agent/orchestrator.ts)
 | Marketing Analysis (§6) | `marketing-analysis.ts`, `marketing-analysis-model.ts` | **Built for fixed checks.** **Model part built, not verified live:** messaging, conversion and content findings with quoted evidence, saved as Action Cards (origin `model`) behind `modelFindings`; never marked "verified fixed". |
 | Performance Intelligence (§11) | `performance-intelligence.ts` | **Partly built.** Verified fixed / still found / awaiting. Traffic and search data not connected. |
 | Content Creation (§8) | `content-creation.ts` | **Built, not verified live.** Homepage copy and SEO title/description from the business understanding and the card's evidence; content rules enforced; version 1 → edits as versions → owner approves a version. Behind `drafts`. |
-| Market Research (§4) | `unavailable.ts` | Not built. |
+| Market Research (§4) | `market-research.ts`, `lib/research.ts` | **Built (no model).** Reads the public homepage of up to 5 sites the owner names and the owner's own; records what each visibly shows (phone, tap-to-call, service area, reviews, prices, search markup) as verified-as-observed signals; comparison table on `/app/research`; saved in `competitor_scans` (re-read keeps the earlier result). Does not find competitors, and has no keyword or traffic data. |
 | Marketing Strategy (§7) | `marketing-strategy.ts` | **Built, not verified live.** A proposed plan from the business understanding and the open Action Cards: summary, ≤3 objectives, ≤8 ordered priorities that point at real open actions (by short reference, never ids the model could invent), effort, dependencies that must come earlier, next steps, questions for the owner, what to leave for later. Grounding drops unknown or repeated actions, promises, figures not in the material and generic advice. Owner reviews, revises (adds notes → a new proposal), approves or rejects at `/app/plan` behind `strategy`. Approval = agreement, never completion. Market research is not connected, so plans use only the business's own details and website findings. |
-| Campaign Planning (§9) | `unavailable.ts` | Not built. |
-| Marketing Execution (§10) | `unavailable.ts` | Not built (needs authorized integrations). |
+| Campaign Planning (§9) | `campaign-planning.ts`, `lib/campaigns.ts` | **Built (no model).** Four fixed playbooks (fix what visitors notice first, close gaps other sites show, ask for reviews, Google Business Profile), each offered only when something observed calls for it. Tasks carry a reason, an evidence class and a basis, with fixed-template drafts filled only from owner-given or confirmed facts (unknowns stay `[blanks]`). The owner approves a campaign (`decide_campaign`, owner only), edits drafts (original kept), does each task and marks it done (`set_task_status`, only after approval); a campaign completes when every task is done or skipped. Results: tasks done, and for fixes what the next website check verified. Migration 20261203120000. |
+| Marketing Execution (§10) | `unavailable.ts` | Not built (needs authorized integrations). Guided task tracking above is not execution: nothing is published or sent. |
 
 ## Feature switches
-`src/config/features.ts`: `drafts`, `businessProfile`, `modelFindings`, `strategy`. Off unless `FEATURE_<NAME>=1`; always off
+`src/config/features.ts`: `drafts`, `businessProfile`, `modelFindings`, `strategy`, `campaigns` (Compare and Campaigns screens; needs no model). Off unless `FEATURE_<NAME>=1`; always off
 in Production. Customers in Production see none of the model-assisted work.
 
 ## Cost control (§16)

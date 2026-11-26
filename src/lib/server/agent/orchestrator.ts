@@ -11,6 +11,8 @@ import { CAPABILITIES, type CapabilityId } from "./capabilities";
 import { FEATURES } from "@/config/features";
 
 import { MODULES } from "./modules";
+import { validateUrl, type FetchedPage } from "../safe-fetch";
+import type { Campaign, CampaignInput } from "@/lib/campaigns";
 import { sourcePages } from "./modules/business-understanding";
 import { analyzeWithModel } from "./modules/marketing-analysis-model";
 import { expectDone } from "./modules/types";
@@ -280,7 +282,7 @@ async function proposeFacts(db: WorkflowDb, orgId: string, analysisId: string, f
 }
 
 /** Kinds whose steps are implemented. Others are planned and report themselves as blocked. */
-const IMPLEMENTED: WorkflowKind[] = ["website_review"];
+const IMPLEMENTED: WorkflowKind[] = ["website_review", "competitor_research", "promotional_campaign"];
 
 /**
  * Entry point for requests other than the website review. Selects capabilities; if any needed
@@ -294,6 +296,8 @@ export async function requestMarketingWork(
   if (input.kind === "website_review") {
     throw new Error("Start a website review with start_analysis, then runWebsiteReview.");
   }
+  if (input.kind === "competitor_research") throw new Error("Use runCompetitorResearch.");
+  if (input.kind === "promotional_campaign") throw new Error("Use runCampaignPlanning.");
   const plan = planWorkflow(input.kind, { modelProvider: getModelProvider() !== null });
   const reason = plan.blocked ?? (IMPLEMENTED.includes(input.kind) ? null : `"${WORKFLOWS[input.kind].label}" is planned but not built yet.`);
   const steps: StepRecord[] = plan.steps.map((s) => ({
@@ -305,4 +309,130 @@ export async function requestMarketingWork(
   await closeRecord(db, workflowId, "blocked", steps, null, why);
   log.info("workflow.blocked", { workflowId, kind: input.kind, reason: why });
   return { status: "blocked", workflowId, reason: why, steps };
+}
+
+export interface ResearchOutcome {
+  status: "prepared" | "failed";
+  workflowId: string | null;
+  reason?: string;
+  steps: StepRecord[];
+  read: number;
+  failed: { host: string; failure: string }[];
+}
+
+/**
+ * Competitor research (Market Research, no model): reads the owner's own homepage and the sites the owner named,
+ * records what each visibly shows, and saves it for comparison. It never finds competitors on its own.
+ */
+export async function runCompetitorResearch(
+  db: WorkflowDb,
+  input: { orgId: string; ownWebsite: string; urls: string[] },
+  deps: { fetchPage?: (url: string) => Promise<FetchedPage> } = {},
+): Promise<ResearchOutcome> {
+  const plan = planWorkflow("competitor_research", { modelProvider: getModelProvider() !== null });
+  const steps: StepRecord[] = [];
+  const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });
+  const workflowId = await openRecord(db, input.orgId, "competitor_research", null, plan.capabilities, null);
+  const hostOf = (u: string) => new URL(u).hostname.toLowerCase().replace(/^www\./, "");
+
+  const targets: { url: string; own: boolean }[] = [];
+  const failed: ResearchOutcome["failed"] = [];
+  const seen = new Set<string>();
+  let ownHost = "";
+  try {
+    ownHost = hostOf(validateUrl(input.ownWebsite).toString());
+    targets.push({ url: validateUrl(input.ownWebsite).toString(), own: true });
+    seen.add(ownHost);
+  } catch {
+    /* the business's own address is checked elsewhere; research can still run on the others */
+  }
+  for (const raw of input.urls) {
+    try {
+      const u = validateUrl(/^[a-z]+:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`).toString();
+      const h = hostOf(u);
+      if (seen.has(h)) continue;
+      seen.add(h);
+      targets.push({ url: u, own: false });
+    } catch {
+      failed.push({ host: raw.trim().slice(0, 80), failure: "That doesn't look like a public website address." });
+    }
+  }
+  if (!targets.some((t) => !t.own)) {
+    const reason = "Add at least one website to compare with.";
+    step({ step: "choose_sites", capability: "market_research", status: "failed", detail: reason });
+    await closeRecord(db, workflowId, "failed", steps, null, reason);
+    return { status: "failed", workflowId, reason, steps, read: 0, failed };
+  }
+  step({ step: "plan", capability: null, status: "done", detail: `Reading ${targets.length} homepage${targets.length === 1 ? "" : "s"} (yours and ${targets.length - (targets.some((t) => t.own) ? 1 : 0)} you named).` });
+  const run = expectDone(await MODULES.market_research.run({ targets, fetchPage: deps.fetchPage }), "market_research");
+  let read = 0;
+  for (const r of run.output) {
+    const { error } = await db.rpc("save_competitor_scan", {
+      p_org: input.orgId, p_url: r.url, p_host: r.host, p_status: r.status,
+      p_signals: (r.signals ?? {}) as unknown as Json, p_failure: r.failure, p_is_self: r.own,
+    });
+    if (error) {
+      if ((error as { hint?: string }).hint === "competitor_limit") {
+        const reason = "You can compare up to 5 other websites. Remove one first.";
+        step({ step: "save_research", capability: "market_research", status: "failed", detail: reason });
+        await closeRecord(db, workflowId, "failed", steps, null, reason);
+        return { status: "failed", workflowId, reason, steps, read, failed };
+      }
+      log.error("research.save_failed", { orgId: input.orgId, error: error.message });
+      failed.push({ host: r.host, failure: "We couldn't save this one." });
+      continue;
+    }
+    if (r.status === "done") { if (!r.own) read += 1; } else failed.push({ host: r.host, failure: r.failure ?? "We couldn't read it." });
+  }
+  step({ step: "read_sites", capability: "market_research", status: read ? "done" : "failed", detail: `${run.detail} Observed on the public homepages only.` });
+  step({ step: "owner_review", capability: null, status: "waiting", detail: "Waiting for the owner to look at the comparison." });
+  await closeRecord(db, workflowId, read ? "prepared" : "failed", steps, { read, failed: failed.length }, read ? null : "None of the sites could be read.");
+  log.info("research.prepared", { workflowId, read, failed: failed.length });
+  return { status: read ? "prepared" : "failed", workflowId, reason: read ? undefined : "We couldn't read any of those sites.", steps, read, failed };
+}
+
+export interface CampaignOutcome {
+  status: "prepared" | "blocked" | "failed";
+  workflowId: string | null;
+  reason?: string;
+  steps: StepRecord[];
+  saved: number;
+}
+
+/**
+ * Campaign planning (fixed playbooks, no model): proposes campaigns from what is known and observed. Each is saved as a
+ * proposal; only the owner approves, and nothing is published or sent.
+ */
+export async function runCampaignPlanning(db: WorkflowDb, input: { orgId: string; campaign: CampaignInput }): Promise<CampaignOutcome> {
+  const plan = planWorkflow("promotional_campaign", { modelProvider: getModelProvider() !== null });
+  const steps: StepRecord[] = [];
+  const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });
+  const workflowId = await openRecord(db, input.orgId, "promotional_campaign", null, plan.capabilities, null);
+  const c = input.campaign;
+  step({
+    step: "gather", capability: "business_intelligence", status: "done",
+    detail: `${c.cards.length} open recommendation${c.cards.length === 1 ? "" : "s"}, ${c.confirmedServices.length} confirmed service${c.confirmedServices.length === 1 ? "" : "s"}, ${c.competitors.length} site${c.competitors.length === 1 ? "" : "s"} compared.`,
+  });
+  const run = await MODULES.campaign_planning.run(c);
+  if (run.status === "blocked") {
+    step({ step: "plan_campaigns", capability: "campaign_planning", status: "blocked", detail: run.reason });
+    await closeRecord(db, workflowId, "blocked", steps, null, run.reason);
+    return { status: "blocked", workflowId, reason: run.reason, steps, saved: 0 };
+  }
+  let saved = 0;
+  for (const campaign of run.output as Campaign[]) {
+    const { error } = await db.rpc("save_campaign", { p_org: input.orgId, p_campaign: campaign as unknown as Json });
+    if (error) { log.error("campaign.save_failed", { orgId: input.orgId, playbook: campaign.playbook, error: error.message }); continue; }
+    saved += 1;
+  }
+  if (!saved) {
+    const reason = "We couldn't save the campaigns. Please try again.";
+    step({ step: "save_campaigns", capability: "campaign_planning", status: "failed", detail: reason });
+    await closeRecord(db, workflowId, "failed", steps, null, reason);
+    return { status: "failed", workflowId, reason, steps, saved };
+  }
+  step({ step: "plan_campaigns", capability: "campaign_planning", status: "done", detail: run.detail });
+  step({ step: "owner_review", capability: null, status: "waiting", detail: "Waiting for the owner to approve, edit and carry out each task." });
+  await closeRecord(db, workflowId, "prepared", steps, { campaigns: saved }, null);
+  return { status: "prepared", workflowId, steps, saved };
 }

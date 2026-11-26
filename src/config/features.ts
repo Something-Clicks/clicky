@@ -11,6 +11,8 @@
  *   modelFindings   - model-assisted Marketing Analysis findings shown as Action Cards.
  *   strategy        - Marketing Strategy: a proposed plan (objectives, ordered priorities, next steps) the
  *                     owner reviews, revises, approves or rejects.
+ *   campaigns       - Research (compare with websites the owner names) and Campaigns (fixed playbooks, guided tasks the
+ *                     owner approves, edits and marks done). Needs no model.
  *
  * Server-only: read these in server components and server actions, and pass plain booleans to client
  * components (client bundles never see these variables, so they would always read false).
@@ -31,5 +33,8 @@ export const FEATURES = {
   },
   get strategy() {
     return on("STRATEGY");
+  },
+  get campaigns() {
+    return on("CAMPAIGNS");
   },
 };

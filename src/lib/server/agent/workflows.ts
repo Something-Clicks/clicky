@@ -24,7 +24,7 @@ export const WORKFLOWS: Record<WorkflowKind, { label: string; capabilities: Capa
   },
   competitor_research: {
     label: "Research competitors",
-    capabilities: ["business_intelligence", "market_research", "marketing_analysis"],
+    capabilities: ["business_intelligence", "market_research"],
   },
   marketing_plan: {
     label: "Develop a marketing plan",
@@ -32,7 +32,7 @@ export const WORKFLOWS: Record<WorkflowKind, { label: string; capabilities: Capa
   },
   promotional_campaign: {
     label: "Prepare a promotional campaign",
-    capabilities: ["business_intelligence", "market_research", "marketing_strategy", "content_creation", "campaign_planning"],
+    capabilities: ["business_intelligence", "market_research", "campaign_planning"],
   },
   results_review: {
     label: "Evaluate the latest marketing results",

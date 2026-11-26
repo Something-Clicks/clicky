@@ -51,8 +51,8 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
     today: "Re-checks completed or approved work on the next website check (verified fixed / still found) and compares PageSpeed.",
   },
   market_research: {
-    id: "market_research", label: "Market Research", runsOn: "model",
-    today: "Not available: needs a model provider and a research data source.",
+    id: "market_research", label: "Market Research", runsOn: "checks",
+    today: "Reads the public homepage of up to 5 websites the owner names, and the owner's own, and records what each visibly shows (phone, tap-to-call, service area, reviews, prices, search markup). It does not find competitors or use keyword or traffic data.",
   },
   marketing_strategy: {
     id: "marketing_strategy", label: "Marketing Strategy", runsOn: "model",
@@ -63,8 +63,8 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
     today: "Homepage copy and SEO titles/descriptions from the business understanding and the evidence; editable versions; owner approval (behind a switch, development and Preview).",
   },
   campaign_planning: {
-    id: "campaign_planning", label: "Campaign Planning", runsOn: "model",
-    today: "Not available: needs a model provider.",
+    id: "campaign_planning", label: "Campaign Planning", runsOn: "checks",
+    today: "Fixed playbooks (fix what visitors notice first, close gaps other sites show, ask for reviews, Google Business Profile) offered only when something observed calls for them. Tasks carry their reason and evidence class, with fixed-template drafts the owner edits; the owner approves, does the work and marks it done.",
   },
   marketing_execution: {
     id: "marketing_execution", label: "Marketing Execution", runsOn: "integration",

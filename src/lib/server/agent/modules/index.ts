@@ -1,7 +1,9 @@
 import { getModelProvider, type ModelProvider } from "../provider";
 import type { CapabilityId } from "../capabilities";
+import { campaignPlanning } from "./campaign-planning";
 import { businessIntelligence } from "./business-intelligence";
 import { createContent, type ContentDraft, type ContentInput } from "./content-creation";
+import { marketResearch } from "./market-research";
 import { marketingAnalysis } from "./marketing-analysis";
 import { createPlan, type MarketingPlan, type PlanInput } from "./marketing-strategy";
 import { performanceIntelligence } from "./performance-intelligence";
@@ -19,7 +21,8 @@ import { websiteIntelligence } from "./website-intelligence";
  *     marketing_analysis
  *   built, model only (blocked without a provider): content_creation (website copy, SEO titles/descriptions),
  *     marketing_strategy (a proposed plan the owner approves)
- *   not built yet (report "blocked"): market_research, campaign_planning, marketing_execution
+ *   built, fixed code (no model): market_research (named public homepages), campaign_planning (fixed playbooks)
+ *   not built yet (report "blocked"): marketing_execution (needs authorized integrations)
  */
 const hasModel = () => getModelProvider() !== null;
 
@@ -61,11 +64,11 @@ export const MODULES = {
   seo_intelligence: seoIntelligence,
   marketing_analysis: marketingAnalysis,
   performance_intelligence: performanceIntelligence,
-  market_research: notYetAvailable("market_research", hasModel),
+  market_research: marketResearch,
   marketing_strategy: marketingStrategy,
   content_creation: contentCreation,
-  campaign_planning: notYetAvailable("campaign_planning", hasModel),
+  campaign_planning: campaignPlanning,
   marketing_execution: notYetAvailable("marketing_execution", hasModel),
 } satisfies Record<CapabilityId, CapabilityModule<never, unknown>>;
 
-export const BUILT: CapabilityId[] = ["business_intelligence", "website_intelligence", "seo_intelligence", "marketing_analysis", "performance_intelligence", "content_creation", "marketing_strategy"];
+export const BUILT: CapabilityId[] = ["business_intelligence", "website_intelligence", "seo_intelligence", "marketing_analysis", "performance_intelligence", "content_creation", "marketing_strategy", "market_research", "campaign_planning"];
