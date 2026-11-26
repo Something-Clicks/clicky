@@ -1,5 +1,6 @@
 import type { FactField } from "@/lib/business-profile";
 
+import { orderByDependencies } from "./card-dependencies";
 import type { StoredPlan } from "./marketing-strategy";
 
 /**
@@ -24,6 +25,8 @@ export interface RulesCard {
   impact: string;
   confidence: string;
   evidence_class: string;
+  /** Other open cards that should be done first (card-dependencies.ts). */
+  depends_on?: string[];
 }
 
 const LEVEL: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -62,14 +65,24 @@ const firstSentence = (text: string, max: number) => {
   return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
 };
 
-export function buildRulesPlan(input: { businessName: string; primaryGoal: string | null; cards: RulesCard[]; missing: FactField[] }): StoredPlan | null {
+export interface RulesMemory {
+  /** Checks the owner dismissed before: not pushed again as priorities (§3.4 previous decisions). */
+  dismissedChecks?: string[];
+  /** Research older than the freshness limit, so the owner is asked for newer data rather than it being used as current. */
+  staleResearch?: number;
+}
+
+export function buildRulesPlan(input: { businessName: string; primaryGoal: string | null; cards: RulesCard[]; missing: FactField[]; memory?: RulesMemory }): StoredPlan | null {
   if (!input.cards.length) return null;
+  const dismissed = new Set(input.memory?.dismissedChecks ?? []);
+  const wasDismissed = (c: RulesCard) => Boolean(c.check_key && dismissed.has(c.check_key));
   const goal = input.primaryGoal ? GOAL[input.primaryGoal] : undefined;
   const serves = (c: RulesCard) => Boolean(goal && c.check_key && goal.checks.test(c.check_key));
 
-  const ordered = input.cards
+  const ranked = input.cards
     .map((c, i) => ({ c, i }))
     .sort((a, b) =>
+      Number(wasDismissed(a.c)) - Number(wasDismissed(b.c)) ||
       level(a.c.impact) - level(b.c.impact) ||
       Number(serves(b.c)) - Number(serves(a.c)) ||
       (EVIDENCE[a.c.evidence_class] ?? 3) - (EVIDENCE[b.c.evidence_class] ?? 3) ||
@@ -78,9 +91,14 @@ export function buildRulesPlan(input: { businessName: string; primaryGoal: strin
       a.i - b.i,
     )
     .map((x) => x.c);
+  // Work that others depend on moves ahead of them (title before description, HTTPS before speed, ...).
+  const ordered = orderByDependencies(ranked, (c) => c.depends_on ?? []);
 
-  const top = ordered.slice(0, 8);
-  const rest = ordered.slice(8, 13);
+  // If everything open was dismissed before, it is still the only work there is: plan it rather than nothing.
+  const fresh = ordered.some((c) => !wasDismissed(c)) ? ordered.filter((c) => !wasDismissed(c)) : ordered;
+  const top = fresh.slice(0, 8);
+  const rest = [...fresh.slice(8), ...ordered.filter((c) => !fresh.includes(c))].slice(0, 5);
+  const topIds = new Set(top.map((c) => c.id));
   const impactWord = (v: string) => (v === "high" ? "High" : v === "low" ? "Low" : "Medium");
   const seen = (c: RulesCard) => (c.evidence_class === "verified" ? "We saw this directly on your website." : c.evidence_class === "unknown" ? "Some information was missing, so check it first." : "This is our best reading of your website.");
 
@@ -88,7 +106,10 @@ export function buildRulesPlan(input: { businessName: string; primaryGoal: strin
     const effort = effortOf(c.check_key);
     const goalClause = serves(c) ? ` It supports your goal to ${goal!.label}.` : "";
     const whyNow = `${impactWord(c.impact)} impact${effort === "small" ? " and a small change" : ""}.${goalClause} ${seen(c)} ${firstSentence(c.why_it_matters, 200)}`.replace(/\s+/g, " ").trim();
-    return { card_id: c.id, order: i + 1, why_now: whyNow.slice(0, 500), effort, based_on: serves(c) ? ["goal"] : [], depends_on: [] };
+    const earlier = new Set(top.slice(0, i).map((x) => x.id));
+    const deps = (c.depends_on ?? []).filter((d) => topIds.has(d) && earlier.has(d));
+    const depClause = deps.length ? ` Do it after “${top.find((x) => x.id === deps[0])!.title.slice(0, 80)}”.` : "";
+    return { card_id: c.id, order: i + 1, why_now: `${whyNow}${depClause}`.slice(0, 500), effort, based_on: serves(c) ? ["goal"] : [], depends_on: deps };
   });
 
   const name = input.businessName.trim().slice(0, 60) || "your business";
@@ -100,7 +121,10 @@ export function buildRulesPlan(input: { businessName: string; primaryGoal: strin
     objectives: goal ? [{ objective: goal.label[0]!.toUpperCase() + goal.label.slice(1), based_on: ["goal"] }] : [],
     priorities,
     next_steps: top.slice(0, 3).map((c) => `${c.title}: ${firstSentence(c.recommended_action, 220)}`.slice(0, 300)),
-    questions: input.missing.map((f) => QUESTION[f]).filter((q): q is string => Boolean(q)).slice(0, 4),
-    not_now: rest.map((c) => ({ card_id: c.id, reason: `${impactWord(c.impact)} impact, so it comes after the actions above.` })),
+    questions: [
+      ...(input.memory?.staleResearch ? [`Some of your research is more than 3 months old. Can you add a newer export or re-run the comparison?`] : []),
+      ...input.missing.map((f) => QUESTION[f]).filter((q): q is string => Boolean(q)),
+    ].slice(0, 4),
+    not_now: rest.map((c) => ({ card_id: c.id, reason: wasDismissed(c) ? "You dismissed this before, so it is not pushed again." : `${impactWord(c.impact)} impact, so it comes after the actions above.` })),
   };
 }

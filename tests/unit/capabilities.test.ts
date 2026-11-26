@@ -155,6 +155,7 @@ describe("Performance Intelligence", () => {
     const r = expectDone(await performanceIntelligence.run({ cards: [
       { status: "done", verification: "fixed" }, { status: "approved", verification: "still_found" }, { status: "done", verification: null }, { status: "new", verification: null },
     ] }), "pi").output;
-    expect(r).toEqual({ completed_or_approved: 3, verified_fixed: 1, still_found: 1, awaiting_check: 1, traffic_data: "not_connected" });
+    expect(r).toMatchObject({ completed_or_approved: 3, verified_fixed: 1, still_found: 1, awaiting_check: 1, executed: 0, comparisons: [], supplied_data: "none" });
+    expect(r.caveats.join(" ")).toMatch(/does not measure them itself/);
   });
 });

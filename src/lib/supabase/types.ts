@@ -150,6 +150,9 @@ export type Database = {
           completion_basis: string | null;
           // ── evidence classes (20261127120000); derived for fixed checks, validated for model findings ──
           evidence_class: string | null;
+          // ── agent memory and execution (20261204120000) ──
+          effort: string | null;
+          depends_on: string[];
           evidence_basis: string | null;
         },
         "organization_id" | "analysis_id" | "check_key" | "title"
@@ -347,6 +350,30 @@ export type Database = {
         },
         "campaign_id" | "organization_id" | "position" | "kind" | "title" | "why" | "evidence_class"
       >;
+      // ── agent memory and execution (20261204120000) ──
+      research_items: Table<
+        {
+          id: string; organization_id: string; kind: string; source: string; term: string; metrics: Json; previous_metrics: Json | null;
+          previous_measured_on: string | null; evidence_class: string; basis: string | null; measured_on: string; imported_at: string; created_by: string | null;
+        },
+        "organization_id" | "source" | "term" | "evidence_class" | "measured_on"
+      >;
+      performance_metrics: Table<
+        {
+          id: string; organization_id: string; metric: string; period_start: string; period_end: string; value: number; source: string;
+          note: string | null; recorded_by: string | null; recorded_at: string;
+        },
+        "organization_id" | "metric" | "period_start" | "period_end" | "value" | "source"
+      >;
+      execution_records: Table<
+        {
+          id: string; organization_id: string; action: string; card_id: string | null; task_id: string | null; approval_id: string | null;
+          draft_version_id: string | null; status: string; integration: string | null; deliverable: Json | null; request_note: string | null;
+          result: string | null; error: string | null; verification: string | null; verified_at: string | null; idempotency_key: string;
+          requested_by: string | null; requested_at: string; authorized_by: string | null; authorized_at: string | null; executed_at: string | null;
+        },
+        "organization_id" | "action" | "status" | "idempotency_key"
+      >;
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -426,6 +453,16 @@ export type Database = {
       decide_campaign: { Args: { p_campaign: string; p_decision: string }; Returns: undefined };
       edit_task_deliverable: { Args: { p_task: string; p_text: string }; Returns: undefined };
       set_task_status: { Args: { p_task: string; p_status: string; p_note: string | null }; Returns: undefined };
+      // ── agent memory and execution (20261204120000) ──
+      import_research_items: { Args: { p_org: string; p_source: string; p_measured_on: string; p_items: Json }; Returns: number };
+      remove_research_item: { Args: { p_id: string }; Returns: undefined };
+      record_performance_metrics: { Args: { p_org: string; p_source: string; p_rows: Json }; Returns: number };
+      remove_performance_metric: { Args: { p_id: string }; Returns: undefined };
+      request_execution: { Args: { p_org: string; p_action: string; p_card: string | null; p_task: string | null; p_note: string | null; p_key: string }; Returns: string };
+      authorize_execution: { Args: { p_id: string }; Returns: undefined };
+      execute_authorized: { Args: { p_id: string }; Returns: string };
+      cancel_execution: { Args: { p_id: string }; Returns: undefined };
+      annotate_action_cards: { Args: { p_analysis: string; p_rows: Json }; Returns: number };
       admin_agent_review: { Args: { p_limit: number }; Returns: Json };
       review_business_fact: { Args: { p_fact: string; p_decision: string; p_value: string | null }; Returns: string };
       add_business_fact: { Args: { p_org: string; p_category: string; p_field: string; p_value: string }; Returns: string };

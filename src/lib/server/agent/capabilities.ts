@@ -27,6 +27,11 @@ export interface Capability {
   runsOn: RunsOn;
   /** What it actually does today (or would do), in one line. */
   today: string;
+  /**
+   * For a model capability: what it does without a model, in fixed rules. Present only when that path is real and
+   * labelled as rules in the product (never presented as model reasoning).
+   */
+  withoutModel?: string;
 }
 
 export const CAPABILITIES: Record<CapabilityId, Capability> = {
@@ -40,7 +45,7 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
   },
   seo_intelligence: {
     id: "seo_intelligence", label: "SEO Intelligence", runsOn: "checks",
-    today: "On-page checks only (titles, descriptions, headings, indexability) plus PageSpeed when measured. No keyword data source is connected.",
+    today: "On-page checks (titles, descriptions, headings, indexability) plus PageSpeed when measured, and keyword research the owner supplies (a Semrush or Search Console export, kept with its source and date). No keyword API is connected.",
   },
   marketing_analysis: {
     id: "marketing_analysis", label: "Marketing Analysis", runsOn: "checks",
@@ -48,7 +53,7 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
   },
   performance_intelligence: {
     id: "performance_intelligence", label: "Performance Intelligence", runsOn: "checks",
-    today: "Re-checks completed or approved work on the next website check (verified fixed / still found) and compares PageSpeed.",
+    today: "Re-checks completed or approved work on the next website check (verified fixed / still found), tracks executed work, and compares results figures the owner supplied between equal periods. Measures no traffic itself.",
   },
   market_research: {
     id: "market_research", label: "Market Research", runsOn: "checks",
@@ -56,6 +61,7 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
   },
   marketing_strategy: {
     id: "marketing_strategy", label: "Marketing Strategy", runsOn: "model",
+    withoutModel: "A plan built by fixed rules (impact, evidence, effort, dependencies, the owner's goal and previous decisions), labelled as such; no written analysis.",
     today: "A proposed plan from the business understanding and the open findings: objectives, ordered priorities tied to real actions, next steps and questions for the owner; the owner revises, approves or rejects it (behind a switch, development and Preview). Market research is not connected, so the plan uses only the business's own details and website findings.",
   },
   content_creation: {
@@ -67,8 +73,8 @@ export const CAPABILITIES: Record<CapabilityId, Capability> = {
     today: "Fixed playbooks (fix what visitors notice first, close gaps other sites show, ask for reviews, Google Business Profile) offered only when something observed calls for them. Tasks carry their reason and evidence class, with fixed-template drafts the owner edits; the owner approves, does the work and marks it done.",
   },
   marketing_execution: {
-    id: "marketing_execution", label: "Marketing Execution", runsOn: "integration",
-    today: "Not available: no publishing or sending integration exists. The owner does the work and records it.",
+    id: "marketing_execution", label: "Marketing Execution", runsOn: "checks",
+    today: "After the owner authorizes: saves the exact approved draft to the workspace, or records that the team did the work (verified by the next website check). Publishing, sending and ad spend have no integration and are refused.",
   },
 };
 
@@ -77,10 +83,18 @@ export interface Availability {
   modelProvider: boolean;
 }
 
-/** Why a capability cannot run now, or null when it can. */
+/** How a capability runs now: fixed checks, a model, fixed rules in place of a model, or not at all. */
+export function capabilityMode(id: CapabilityId, env: Availability): "checks" | "model" | "rules" | "unavailable" {
+  const c = CAPABILITIES[id];
+  if (c.runsOn === "checks") return "checks";
+  if (c.runsOn === "model") return env.modelProvider ? "model" : c.withoutModel ? "rules" : "unavailable";
+  return "unavailable";
+}
+
+/** Why a capability cannot run now, or null when it can (with a model, or with its fixed-rules path). */
 export function unavailableReason(id: CapabilityId, env: Availability): string | null {
   const c = CAPABILITIES[id];
-  if (c.runsOn === "checks") return null;
+  if (c.runsOn === "checks" || capabilityMode(id, env) === "rules") return null;
   if (c.runsOn === "model") return env.modelProvider ? null : "No language model is available yet. Something Clicks is building its own model hosting.";
   return "No authorized integration exists for this yet.";
 }

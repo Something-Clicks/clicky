@@ -9,7 +9,7 @@ import { createPlan, type MarketingPlan, type PlanInput } from "./marketing-stra
 import { performanceIntelligence } from "./performance-intelligence";
 import { seoIntelligence } from "./seo-intelligence";
 import type { CapabilityModule } from "./types";
-import { notYetAvailable } from "./unavailable";
+import { marketingExecution } from "./marketing-execution";
 import { websiteIntelligence } from "./website-intelligence";
 
 /**
@@ -22,7 +22,8 @@ import { websiteIntelligence } from "./website-intelligence";
  *   built, model only (blocked without a provider): content_creation (website copy, SEO titles/descriptions),
  *     marketing_strategy (a proposed plan the owner approves)
  *   built, fixed code (no model): market_research (named public homepages), campaign_planning (fixed playbooks)
- *   not built yet (report "blocked"): marketing_execution (needs authorized integrations)
+ *   built, fixed code (no model): marketing_execution (only actions the application performs itself, after the owner
+ *     authorizes; publishing, sending and ad spend have no integration and are refused)
  */
 const hasModel = () => getModelProvider() !== null;
 
@@ -68,7 +69,7 @@ export const MODULES = {
   marketing_strategy: marketingStrategy,
   content_creation: contentCreation,
   campaign_planning: campaignPlanning,
-  marketing_execution: notYetAvailable("marketing_execution", hasModel),
+  marketing_execution: marketingExecution,
 } satisfies Record<CapabilityId, CapabilityModule<never, unknown>>;
 
-export const BUILT: CapabilityId[] = ["business_intelligence", "website_intelligence", "seo_intelligence", "marketing_analysis", "performance_intelligence", "content_creation", "marketing_strategy", "market_research", "campaign_planning"];
+export const BUILT: CapabilityId[] = ["business_intelligence", "website_intelligence", "seo_intelligence", "marketing_analysis", "performance_intelligence", "content_creation", "marketing_strategy", "market_research", "campaign_planning", "marketing_execution"];

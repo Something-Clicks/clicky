@@ -1,4 +1,4 @@
-import { CAPABILITIES, unavailableReason, type Availability, type CapabilityId } from "./capabilities";
+import { CAPABILITIES, capabilityMode, unavailableReason, type Availability, type CapabilityId } from "./capabilities";
 
 /**
  * Workflow selection (spec 12.2): each kind of request runs only the capabilities it needs.
@@ -45,6 +45,8 @@ export const isWorkflowKind = (v: unknown): v is WorkflowKind => typeof v === "s
 export interface PlannedStep {
   capability: CapabilityId;
   runsOn: string;
+  /** How it will run: fixed checks, a model, fixed rules in place of a model, or not at all. */
+  mode: "checks" | "model" | "rules" | "unavailable";
   available: boolean;
   reason: string | null;
 }
@@ -61,7 +63,7 @@ export function planWorkflow(kind: WorkflowKind, env: Availability): WorkflowPla
   const capabilities = WORKFLOWS[kind].capabilities;
   const steps = capabilities.map((id) => {
     const reason = unavailableReason(id, env);
-    return { capability: id, runsOn: CAPABILITIES[id].runsOn, available: reason === null, reason };
+    return { capability: id, runsOn: CAPABILITIES[id].runsOn, mode: capabilityMode(id, env), available: reason === null, reason };
   });
   const missing = steps.filter((s) => !s.available);
   const blocked = missing.length

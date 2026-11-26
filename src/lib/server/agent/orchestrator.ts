@@ -14,12 +14,19 @@ import { MODULES } from "./modules";
 import { validateUrl, type FetchedPage } from "../safe-fetch";
 import type { Campaign, CampaignInput } from "@/lib/campaigns";
 import { sourcePages } from "./modules/business-understanding";
+import { annotateCards } from "./modules/card-dependencies";
 import { analyzeWithModel } from "./modules/marketing-analysis-model";
 import { expectDone } from "./modules/types";
+import { loadAgentContext, RESEARCH_STALE_DAYS, type AgentContext } from "./context";
+import { understandRequest, type RequestUnderstanding } from "./intake";
 import { meteredProvider, ModelBudgetExceeded } from "./metering";
-import { getModelProvider } from "./provider";
+import type { OwnerProfile } from "./modules/business-intelligence";
+import { createPlan, PlanRejected } from "./modules/marketing-strategy";
+import { followUps, type FollowUp, type PerformanceSummary } from "./modules/performance-intelligence";
+import { buildRulesPlan, RULES_MODEL, RULES_PROVIDER } from "./modules/rules-strategy";
+import { getModelProvider, ModelOutputInvalid, type ModelProvider } from "./provider";
 import type { RankedNeed } from "./rank";
-import { planWorkflow, WORKFLOWS, type WorkflowKind } from "./workflows";
+import { planWorkflow, type WorkflowKind } from "./workflows";
 
 /**
  * The central Marketing Agent orchestrator (spec section 12).
@@ -229,6 +236,27 @@ export async function runWebsiteReview(
     detail: r.ranked.length ? `${r.ranked.length} needs ranked; first: ${r.ranked[0]!.title}.` : "Nothing needs attention right now.",
   });
 
+  // 7b. Effort and order: which actions should come before others (fixed dependency rules, saved on the cards).
+  const annotations = annotateCards(r.findings.map((f) => ({ id: f.check_key, check_key: f.check_key })))
+    .map((a) => ({ check_key: a.id, effort: a.effort, depends_on: a.depends_on }));
+  const ordered = annotations.filter((a) => a.depends_on.length).length;
+  if (annotations.length) {
+    let saved = true;
+    try {
+      const { error } = await db.rpc("annotate_action_cards", { p_analysis: input.analysisId, p_rows: annotations as unknown as Json });
+      if (error) { saved = false; log.error("workflow.annotate_failed", { workflowId, error: error.message }); }
+    } catch (error) {
+      saved = false;
+      log.error("workflow.annotate_failed", { workflowId, error });
+    }
+    step({
+      step: "order_work", capability: "marketing_analysis", status: saved ? "done" : "failed",
+      detail: saved
+        ? `Effort set on ${annotations.length} action${annotations.length === 1 ? "" : "s"}; ${ordered} should wait for another one first.`
+        : "Effort and order could not be saved; the recommendations themselves are unaffected.",
+    });
+  }
+
   // 8. Prepare the work and explain why it matters: the saved Action Cards.
   const draftsPossible = r.findings.filter((f) => f.ai_capable && f.execution_type !== "manual").length;
   step({
@@ -281,34 +309,24 @@ async function proposeFacts(db: WorkflowDb, orgId: string, analysisId: string, f
   }
 }
 
-/** Kinds whose steps are implemented. Others are planned and report themselves as blocked. */
-const IMPLEMENTED: WorkflowKind[] = ["website_review", "competitor_research", "promotional_campaign"];
-
 /**
- * Entry point for requests other than the website review. Selects capabilities; if any needed
- * capability cannot run (no model provider, no integration) or the workflow is not built yet,
- * it records a blocked workflow and says why. It never produces placeholder output.
+ * Records a request whose required capability cannot run (for example, a homepage headline with no model to write it).
+ * It never produces placeholder output. Kinds that can run have their own entry points (see handleRequest).
  */
 export async function requestMarketingWork(
   db: WorkflowDb,
   input: { orgId: string; kind: WorkflowKind; request: string | null },
 ): Promise<WorkflowOutcome> {
-  if (input.kind === "website_review") {
-    throw new Error("Start a website review with start_analysis, then runWebsiteReview.");
-  }
-  if (input.kind === "competitor_research") throw new Error("Use runCompetitorResearch.");
-  if (input.kind === "promotional_campaign") throw new Error("Use runCampaignPlanning.");
   const plan = planWorkflow(input.kind, { modelProvider: getModelProvider() !== null });
-  const reason = plan.blocked ?? (IMPLEMENTED.includes(input.kind) ? null : `"${WORKFLOWS[input.kind].label}" is planned but not built yet.`);
+  if (!plan.blocked) throw new Error(`"${input.kind}" can run; use its workflow.`);
   const steps: StepRecord[] = plan.steps.map((s) => ({
     step: s.capability, capability: s.capability, status: s.available ? "skipped" : "blocked",
     detail: s.reason ?? "Not run: the workflow is blocked.", at: now(),
   }));
   const workflowId = await openRecord(db, input.orgId, input.kind, input.request, plan.capabilities, null);
-  const why = reason ?? "Blocked.";
-  await closeRecord(db, workflowId, "blocked", steps, null, why);
-  log.info("workflow.blocked", { workflowId, kind: input.kind, reason: why });
-  return { status: "blocked", workflowId, reason: why, steps };
+  await closeRecord(db, workflowId, "blocked", steps, null, plan.blocked);
+  log.info("workflow.blocked", { workflowId, kind: input.kind, reason: plan.blocked });
+  return { status: "blocked", workflowId, reason: plan.blocked, steps };
 }
 
 export interface ResearchOutcome {
@@ -435,4 +453,246 @@ export async function runCampaignPlanning(db: WorkflowDb, input: { orgId: string
   step({ step: "owner_review", capability: null, status: "waiting", detail: "Waiting for the owner to approve, edit and carry out each task." });
   await closeRecord(db, workflowId, "prepared", steps, { campaigns: saved }, null);
   return { status: "prepared", workflowId, steps, saved };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Request understanding and the remaining workflows (§12.1–12.2). Every kind of request now runs through the orchestrator
+// with its relevant context (context.ts) and is recorded in marketing_workflows.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type AgentDb = Pick<Db, "rpc" | "from">;
+
+/** Understands a request and plans the workflow it needs (capabilities, how each runs, what blocks it). */
+export function routeRequest(text: string, env = { modelProvider: getModelProvider() !== null }): { understanding: RequestUnderstanding; plan: ReturnType<typeof planWorkflow> | null } {
+  const understanding = understandRequest(text);
+  return { understanding, plan: understanding.kind ? planWorkflow(understanding.kind, env) : null };
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** A next step from the owner's own keyword research: only fresh rows, only figures the source reported. */
+export function keywordNextStep(keywords: NonNullable<AgentContext["research"]>["keywords"]): string | null {
+  const fresh = keywords.filter((k) => !k.stale);
+  const num = (k: (typeof fresh)[number], key: string) => (typeof k.metrics[key] === "number" ? (k.metrics[key] as number) : -1);
+  const gsc = fresh.filter((k) => k.source === "search_console_export" && num(k, "impressions") > 0).sort((a, b) => num(b, "impressions") - num(a, "impressions")).slice(0, 2);
+  if (gsc.length) {
+    return `Google Search Console (${gsc[0]!.measured_on}) shows people find you most for “${gsc.map((k) => k.term.slice(0, 60)).join("” and “")}”. Make sure the page they land on answers that search clearly.`.slice(0, 300);
+  }
+  const sem = fresh.filter((k) => k.source === "semrush_export" && num(k, "volume") > 0).sort((a, b) => num(b, "volume") - num(a, "volume")).slice(0, 2);
+  if (sem.length) {
+    return `Your Semrush export (${sem[0]!.measured_on}, Semrush's estimates) lists “${sem.map((k) => k.term.slice(0, 60)).join("” and “")}” as the most searched. Check that a page on your site is clearly about each.`.slice(0, 300);
+  }
+  return null;
+}
+
+export type PlanOutcome =
+  | { status: "prepared"; workflowId: string | null; steps: StepRecord[]; by: "rules" | "model"; priorities: number }
+  | { status: "failed"; workflowId: string | null; steps: StepRecord[]; reason: string; code: "no_analysis" | "no_open_actions" | "budget" | "invalid" | "error" };
+
+/**
+ * Marketing plan (§7): Business Intelligence (+ previous decisions) → Market Research (what is in the Research Library) →
+ * Website Intelligence (the latest check) → Marketing Analysis (open actions with effort and order) → Marketing Strategy
+ * (a model when one is configured, otherwise fixed rules, labelled as such) → saved as a proposal the owner decides on.
+ */
+export async function runMarketingPlan(
+  db: AgentDb,
+  input: { orgId: string; profile: OwnerProfile; notes: string | null; request?: string | null },
+  deps: { provider?: (workflowId: string | null) => ModelProvider | null; deadlineAt?: number; now?: number } = {},
+): Promise<PlanOutcome> {
+  const plan = planWorkflow("marketing_plan", { modelProvider: getModelProvider() !== null });
+  const steps: StepRecord[] = [];
+  const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });
+  const workflowId = await openRecord(db, input.orgId, "marketing_plan", input.request ?? null, plan.capabilities, null);
+  const fail = async (code: Extract<PlanOutcome, { status: "failed" }>["code"], reason: string, capability: CapabilityId | null, stepName: string): Promise<PlanOutcome> => {
+    step({ step: stepName, capability, status: "failed", detail: reason });
+    await closeRecord(db, workflowId, "failed", steps, null, reason);
+    return { status: "failed", workflowId, steps, reason, code };
+  };
+
+  const ctx = await loadAgentContext(db, input.orgId, input.profile, "marketing_plan", deps.now);
+  const u = ctx.understanding!;
+  step({ step: "understand_business", capability: "business_intelligence", status: "done", detail: `${plural(u.known.length, "confirmed or proposed detail")}; missing: ${u.missing.length ? u.missing.join(", ") : "nothing"}. ${plural(ctx.decisions!.dismissed.length, "earlier dismissed action")} remembered.` });
+  const r = ctx.research!;
+  step({
+    step: "research", capability: "market_research", status: "done",
+    detail: `Research Library: ${plural(r.competitors.filter((c) => !c.is_self).length, "compared site")}, ${plural(r.keywords.length, "keyword")}${r.staleCount ? `; ${r.staleCount} older than ${RESEARCH_STALE_DAYS} days, not treated as current` : ""}.`,
+  });
+  if (!ctx.latestAnalysis) return fail("no_analysis", "Check your website first. The plan builds on what we find.", "website_intelligence", "review_website");
+  step({ step: "review_website", capability: "website_intelligence", status: "done", detail: `Using the website check from ${ctx.latestAnalysis.completed_at.slice(0, 10)}.` });
+  const open = ctx.openCards!.filter((c) => c.status !== "done");
+  if (!open.length) return fail("no_open_actions", "There's nothing open to plan around right now.", "marketing_analysis", "analyze_marketing");
+  step({ step: "analyze_marketing", capability: "marketing_analysis", status: "done", detail: `${plural(open.length, "open action")}; ${open.filter((c) => c.depends_on?.length).length} should wait for another first.` });
+
+  const provider = deps.provider?.(workflowId) ?? null;
+  let stored: Json;
+  let by: { provider: string; model: string };
+  let n = 0;
+  let usage: { inputTokens: number; outputTokens: number } | null = null;
+  try {
+    if (provider) {
+      const result = await createPlan(provider, {
+        businessName: input.profile.businessName, serviceArea: input.profile.serviceArea, primaryGoal: input.profile.primaryGoal, known: u.known,
+        cards: open.map((c) => ({
+          id: c.id, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action,
+          impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown", stage: c.stage as "prepared" | "approved",
+        })),
+        ownerNotes: input.notes,
+        deadlineAt: deps.deadlineAt,
+      });
+      stored = result.plan as unknown as Json;
+      by = { provider: result.provider, model: result.model };
+      usage = { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens };
+      n = result.plan.priorities.length;
+    } else {
+      const rules = buildRulesPlan({
+        businessName: input.profile.businessName, primaryGoal: input.profile.primaryGoal, missing: u.missing,
+        cards: open.map((c) => ({
+          id: c.id, check_key: c.check_key, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action,
+          impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown", depends_on: c.depends_on ?? [],
+        })),
+        memory: { dismissedChecks: ctx.decisions!.dismissed.map((d) => d.check_key).filter((k): k is string => Boolean(k)), staleResearch: r.staleCount },
+      });
+      if (!rules) return fail("no_open_actions", "There's nothing open to plan around right now.", "marketing_strategy", "plan_strategy");
+      const research = keywordNextStep(r.keywords);
+      if (research && rules.next_steps.length < 5) rules.next_steps.push(research);
+      stored = rules as unknown as Json;
+      by = { provider: RULES_PROVIDER, model: RULES_MODEL };
+      n = rules.priorities.length;
+    }
+  } catch (e) {
+    log.error("plan.failed", { orgId: input.orgId, workflowId, error: e });
+    if (e instanceof ModelBudgetExceeded) return fail("budget", "Planning has reached its usage limit for now. Please try again later.", "marketing_strategy", "plan_strategy");
+    if (e instanceof PlanRejected || e instanceof ModelOutputInvalid) return fail("invalid", "We couldn't prepare a usable plan this time. Please try again.", "marketing_strategy", "plan_strategy");
+    return fail("error", "We couldn't prepare the plan. Please try again.", "marketing_strategy", "plan_strategy");
+  }
+  step({
+    step: "plan_strategy", capability: "marketing_strategy", status: "done",
+    detail: provider ? `Proposed ${plural(n, "priority", "priorities")} with the model.` : `Ordered ${plural(n, "priority", "priorities")} with fixed rules (impact, evidence, effort, order, goal, earlier decisions); no written analysis.`,
+  });
+  const { error } = await db.rpc("save_marketing_plan", { p_org: input.orgId, p_analysis: ctx.latestAnalysis.id, p_plan: stored, p_provider: by.provider, p_model: by.model });
+  if (error) {
+    log.error("plan.save_failed", { orgId: input.orgId, error: error.message });
+    return fail("error", "We couldn't save the plan. Please try again.", "marketing_strategy", "save_plan");
+  }
+  step({ step: "owner_review", capability: null, status: "waiting", detail: "Waiting for the owner to approve or reject the plan." });
+  await closeRecord(db, workflowId, "prepared", steps, { priorities: n, by: provider ? "model" : "rules", analysis_id: ctx.latestAnalysis.id }, null,
+    usage ? { provider: by.provider, model: by.model, usage } : null);
+  return { status: "prepared", workflowId, steps, by: provider ? "model" : "rules", priorities: n };
+}
+
+export interface ResultsReview {
+  summary: PerformanceSummary;
+  follow_ups: FollowUp[];
+  next_action: { card_id: string; title: string; why: string } | null;
+  plan_progress: { plan_id: string; total: number; completed: number } | null;
+  reviewed_at: string;
+}
+
+/**
+ * Results review (§11): Performance Intelligence (outcomes, executed work, supplied figures) → Marketing Analysis (what
+ * needs another look) → Marketing Strategy (the next action by the same fixed rules as the plan, and progress on the
+ * approved plan). Uses only real data; with none it says so and asks for it.
+ */
+export async function runResultsReview(
+  db: AgentDb,
+  input: { orgId: string; profile: OwnerProfile; request?: string | null },
+  deps: { now?: number } = {},
+): Promise<{ status: "prepared"; workflowId: string | null; steps: StepRecord[]; review: ResultsReview }> {
+  const plan = planWorkflow("results_review", { modelProvider: getModelProvider() !== null });
+  const steps: StepRecord[] = [];
+  const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });
+  const workflowId = await openRecord(db, input.orgId, "results_review", input.request ?? null, plan.capabilities, null);
+  const ctx = await loadAgentContext(db, input.orgId, input.profile, "results_review", deps.now);
+
+  const perf = expectDone(await MODULES.performance_intelligence.run({ cards: ctx.trackedCards!, metrics: ctx.performance!.metrics, executions: ctx.performance!.executions }), "performance_intelligence");
+  step({ step: "measure", capability: "performance_intelligence", status: "done", detail: perf.detail });
+
+  const stillFound = ctx.trackedCards!.filter((c) => c.verification === "still_found").map((c) => ({ id: c.id, title: c.title }));
+  const follow = followUps({ summary: perf.output, stillFound });
+  step({ step: "analyze_results", capability: "marketing_analysis", status: "done", detail: `${plural(follow.length, "follow-up")}: ${follow.map((f) => f.kind).join(", ") || "none"}.` });
+
+  const open = ctx.openCards!.filter((c) => c.status !== "done");
+  const dismissed = ctx.decisions!.dismissed.map((d) => d.check_key).filter((k): k is string => Boolean(k));
+  const rules = open.length ? buildRulesPlan({
+    businessName: input.profile.businessName, primaryGoal: input.profile.primaryGoal, missing: [],
+    cards: open.map((c) => ({ id: c.id, check_key: c.check_key, title: c.title, why_it_matters: c.why_it_matters, recommended_action: c.recommended_action, impact: c.impact_priority, confidence: c.confidence, evidence_class: c.evidence_class ?? "unknown", depends_on: c.depends_on ?? [] })),
+    memory: { dismissedChecks: dismissed },
+  }) : null;
+  const first = rules?.priorities[0];
+  const firstCard = first ? open.find((c) => c.id === first.card_id)! : null;
+  const next_action = first && firstCard ? { card_id: first.card_id, title: firstCard.title, why: first.why_now } : null;
+
+  let plan_progress: ResultsReview["plan_progress"] = null;
+  const approved = ctx.approvedPlan;
+  const priorities = (approved?.plan as { priorities?: { card_id: string }[] } | null)?.priorities ?? [];
+  if (approved && priorities.length) {
+    const doneIds = new Set(ctx.trackedCards!.filter((c) => c.stage === "completed").map((c) => c.id));
+    plan_progress = { plan_id: approved.id, total: priorities.length, completed: priorities.filter((p) => doneIds.has(p.card_id)).length };
+  }
+  step({
+    step: "next_action", capability: "marketing_strategy", status: "done",
+    detail: `${next_action ? `Next: ${next_action.title}` : "Nothing open right now"} (fixed rules).${plan_progress ? ` Approved plan: ${plan_progress.completed} of ${plan_progress.total} done.` : ""}`,
+  });
+
+  const review: ResultsReview = { summary: perf.output, follow_ups: follow, next_action, plan_progress, reviewed_at: now() };
+  await closeRecord(db, workflowId, "prepared", steps, review, null);
+  return { status: "prepared", workflowId, steps, review };
+}
+
+export type HeadlineOutcome = {
+  status: "prepared" | "blocked" | "failed";
+  workflowId: string | null;
+  steps: StepRecord[];
+  reason?: string;
+  /** The action the headline work belongs to, where a draft is prepared and approved. */
+  card: { id: string; title: string } | null;
+};
+
+const HEADLINE_CHECK = /^(content\.h1_missing|content\.thin_homepage|model\.(headline|value|messag))/;
+
+/**
+ * Homepage headline (§12.2): Business Intelligence → Website Intelligence (the latest check) → Marketing Analysis (the
+ * homepage messaging action, with its evidence) → Content Creation (a draft on that action). Content Creation needs a
+ * model; without one the workflow stops there and says so. Nothing is written by a stand-in.
+ */
+export async function runHomepageHeadline(
+  db: AgentDb,
+  input: { orgId: string; profile: OwnerProfile; request?: string | null },
+  deps: { draftsEnabled: boolean; now?: number },
+): Promise<HeadlineOutcome> {
+  const hasModel = getModelProvider() !== null;
+  const plan = planWorkflow("homepage_headline", { modelProvider: hasModel });
+  const steps: StepRecord[] = [];
+  const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });
+  const workflowId = await openRecord(db, input.orgId, "homepage_headline", input.request ?? null, plan.capabilities, null);
+  const ctx = await loadAgentContext(db, input.orgId, input.profile, "homepage_headline", deps.now);
+  const u = ctx.understanding!;
+  step({ step: "understand_business", capability: "business_intelligence", status: "done", detail: `${plural(u.known.length, "detail")} known; missing: ${u.missing.join(", ") || "nothing"}.` });
+  if (!ctx.latestAnalysis) {
+    const reason = "Check your website first. The headline work starts from what is on your homepage now.";
+    step({ step: "review_website", capability: "website_intelligence", status: "failed", detail: reason });
+    await closeRecord(db, workflowId, "failed", steps, null, reason);
+    return { status: "failed", workflowId, steps, reason, card: null };
+  }
+  step({ step: "review_website", capability: "website_intelligence", status: "done", detail: `Using the homepage as read on ${ctx.latestAnalysis.completed_at.slice(0, 10)}.` });
+  const card = ctx.openCards!.find((c) => c.status !== "done" && (c.execution_type === "page_copy" || (c.check_key !== null && HEADLINE_CHECK.test(c.check_key))));
+  if (!card) {
+    step({ step: "analyze_marketing", capability: "marketing_analysis", status: "done", detail: "The latest check found nothing about the homepage headline that needs attention." });
+    await closeRecord(db, workflowId, "prepared", steps, { card: null, finding: "none" }, null);
+    return { status: "prepared", workflowId, steps, card: null };
+  }
+  step({ step: "analyze_marketing", capability: "marketing_analysis", status: "done", detail: `Homepage messaging action: ${card.title}.` });
+  const ref = { id: card.id, title: card.title };
+  const draftable = card.execution_type === "page_copy";
+  if (!hasModel || !deps.draftsEnabled || !draftable) {
+    const reason = !hasModel
+      ? "No language model is available yet, so no headline was written. The finding and its evidence are on the action."
+      : !draftable ? "This action needs a change only you or your web designer can make." : "Drafts are switched off here.";
+    step({ step: "create_content", capability: "content_creation", status: "blocked", detail: reason });
+    await closeRecord(db, workflowId, "blocked", steps, { card: ref }, reason);
+    return { status: "blocked", workflowId, steps, reason, card: ref };
+  }
+  step({ step: "create_content", capability: "content_creation", status: "waiting", detail: "Ready to prepare a draft on that action when the owner asks for one." });
+  await closeRecord(db, workflowId, "prepared", steps, { card: ref }, null);
+  return { status: "prepared", workflowId, steps, card: ref };
 }

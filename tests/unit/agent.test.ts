@@ -76,20 +76,28 @@ describe("workflow selection (spec 12.2)", () => {
     expect(WORKFLOWS.results_review.capabilities).toEqual(["performance_intelligence", "marketing_analysis", "marketing_strategy"]);
   });
 
-  it("the website review runs on checks alone; the rest are blocked without a provider", () => {
+  it("without a provider only work that truly needs a model is blocked; strategy runs on its labelled fixed rules", () => {
     const env = { modelProvider: false };
     expect(planWorkflow("website_review", env).blocked).toBeNull();
-    for (const kind of ["homepage_headline", "marketing_plan", "results_review"] as const) {
-      expect(planWorkflow(kind, env).blocked).toMatch(/No language model is available yet/);
-    }
+    // Content Creation has no rules path: the headline workflow is blocked without a model.
+    expect(planWorkflow("homepage_headline", env).blocked).toMatch(/No language model is available yet/);
     expect(planWorkflow("homepage_headline", { modelProvider: true }).blocked).toBeNull();
+    // Marketing Strategy falls back to fixed rules, and says so in the step's mode.
+    for (const kind of ["marketing_plan", "results_review"] as const) {
+      const plan = planWorkflow(kind, env);
+      expect(plan.blocked).toBeNull();
+      expect(plan.steps.find((s) => s.capability === "marketing_strategy")!.mode).toBe("rules");
+      expect(planWorkflow(kind, { modelProvider: true }).steps.find((s) => s.capability === "marketing_strategy")!.mode).toBe("model");
+    }
+    expect(planWorkflow("homepage_headline", env).steps.find((s) => s.capability === "content_creation")!.mode).toBe("unavailable");
     // Competitor research and campaigns are built on fixed code and need no model.
     expect(planWorkflow("competitor_research", env).blocked).toBeNull();
     expect(planWorkflow("promotional_campaign", env).blocked).toBeNull();
   });
 
-  it("execution is never available: no integration exists", () => {
-    expect(CAPABILITIES.marketing_execution.runsOn).toBe("integration");
+  it("execution runs only inside the application; the capability needs no integration for what it supports", () => {
+    expect(CAPABILITIES.marketing_execution.runsOn).toBe("checks");
+    expect(CAPABILITIES.marketing_execution.today).toMatch(/Publishing, sending and ad spend have no integration/);
   });
 });
 
@@ -149,7 +157,7 @@ describe("orchestrator: website review (stub database, fixture HTML)", () => {
     delete process.env.FEATURE_BUSINESS_PROFILE;
     const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf1" : null, error: null }));
     const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business }, { fetchPage: async (u) => page(u, HOME), pageSpeed: psiMissing });
-    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "finish_marketing_workflow"]);
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "annotate_action_cards", "finish_marketing_workflow"]);
     expect(out.status).toBe("prepared");
     if (out.status === "prepared") expect(out.steps.map((s) => s.step)).not.toContain("learn_business");
   });
@@ -157,7 +165,7 @@ describe("orchestrator: website review (stub database, fixture HTML)", () => {
   it("records the workflow, saves the analysis, ranks needs, and finishes as prepared", async () => {
     const rpc = vi.fn(async (name: string, _args?: unknown) => ({ data: name === "start_marketing_workflow" ? "wf1" : null, error: null }));
     const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a1", business }, { fetchPage: async (u) => page(u, HOME), pageSpeed: psiMissing });
-    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "propose_business_facts", "finish_marketing_workflow"]);
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "propose_business_facts", "annotate_action_cards", "finish_marketing_workflow"]);
     expect(rpc.mock.calls[0]![1]).toMatchObject({ p_org: "o1", p_kind: "website_review", p_analysis: "a1", p_capabilities: ["business_intelligence", "website_intelligence", "seo_intelligence", "marketing_analysis"] });
     expect(out.status).toBe("prepared");
     if (out.status !== "prepared") return;
@@ -171,9 +179,14 @@ describe("orchestrator: website review (stub database, fixture HTML)", () => {
     expect(out.result.ranked.length).toBeGreaterThan(2);
     expect(out.steps.map((s) => [s.step, s.status])).toEqual([
       ["understand_business", "done"], ["plan", "done"], ["analyze_website", "done"], ["analyze_marketing", "done"], ["analyze_seo", "done"],
-      ["learn_business", "done"], ["rank_needs", "done"], ["prepare_work", "done"], ["prepare_drafts", "blocked"], ["owner_review", "waiting"],
+      ["learn_business", "done"], ["rank_needs", "done"], ["order_work", "done"], ["prepare_work", "done"], ["prepare_drafts", "blocked"], ["owner_review", "waiting"],
     ]);
-    const finish = rpc.mock.calls[3]![1] as Record<string, unknown>;
+    // Effort and order are saved by check, resolved to this analysis's cards in the database.
+    const annotate = rpc.mock.calls[3]![1] as { p_analysis: string; p_rows: { check_key: string; effort: string; depends_on: string[] }[] };
+    expect(annotate.p_analysis).toBe("a1");
+    expect(annotate.p_rows.length).toBe(out.result.ranked.length);
+    for (const row of annotate.p_rows) expect(["small", "medium", "large"]).toContain(row.effort);
+    const finish = rpc.mock.calls[4]![1] as Record<string, unknown>;
     expect(finish).toMatchObject({ p_workflow: "wf1", p_status: "prepared", p_provider: null, p_model: null, p_usage: null });
   });
 
@@ -194,7 +207,7 @@ describe("orchestrator: website review (stub database, fixture HTML)", () => {
     const out = await runWebsiteReview({ rpc } as never, { orgId: "o1", analysisId: "a3", business }, { fetchPage: async (u) => page(u, HOME), pageSpeed: psiMissing });
     expect(out.status).toBe("prepared");
     expect(out.workflowId).toBeNull();
-    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "propose_business_facts"]);
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["start_marketing_workflow", "complete_analysis", "propose_business_facts", "annotate_action_cards"]);
   });
 });
 
