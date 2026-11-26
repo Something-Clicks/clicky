@@ -37,6 +37,9 @@ describe("agent functions switch", () => {
     await rollbackFrom(db.admin, "20261201120000_agent_functions_switch");
     await db.admin.query(readFileSync(join(__dirname, "..", "..", "supabase", "migrations", "20261201120000_agent_functions_switch.sql"), "utf8"));
     expect((await db.admin.query("select value from public.app_config where key = 'agent_functions_enabled'")).rows[0].value).toBe(0);
+    // Put back every later migration, so the database is complete again (re-applying turns the switch on; keep it off here).
+    await reapplyFrom(db.admin, "20261202000000");
+    await setSwitch("0");
   });
 
   it("while off, a member cannot store model findings, business details, plans or draft output by calling the functions directly", async () => {

@@ -103,12 +103,32 @@ export async function runWebsiteReviewJob(db: WorkerDb, job: WebsiteReviewJob, r
   const { data } = await db.from("analyses").select("status, organization_id").eq("id", job.analysisId).maybeSingle();
   if (!data || data.organization_id !== job.organizationId) return { status: "skipped", reason: "not_found" };
   if (data.status !== "running") return { status: "skipped", reason: `already_${data.status}` };
+  if (run.attempt > 1) await closeStaleWorkflows(db, job.analysisId);
   const out = await runWebsiteReview(
     db,
     { orgId: job.organizationId, analysisId: job.analysisId, business: job.business, request: job.request, background: run },
     job.notify ? { notifyOrg: job.organizationId } : {},
   );
   return { status: out.status, workflowId: out.workflowId };
+}
+
+/**
+ * A retried run must not be blocked by the record its crashed attempt left "running" (one running workflow per kind is
+ * enforced), and that record must not stay "running" forever: close it as failed, with the reason, before retrying.
+ */
+export async function closeStaleWorkflows(db: WorkerDb, analysisId: string): Promise<number> {
+  const { data } = await db.from("marketing_workflows").select("id, steps").eq("analysis_id", analysisId).eq("status", "running");
+  let closed = 0;
+  for (const wf of data ?? []) {
+    const steps = Array.isArray(wf.steps) ? wf.steps : [];
+    const { error } = await db.rpc("finish_marketing_workflow", {
+      p_workflow: wf.id, p_status: "failed", p_steps: steps, p_result: null,
+      p_error: "This attempt stopped before finishing; the check was retried.", p_provider: null, p_model: null, p_usage: null,
+    });
+    if (error) log.warn("background.close_stale_failed", { workflowId: wf.id, error: error.message });
+    else closed += 1;
+  }
+  return closed;
 }
 
 /** Closes a check that failed every attempt, so the customer sees it failed instead of "running" forever. */

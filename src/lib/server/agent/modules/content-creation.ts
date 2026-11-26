@@ -120,3 +120,96 @@ export async function createContent(provider: ModelProvider, input: ContentInput
   const source = [input.businessName, ...input.known.map((k) => k.value), ...input.evidence.flatMap((e) => [e.observation, e.excerpt ?? ""]), input.ownerNotes ?? ""].join("\n");
   return { fields: checkDraft(input.kind, r.output, source), model: r.model, provider: r.provider, usage: r.usage };
 }
+
+// ── Campaign drafts (§8.4–8.6): landing page, email, social post, Google Business Profile post, text message ──────────
+
+export type ChannelKind = "landing_page" | "email" | "social" | "gbp" | "sms";
+
+const CHANNEL_SPECS: Record<ChannelKind, { fields: { key: string; label: string; max: number }[]; brief: string }> = {
+  landing_page: {
+    fields: [
+      { key: "headline", label: "Headline", max: 90 },
+      { key: "intro", label: "Opening paragraph", max: 450 },
+      { key: "whats_included", label: "What's included", max: 700 },
+      { key: "how_it_works", label: "How it works", max: 700 },
+      { key: "call_to_action", label: "Call to action", max: 160 },
+    ],
+    brief: "A page about one service: a headline naming the service and the area, an opening paragraph for the audience, what the customer gets, how it works from first contact to finished job, and a call to action. Use [placeholders] for anything not in the material (prices, steps, guarantees you cannot see).",
+  },
+  email: {
+    fields: [
+      { key: "subject", label: "Subject", max: 90 },
+      { key: "body", label: "Email", max: 1200 },
+    ],
+    brief: "A short, friendly email to past customers who agreed to hear from the business, announcing the service and linking to [link to the new page]. Start with \"Hi [first name],\". 60-150 words.",
+  },
+  social: {
+    fields: [{ key: "post", label: "Post", max: 500 }],
+    brief: "One social media post (40-80 words) about the service, ending with [link to the new page]. No hashtags beyond two.",
+  },
+  gbp: {
+    fields: [{ key: "post", label: "Google post", max: 750 }],
+    brief: "One Google Business Profile post (50-120 words) about the service for people searching nearby, ending with a line pointing to [link to the new page].",
+  },
+  sms: {
+    fields: [{ key: "message", label: "Text message", max: 300 }],
+    brief: "One text message (under 300 characters) to a customer who agreed to receive texts, with [link to the new page].",
+  },
+};
+export const isChannelKind = (v: unknown): v is ChannelKind => typeof v === "string" && Object.hasOwn(CHANNEL_SPECS, v);
+
+const channelSchema = (kind: ChannelKind) =>
+  z.object(Object.fromEntries(CHANNEL_SPECS[kind].fields.map((f) => [f.key, z.string()]))).strict() as unknown as z.ZodType<Record<string, string>>;
+
+export interface TaskDraftInput {
+  channel: ChannelKind;
+  businessName: string;
+  known: KnownFact[];
+  brief: { objective: string; audience: string | null; offer: string | null; core_message: string };
+  task: { title: string; why: string };
+  /** The fixed template for this task: the structure to follow and the facts already filled in. */
+  template: string | null;
+  ownerNotes: string | null;
+  deadlineAt?: number;
+}
+
+/** Checks a campaign draft the same way as website copy (§8.7), and joins it into the text the owner edits. */
+export function checkTaskDraft(kind: ChannelKind, out: Record<string, string>, source: string): string {
+  const parts = CHANNEL_SPECS[kind].fields.map(({ key, label, max }) => {
+    const text = String(out[key] ?? "").trim();
+    if (!text) throw new ContentRejected("empty_field", "The draft came back incomplete, so we didn't keep it. Please try again.");
+    const problem = claimProblemIn(text);
+    if (problem) throw new ContentRejected(problem, "The draft made a promise or claim we can't back up, so we didn't keep it. Please try again.");
+    if (unsupportedNumbers(text, source).length) throw new ContentRejected("figure_not_in_source", "The draft used a number that isn't in your business details, so we didn't keep it. Please try again.");
+    if (text.length > max * 1.25) throw new ContentRejected("too_long", "The draft came back too long, so we didn't keep it. Please try again.");
+    return { key, label, text };
+  });
+  if (kind === "email") return `Subject: ${parts[0]!.text}\n\n${parts[1]!.text}`;
+  if (parts.length === 1) return parts[0]!.text;
+  return parts.map((p, i) => (i === 0 ? p.text : `${p.label}\n${p.text}`)).join("\n\n");
+}
+
+export async function createTaskDraft(provider: ModelProvider, input: TaskDraftInput): Promise<{ text: string; model: string; provider: string; usage: ModelUsage }> {
+  const spec = CHANNEL_SPECS[input.channel];
+  const business = { name: input.businessName, details: input.known.map((k) => ({ detail: k.label, value: k.value, confirmed_by_owner: k.confirmed })) };
+  const r = await generateStructured(
+    {
+      task: `content_creation.campaign_${input.channel}`,
+      system: SYSTEM,
+      input: [
+        `<brief>${spec.brief}</brief>`,
+        `<business>${jsonForPrompt(business)}</business>`,
+        `<campaign>${jsonForPrompt(input.brief)}</campaign>`,
+        `<task>${jsonForPrompt(input.task)}</task>`,
+        `<template>${plainForPrompt(input.template ?? "")}</template>`,
+        `<owner_notes>${plainForPrompt(input.ownerNotes ?? "")}</owner_notes>`,
+      ].join("\n"),
+      schema: channelSchema(input.channel),
+      maxOutputTokens: 1500,
+      deadlineAt: input.deadlineAt,
+    },
+    provider,
+  );
+  const source = [input.businessName, ...input.known.map((k) => k.value), input.brief.objective, input.brief.core_message, input.brief.audience ?? "", input.brief.offer ?? "", input.template ?? "", input.ownerNotes ?? ""].join("\n");
+  return { text: checkTaskDraft(input.channel, r.output, source), model: r.model, provider: r.provider, usage: r.usage };
+}

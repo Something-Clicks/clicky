@@ -21,6 +21,7 @@ import { loadAgentContext, RESEARCH_STALE_DAYS, type AgentContext } from "./cont
 import { understandRequest, type RequestUnderstanding } from "./intake";
 import { meteredProvider, ModelBudgetExceeded } from "./metering";
 import type { OwnerProfile } from "./modules/business-intelligence";
+import { ContentRejected, createTaskDraft, isChannelKind, type ChannelKind } from "./modules/content-creation";
 import { createPlan, PlanRejected } from "./modules/marketing-strategy";
 import { followUps, type FollowUp, type PerformanceSummary } from "./modules/performance-intelligence";
 import { buildRulesPlan, RULES_MODEL, RULES_PROVIDER } from "./modules/rules-strategy";
@@ -152,7 +153,7 @@ export async function runWebsiteReview(
   const { businessName, serviceArea, primaryGoal, website } = input.business;
   const profile = { businessName, serviceArea, primaryGoal, website };
   if (input.background) {
-    step({ step: "run_in_background", capability: null, status: "done", detail: `Running as a durable background job (attempt ${input.background.attempt}).` });
+    step({ step: "run_in_background", capability: null, status: "done", detail: `Running as a durable background job (run ${input.background.runId.slice(0, 40)}, attempt ${input.background.attempt}).` });
   }
 
   // 1. Understand the business (Business Intelligence, from the owner's profile).
@@ -706,4 +707,86 @@ export async function runHomepageHeadline(
   step({ step: "create_content", capability: "content_creation", status: "waiting", detail: "Ready to prepare a draft on that action when the owner asks for one." });
   await closeRecord(db, workflowId, "prepared", steps, { card: ref }, null);
   return { status: "prepared", workflowId, steps, card: ref };
+}
+
+export interface CampaignDraftsOutcome {
+  status: "prepared" | "blocked" | "failed";
+  workflowId: string | null;
+  steps: StepRecord[];
+  written: number;
+  rejected: number;
+  reason?: string;
+}
+
+/**
+ * Content Creation for a campaign (§8.4–8.6): writes a draft for each task that has a channel (page, email, social, Google
+ * post, text), from the business understanding and the campaign brief, through the metered model. Drafts are stored beside
+ * the fixed template (save_task_model_draft) for the owner to edit and use; nothing is sent or published. Without a model
+ * it is recorded as blocked and the templates remain.
+ */
+export async function runCampaignDrafts(
+  db: AgentDb,
+  input: { orgId: string; campaignId: string; profile: OwnerProfile; notes?: string | null },
+  deps: { provider?: (workflowId: string | null) => ModelProvider | null; deadlineAt?: number },
+): Promise<CampaignDraftsOutcome> {
+  const plan = planWorkflow("promotional_campaign", { modelProvider: getModelProvider() !== null });
+  const steps: StepRecord[] = [];
+  const step = (s: Omit<StepRecord, "at">) => steps.push({ ...s, at: now() });
+  const workflowId = await openRecord(db, input.orgId, "promotional_campaign", "Write the campaign drafts", [...plan.capabilities, "content_creation"], null);
+  const finish = async (status: CampaignDraftsOutcome["status"], written: number, rejected: number, reason?: string): Promise<CampaignDraftsOutcome> => {
+    await closeRecord(db, workflowId, status, steps, status === "prepared" ? { campaign_id: input.campaignId, written, rejected } : null, reason ?? null);
+    return { status, workflowId, steps, written, rejected, reason };
+  };
+
+  const [{ data: campaign }, { data: tasks }] = await Promise.all([
+    db.from("marketing_campaigns").select("id, status, brief, title").eq("id", input.campaignId).eq("organization_id", input.orgId).maybeSingle(),
+    db.from("campaign_tasks").select("id, position, title, why, channel, deliverable, status").eq("campaign_id", input.campaignId).order("position", { ascending: true }),
+  ]);
+  if (!campaign || campaign.status === "dismissed") {
+    step({ step: "load_campaign", capability: "campaign_planning", status: "failed", detail: "That campaign isn't open." });
+    return finish("failed", 0, 0, "That campaign isn't open.");
+  }
+  const brief = (campaign.brief ?? null) as { objective: string; audience: string | null; offer: string | null; core_message: string } | null;
+  const writable = (tasks ?? []).filter((t) => isChannelKind(t.channel) && t.status !== "done" && t.status !== "skipped");
+  if (!brief || !writable.length) {
+    step({ step: "load_campaign", capability: "campaign_planning", status: "done", detail: "Nothing in this campaign needs a written draft." });
+    return finish("prepared", 0, 0);
+  }
+  const ctx = await loadAgentContext(db, input.orgId, input.profile, "promotional_campaign");
+  step({ step: "understand_business", capability: "business_intelligence", status: "done", detail: `${plural(ctx.understanding!.known.length, "detail")} known; missing: ${missingWords(ctx.understanding!.missing)}.` });
+
+  const provider = deps.provider?.(workflowId) ?? null;
+  if (!provider) {
+    const reason = "We can't write these drafts yet; the templates are ready to edit.";
+    step({ step: "create_content", capability: "content_creation", status: "blocked", detail: reason });
+    return finish("blocked", 0, 0, reason);
+  }
+  let written = 0;
+  let rejected = 0;
+  let usage = { inputTokens: 0, outputTokens: 0 };
+  let model: string | null = null;
+  for (const t of writable) {
+    try {
+      const d = await createTaskDraft(provider, {
+        channel: t.channel as ChannelKind, businessName: input.profile.businessName, known: ctx.understanding!.known,
+        brief, task: { title: t.title, why: t.why }, template: t.deliverable, ownerNotes: input.notes ?? null, deadlineAt: deps.deadlineAt,
+      });
+      usage = { inputTokens: usage.inputTokens + d.usage.inputTokens, outputTokens: usage.outputTokens + d.usage.outputTokens };
+      model = d.model;
+      const { error } = await db.rpc("save_task_model_draft", { p_task: t.id, p_text: d.text, p_provider: d.provider, p_model: d.model });
+      if (error) throw new Error(`save_task_model_draft: ${error.message}`);
+      written += 1;
+      step({ step: `draft_${t.position}`, capability: "content_creation", status: "done", detail: `Wrote “${t.title.slice(0, 80)}”.` });
+    } catch (error) {
+      rejected += 1;
+      log.warn("campaign.draft_failed", { workflowId, task: t.id, error });
+      const plain = error instanceof ContentRejected ? error.message : error instanceof ModelBudgetExceeded ? "The usage limit for this business was reached." : "This draft didn't finish; the template is still there.";
+      step({ step: `draft_${t.position}`, capability: "content_creation", status: "failed", detail: `“${t.title.slice(0, 80)}”: ${plain}` });
+      if (error instanceof ModelBudgetExceeded) break;
+    }
+  }
+  step({ step: "owner_review", capability: null, status: "waiting", detail: "Waiting for the owner to edit and use the drafts. Nothing is sent or published." });
+  await closeRecord(db, workflowId, written ? "prepared" : "failed", steps, written ? { campaign_id: input.campaignId, written, rejected } : null,
+    written ? null : "No draft passed the checks.", model ? { provider: provider.id, model, usage } : null);
+  return { status: written ? "prepared" : "failed", workflowId, steps, written, rejected, reason: written ? undefined : "No draft passed the checks." };
 }

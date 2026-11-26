@@ -6,12 +6,15 @@ import { decideCampaign, editTaskDraft, markTask } from "@/app/actions/campaigns
 import { CopyButton } from "@/app/app/actions/[id]/copy-button";
 import { FEATURES } from "@/config/features";
 import { requireOrganization } from "@/lib/auth";
-import { campaignResults } from "@/lib/campaigns";
+import { CHANNEL_LABEL, campaignResults, type Channel } from "@/lib/campaigns";
+import { WriteDraftsForm } from "@/components/agent-forms";
+import { getModelProvider } from "@/lib/server/agent/provider";
 import { EvidenceLine } from "@/components/intelligence";
 import { EVIDENCE_CLASS_LABEL, isEvidenceClass } from "@/lib/evidence";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Campaign" };
+export const maxDuration = 300;
 
 /** One campaign: the owner approves it, edits the template drafts, does each task and marks it done. */
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,11 +23,11 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await requireOrganization();
   const supabase = await createClient();
-  const { data: c } = await supabase.from("marketing_campaigns").select("id, title, goal, summary, status").eq("id", id).eq("organization_id", ws.organization.id).maybeSingle();
+  const { data: c } = await supabase.from("marketing_campaigns").select("id, title, goal, summary, status, brief").eq("id", id).eq("organization_id", ws.organization.id).maybeSingle();
   if (!c || c.status === "dismissed") notFound();
   const { data: tasks } = await supabase
     .from("campaign_tasks")
-    .select("id, position, kind, title, why, steps, deliverable, deliverable_edited, card_id, evidence_class, basis, status, note")
+    .select("id, position, kind, title, why, steps, deliverable, deliverable_edited, deliverable_model, deliverable_model_at, card_id, evidence_class, basis, status, note, channel, due_in_days, depends_on")
     .eq("campaign_id", id).order("position");
   const list = tasks ?? [];
   const cardIds = list.flatMap((t) => (t.card_id ? [t.card_id] : []));
@@ -35,6 +38,10 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const results = campaignResults(list, new Map((cards ?? []).map((x) => [x.id, x])));
   const isOwner = ws.organization.role === "owner";
   const approved = c.status === "approved" || c.status === "completed";
+  const brief = (c.brief ?? null) as { objective: string; audience: string | null; offer: string | null; core_message: string; channels: Channel[]; measurement: string[] } | null;
+  const byPos = new Map(list.map((t) => [t.position, t]));
+  const writable = list.some((t) => t.channel && t.status !== "done" && t.status !== "skipped");
+  const canWrite = FEATURES.drafts && getModelProvider() !== null && writable;
 
   return (
     <div className="stack">
@@ -44,6 +51,21 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         <h1 className="h1">{c.title}</h1>
         <p className="sub">{c.goal}</p>
       </div>
+
+      {brief ? (
+        <section className="card stack" aria-labelledby="camp-brief">
+          <h2 id="camp-brief" style={{ margin: 0 }}>The plan</h2>
+          <ul style={{ margin: 0 }}>
+            <li><strong>Aim:</strong> {brief.objective}</li>
+            <li><strong>Who it&apos;s for:</strong> {brief.audience ?? <span className="muted">not confirmed yet; add your customers in Business details</span>}</li>
+            <li><strong>Offer:</strong> {brief.offer ?? <span className="muted">none set; add one only if you mean it</span>}</li>
+            <li><strong>Message:</strong> {brief.core_message}</li>
+            <li><strong>Where:</strong> {brief.channels.map((ch) => CHANNEL_LABEL[ch] ?? ch).join(", ")}</li>
+            <li><strong>How we&apos;ll know:</strong> your own numbers before and after, in Results</li>
+          </ul>
+          {canWrite ? <WriteDraftsForm campaign={c.id} again={list.some((t) => t.deliverable_model)} /> : null}
+        </section>
+      ) : null}
 
       {c.status === "proposed" ? (
         <section className="card stack" aria-labelledby="camp-decide">
@@ -71,6 +93,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           const draft = t.deliverable_edited ?? t.deliverable;
           const steps = Array.isArray(t.steps) ? (t.steps as string[]) : [];
           const closed = t.status === "done" || t.status === "skipped";
+          const waitingOn = (t.depends_on ?? []).map((p) => byPos.get(p)).filter((d): d is NonNullable<typeof d> => Boolean(d) && d!.status !== "done" && d!.status !== "skipped");
           return (
             <li key={t.id} className="card stack">
               <div className="row between">
@@ -78,6 +101,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                 {closed ? <span className="pill green">{t.status === "done" ? "Done" : "Skipped"}</span> : t.status === "approved" ? <span className="pill">Ready to do</span> : <span className="pill yellow">Not approved yet</span>}
               </div>
               <p>{t.why}</p>
+              {t.channel || t.due_in_days !== null || waitingOn.length ? (
+                <p className="small">
+                  {t.channel ? <>{CHANNEL_LABEL[t.channel as Channel] ?? t.channel}. </> : null}
+                  {t.due_in_days !== null ? <>Start: {t.due_in_days === 0 ? "right away" : `about ${t.due_in_days} days after approval`}. </> : null}
+                  {waitingOn.length ? <strong>Do first: {waitingOn.map((d) => d.title).join(", ")}.</strong> : null}
+                </p>
+              ) : null}
               <p className="small muted">{isEvidenceClass(t.evidence_class) ? EVIDENCE_CLASS_LABEL[t.evidence_class] : t.evidence_class}{t.basis ? ` · ${t.basis}` : ""}</p>
               {steps.length ? <ol>{steps.map((s) => <li key={s}>{s}</li>)}</ol> : null}
               {t.card_id ? (
@@ -94,7 +124,15 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                   <div className="row"><button className="btn outline" type="submit">Save my edits</button><CopyButton text={draft} label="Copy" /></div>
                 </form>
               ) : null}
-              {approved && !closed ? (
+              {t.deliverable_model && !closed ? (
+                <form action={editTaskDraft} className="stack" data-clarity-mask="true">
+                  <input type="hidden" name="task" value={t.id} /><input type="hidden" name="campaign" value={c.id} />
+                  <label className="field" htmlFor={`m-${t.id}`}><span>Written for you from your business details. Check every word and fill in the [blanks]</span>
+                    <textarea id={`m-${t.id}`} name="text" className="input" rows={7} maxLength={4000} defaultValue={t.deliverable_model} /></label>
+                  <div className="row"><button className="btn outline" type="submit">Use this version</button><CopyButton text={t.deliverable_model} label="Copy" /></div>
+                </form>
+              ) : null}
+              {approved && !closed && !waitingOn.length ? (
                 <form action={markTask} className="row">
                   <input type="hidden" name="task" value={t.id} /><input type="hidden" name="campaign" value={c.id} />
                   <button className="btn" type="submit" name="status" value="done">I did this</button>

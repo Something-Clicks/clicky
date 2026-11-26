@@ -339,6 +339,7 @@ export type Database = {
         {
           id: string; organization_id: string; playbook: string; title: string; goal: string; summary: string; status: string; basis: Json;
           created_by: string | null; decided_by: string | null; decided_at: string | null; created_at: string;
+          brief: Json | null;
         },
         "organization_id" | "playbook" | "title" | "goal" | "summary"
       >;
@@ -347,6 +348,8 @@ export type Database = {
           id: string; campaign_id: string; organization_id: string; position: number; kind: string; title: string; why: string; steps: Json;
           deliverable: string | null; deliverable_edited: string | null; card_id: string | null; evidence_class: string; basis: string | null;
           status: string; done_at: string | null; done_by: string | null; note: string | null;
+          channel: string | null; due_in_days: number | null; depends_on: number[]; deliverable_model: string | null;
+          deliverable_model_by: Json | null; deliverable_model_at: string | null;
         },
         "campaign_id" | "organization_id" | "position" | "kind" | "title" | "why" | "evidence_class"
       >;
@@ -463,6 +466,8 @@ export type Database = {
       execute_authorized: { Args: { p_id: string }; Returns: string };
       cancel_execution: { Args: { p_id: string }; Returns: undefined };
       annotate_action_cards: { Args: { p_analysis: string; p_rows: Json }; Returns: number };
+      // ── campaign brief and model drafts (20261205120000) ──
+      save_task_model_draft: { Args: { p_task: string; p_text: string; p_provider: string; p_model: string }; Returns: undefined };
       admin_agent_review: { Args: { p_limit: number }; Returns: Json };
       review_business_fact: { Args: { p_fact: string; p_decision: string; p_value: string | null }; Returns: string };
       add_business_fact: { Args: { p_org: string; p_category: string; p_field: string; p_value: string }; Returns: string };

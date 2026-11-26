@@ -67,7 +67,9 @@ export async function ask(_prev: AskState, form: FormData): Promise<AskState> {
     }
     case "promotional_campaign": {
       if (!FEATURES.campaigns) return { error: "This isn't available yet." };
-      const out = await prepareCampaigns({}, new FormData());
+      const fd = new FormData();
+      fd.set("request", request);
+      const out = await prepareCampaigns({}, fd);
       return out.error ? out : { ...out, redirectTo: "/app/campaigns" };
     }
     case "marketing_plan": {

@@ -130,3 +130,29 @@ describe("smoke test payload", () => {
     for (const bad of [null, {}, { message: "" }, { message: 5 }, { message: "x".repeat(201) }]) expect(() => readSmokePayload(bad)).toThrow(/1 to 200/);
   });
 });
+
+describe("retries and schedulers", () => {
+  it("a retry closes the workflow record its crashed attempt left running, as failed with the reason", async () => {
+    const { closeStaleWorkflows } = await import("@/lib/server/agent/background");
+    const rpc = vi.fn(async () => ({ data: null, error: null }));
+    const rows = [{ id: "wf-old", steps: [{ step: "plan" }], analysis_id: "a1", status: "running" }];
+    const from = () => {
+      let r = [...rows];
+      const q = { select: () => q, eq: (k: string, v: unknown) => { r = r.filter((x) => (x as Row)[k] === v); return q; }, then: (res: (v: { data: Row[] }) => unknown) => Promise.resolve({ data: r }).then(res) };
+      return q;
+    };
+    expect(await closeStaleWorkflows({ rpc, from } as never, "a1")).toBe(1);
+    expect(rpc).toHaveBeenCalledWith("finish_marketing_workflow", expect.objectContaining({ p_workflow: "wf-old", p_status: "failed", p_steps: [{ step: "plan" }], p_error: expect.stringMatching(/retried/) }));
+    expect(await closeStaleWorkflows({ rpc, from } as never, "other")).toBe(0);
+  });
+
+  it("only one scheduler exists: Trigger.dev tasks are queued by the Vercel cron, never scheduled on their own", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const dir = "src/trigger";
+    for (const f of readdirSync(dir)) {
+      // A schedules.task here would run re-checks alongside the Vercel cron (vercel.json). Retire one before adding the other.
+      expect(readFileSync(`${dir}/${f}`, "utf8")).not.toMatch(/schedules\s*\.\s*task|\bcron\s*:/);
+    }
+    expect(readFileSync("vercel.json", "utf8")).toMatch(/\/api\/cron\/weekly-analysis/);
+  });
+});

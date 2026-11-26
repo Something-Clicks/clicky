@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 
-import { compareWebsites, prepareCampaigns } from "@/app/actions/campaigns";
+import { compareWebsites, prepareCampaigns, writeCampaignDrafts } from "@/app/actions/campaigns";
 import { FormMessage, SubmitButton } from "@/components/form";
 import type { FormState } from "@/lib/validation";
 
@@ -28,6 +28,19 @@ export function CampaignForm({ again }: { again: boolean }) {
     <form action={action} className="stack">
       <FormMessage state={state} />
       <div><SubmitButton pending="Preparing…">{again ? "Refresh the campaigns" : "Prepare my campaigns"}</SubmitButton></div>
+    </form>
+  );
+}
+
+/** Asks for a written draft of each page, email and post in a campaign. */
+export function WriteDraftsForm({ campaign, again }: { campaign: string; again: boolean }) {
+  const [state, action] = useActionState(writeCampaignDrafts, {} as FormState);
+  return (
+    <form action={action} className="stack">
+      <FormMessage state={state} />
+      <input type="hidden" name="campaign" value={campaign} />
+      <div><SubmitButton pending="Writing… this can take a few minutes">{again ? "Write them again" : "Write the drafts for me"}</SubmitButton></div>
+      <p className="small muted">Written from your confirmed business details. Check every word; nothing is sent or published.</p>
     </form>
   );
 }

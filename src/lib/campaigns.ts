@@ -10,6 +10,9 @@ import { compareSignals, SIGNAL_LABEL, type SiteSignals } from "@/lib/research";
 export type EvidenceClass = "verified" | "inferred" | "estimated" | "unknown";
 export type TaskKind = "fix_action" | "message" | "checklist" | "research";
 
+export type Channel = "landing_page" | "email" | "social" | "gbp" | "sms";
+export const CHANNEL_LABEL: Record<Channel, string> = { landing_page: "Page on your website", email: "Email", social: "Social post", gbp: "Google Business Profile post", sms: "Text message" };
+
 export interface CampaignTask {
   kind: TaskKind;
   title: string;
@@ -19,6 +22,23 @@ export interface CampaignTask {
   card_id?: string;
   evidence_class: EvidenceClass;
   basis?: string;
+  /** Where the draft is used; tasks with a channel can get a draft written for them (Content Creation). */
+  channel?: Channel;
+  /** Suggested start, days after the owner approves (a schedule, not a promise). */
+  due_in_days?: number;
+  /** Positions (1-based, earlier in the same campaign) that must be done first. */
+  depends_on?: number[];
+}
+
+/** §8.6: what the campaign is for, who it speaks to and how it is measured. Unknown parts stay null, never guessed. */
+export interface CampaignBrief {
+  objective: string;
+  audience: string | null;
+  offer: string | null;
+  core_message: string;
+  channels: Channel[];
+  /** Performance metrics (performance_metrics.metric) to compare before and after. */
+  measurement: string[];
 }
 
 export interface Campaign {
@@ -27,6 +47,7 @@ export interface Campaign {
   goal: string;
   summary: string;
   basis: Record<string, unknown>;
+  brief?: CampaignBrief;
   tasks: CampaignTask[];
 }
 
@@ -48,6 +69,10 @@ export interface CampaignInput {
   cards: CampaignCard[];
   own: SiteSignals | null;
   competitors: { host: string; signals: SiteSignals }[];
+  /** The confirmed audience, if the owner confirmed one. */
+  confirmedAudience?: string | null;
+  /** The service the owner asked to promote (must be one of confirmedServices); otherwise the first confirmed one. */
+  focusService?: string | null;
 }
 
 const IMPACT: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -173,8 +198,79 @@ function googleProfile(i: CampaignInput): Campaign | null {
   };
 }
 
+/**
+ * §9's example: promote one service the owner confirmed. Landing page first; the email, social and Google posts depend on it
+ * (nothing sends people to a page that isn't live); results are measured with figures the owner adds before and after.
+ * Templates use only confirmed facts; a draft can be written for each channel when a model is available.
+ */
+export function promoteService(i: CampaignInput): Campaign | null {
+  const service = (i.focusService && i.confirmedServices.includes(i.focusService) ? i.focusService : i.confirmedServices[0])?.trim();
+  if (!service) return null;
+  const name = i.businessName;
+  const area = i.serviceArea || "[the area you serve]";
+  const audience = i.confirmedAudience?.trim() || null;
+  const core = `${name} offers ${service}${i.serviceArea ? ` in ${i.serviceArea}` : ""}.`;
+  return {
+    playbook: "promote_service",
+    title: clip(`Promote ${service}`, 150),
+    goal: `Get more enquiries for ${service}`,
+    summary: `A page for ${service}, then an email, a social post and a Google post that point to it, and a before-and-after measure. Nothing is sent or published for you.`,
+    basis: { service, confirmed: true, competitors: i.competitors.length },
+    brief: {
+      objective: `More enquiries for ${service}`,
+      audience,
+      offer: null,
+      core_message: core,
+      channels: ["landing_page", "email", "social", "gbp"],
+      measurement: i.primaryGoal === "get_found" ? ["search_clicks", "website_visits", "form_leads"] : ["calls", "form_leads"],
+    },
+    tasks: [
+      {
+        kind: "checklist", title: "Note your numbers for the month before", channel: undefined, due_in_days: 0,
+        why: "Without a before figure, nobody can tell whether the promotion changed anything.",
+        steps: ["Open Results and add last month's calls and enquiries.", "Use your own records; we never fill in numbers."],
+        evidence_class: "verified",
+      },
+      {
+        kind: "message", title: `Publish a page about ${clip(service, 80)}`, channel: "landing_page", due_in_days: 0,
+        why: `People searching for ${service} should land on a page about exactly that, not your homepage.`,
+        steps: ["Edit the draft so it sounds like you and fill in the [blanks].", "Publish it on your website (we can't publish for you).", "Mark this done when it's live."],
+        deliverable: `${service} in ${area}\n\n${name} offers ${service} for ${audience ?? "[who this is for]"} in ${area}.\n\nWhat's included: [what the customer gets]\nHow it works: [the steps, from first call to finished job]\nPricing: [how you price it, or "Ask for a free quote"]\n\nCall [your phone number] or [your contact link] to get started.`,
+        evidence_class: "verified", basis: undefined,
+      },
+      {
+        kind: "message", title: "Send an email to past customers", channel: "email", due_in_days: 7, depends_on: [2],
+        why: "Past customers already trust you and are the quickest to respond.",
+        steps: ["Send only to people who agreed to hear from you.", "Link to the new page."],
+        deliverable: `Subject: ${service} from ${name}\n\nHi ${BLANK_NAME},\n\n${name} now offers ${service} in ${area}. [one sentence on why it helps]\n\nSee the details: [link to the new page]\n\nThanks,\n${name}`,
+        evidence_class: "verified",
+      },
+      {
+        kind: "message", title: "Post about it on social media", channel: "social", due_in_days: 7, depends_on: [2],
+        why: "A short post reaches people who follow you and gives them a link to share.",
+        steps: ["Add a real photo of your work if you have one.", "Link to the new page."],
+        deliverable: `${service} in ${area}: [one sentence on what makes yours worth choosing]. Details and how to book: [link to the new page]`,
+        evidence_class: "verified",
+      },
+      {
+        kind: "message", title: "Post on your Google Business Profile", channel: "gbp", due_in_days: 10, depends_on: [2],
+        why: "Google posts show on your Maps listing to people searching nearby.",
+        steps: ["Your profile isn't connected, so post it yourself.", "Use the “Learn more” button with the page link."],
+        deliverable: `Now offering ${service} in ${area}. [what the customer gets]. Learn more: [link to the new page]`,
+        evidence_class: "unknown", basis: "Google Business Profile isn't connected; we haven't seen yours.",
+      },
+      {
+        kind: "checklist", title: "Compare after a month", due_in_days: 37, depends_on: [1, 2],
+        why: "Compare the same numbers for the month after the page went live.",
+        steps: ["Add this month's calls and enquiries in Results.", "Review your results: we compare like with like and say what the numbers can't show."],
+        evidence_class: "verified",
+      },
+    ],
+  };
+}
+
 export function planCampaigns(i: CampaignInput): Campaign[] {
-  return [firstImpression(i), matchCompetitors(i), reviews(i), googleProfile(i)].filter((c): c is Campaign => c !== null);
+  return [firstImpression(i), matchCompetitors(i), reviews(i), googleProfile(i), promoteService(i)].filter((c): c is Campaign => c !== null);
 }
 
 export interface TaskProgress { status: string; card_id: string | null }

@@ -7,6 +7,7 @@ import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { parseSiteList, readSignals, type SiteSignals } from "@/lib/research";
 import { loadUnderstanding } from "@/lib/server/agent/context";
+import { writeCampaignDraftsFor } from "@/lib/server/agent/drafts-run";
 import { runCampaignPlanning, runCompetitorResearch } from "@/lib/server/agent/orchestrator";
 import { cardStage } from "@/lib/stages";
 import { createClient } from "@/lib/supabase/server";
@@ -42,7 +43,7 @@ export async function removeComparison(form: FormData): Promise<void> {
 }
 
 /** Proposes campaigns from what is known and observed (fixed playbooks). Nothing is applied. */
-export async function prepareCampaigns(_prev: FormState, _form: FormData): Promise<FormState> {
+export async function prepareCampaigns(_prev: FormState, form: FormData): Promise<FormState> {
   if (!FEATURES.campaigns) return { error: "Campaigns aren't available yet." };
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };
@@ -63,11 +64,15 @@ export async function prepareCampaigns(_prev: FormState, _form: FormData): Promi
   const confirmedArea = facts.find((f) => f.field === "service_area" && f.status === "confirmed" && f.value)?.value ?? "";
   const serviceArea = b.serviceArea || confirmedArea;
   const confirmedServices = facts.filter((f) => f.field === "service" && f.status === "confirmed" && f.value).map((f) => f.value as string);
+  const confirmedAudience = facts.find((f) => f.field === "audience" && f.status === "confirmed" && f.value)?.value ?? null;
+  // A service named in the request ("promote our drain cleaning") is promoted if the owner confirmed it; otherwise the first one.
+  const asked = String(form.get("request") ?? "").toLowerCase();
+  const focusService = confirmedServices.find((s) => asked && asked.includes(s.toLowerCase())) ?? null;
   const done = (scans ?? []).filter((s) => s.status === "done").map((s) => ({ host: s.host, own: s.is_self, signals: readSignals(s.signals) })).filter((s): s is { host: string; own: boolean; signals: SiteSignals } => s.signals !== null);
   const own = done.find((s) => s.own)?.signals ?? null;
   const out = await runCampaignPlanning(supabase, {
     orgId,
-    campaign: { businessName: b.businessName, serviceArea, primaryGoal, confirmedServices, cards, own, competitors: done.filter((s) => !s.own).map(({ host, signals }) => ({ host, signals })) },
+    campaign: { businessName: b.businessName, serviceArea, primaryGoal, confirmedServices, confirmedAudience, focusService, cards, own, competitors: done.filter((s) => !s.own).map(({ host, signals }) => ({ host, signals })) },
   });
   revalidatePath("/app/campaigns");
   if (out.status !== "prepared") return { error: out.reason ?? "We couldn't prepare campaigns this time." };
@@ -113,7 +118,18 @@ export async function markTask(form: FormData): Promise<void> {
   if (!ws.organization || !UUID.test(id) || !["done", "skipped", "approved"].includes(status)) return;
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_task_status", { p_task: id, p_status: status, p_note: note as string });
-  if (error && (error as { hint?: string }).hint !== "not_approved") log.error("campaign.mark_failed", { id, error: error.message });
+  if (error && !["not_approved", "dependency_open"].includes((error as { hint?: string }).hint ?? "")) log.error("campaign.mark_failed", { id, error: error.message });
   if (UUID.test(campaign)) back(campaign);
   revalidatePath("/app/campaigns");
+}
+
+/** Writes a draft for each page, email and post in a campaign (Content Creation, metered). Nothing is sent or published. */
+export async function writeCampaignDrafts(_prev: FormState, form: FormData): Promise<FormState> {
+  if (!FEATURES.campaigns || !FEATURES.drafts) return { error: "This isn't available yet." };
+  const ws = await getWorkspace();
+  const id = String(form.get("campaign") ?? "");
+  if (!ws.organization || !ws.business || !UUID.test(id)) return { error: "That campaign could not be found." };
+  const out = await writeCampaignDraftsFor(ws.organization.id, ws.business, id, Date.now() + 280_000);
+  back(id);
+  return out;
 }
