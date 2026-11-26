@@ -177,3 +177,6 @@ next-env.d.ts
 # End-to-end suite: throwaway local sessions
 /e2e/.auth/
 /blob-report/
+
+# Trigger.dev local build output
+.trigger

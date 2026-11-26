@@ -147,6 +147,28 @@ Server-side only; RLS on every table; tenant-isolation tests for every new table
 review of business facts and approvals and plans; website text and owner notes treated as data; audit log; per-business
 and global model spend caps (see Cost control). Not built: alerting on spend, a customer-visible usage screen.
 
+## Durable background jobs (Trigger.dev, Nov 27 2026)
+**Built; registration with Trigger.dev not yet verified (needs the owner's login).** `trigger.config.ts` (project
+`proj_zkgvxkwwahbxpdtqspfe`, `dirs: ["./src/trigger"]`, `maxDuration` 600 s, default retries 3 with backoff, `react-server`
+build condition so `server-only` imports work in the worker). Tasks in `src/trigger/`:
+- `smoke-test`: validates `{ message }` and echoes it; touches nothing else.
+- `website-review`: runs a check a customer (or onboarding) already started, through `runWebsiteReview`; queue
+  `marketing-agent` (4 at once); 3 attempts; a retry after the check finished does nothing; `onFailure` closes a still-running
+  check as failed. The workflow record gets a `run_in_background` step with the attempt number.
+- `weekly-recheck`: one business's weekly re-check (idempotency key per business per day); a retry continues the analysis its
+  first attempt started instead of starting (and counting) another; `onFailure` closes it.
+Where work runs is decided only in `src/lib/server/agent/background.ts`: on when `BACKGROUND_JOBS=trigger` and
+`TRIGGER_SECRET_KEY` are set, never in Production. When off, or if queueing fails, the Check button and onboarding run
+in-process with `after()` exactly as before, and the Vercel cron runs 2 businesses inline as before; when on, the cron queues
+up to 25 due businesses. Tasks are thin wrappers: every decision stays in the orchestrator. The worker uses the same
+service-role client as the cron worker (`createWorkerClient`), never a customer session, so it needs `NEXT_PUBLIC_SUPABASE_URL`,
+`SUPABASE_SECRET_KEY`, `MODEL_USAGE_KEY` and the same `FEATURE_*` values in its environment.
+**Verified:** unit tests for the switch, idempotency keys, inline fallback, retry and failure rules (`tests/unit/background.test.ts`);
+the worker bundle builds with the config's condition and all three tasks load (esbuild + Node, `react-server`). Found and fixed:
+`src/lib/server/site.ts` imported `next/headers` at load time, which crashes a non-Next worker; it is now imported only where
+request headers are read. **Not verified:** `trigger.dev dev` / dashboard registration, and a run on Trigger.dev.
+**Not moved to background yet:** plans, results reviews and research (they finish within a request today).
+
 ## Next, in order
 1. Turn `FEATURE_AGENT` on for Preview (owner decision) and run the Ask → Research → Execute → Results loop on 3–5 permissioned
    real small-business sites with test accounts; record defects.

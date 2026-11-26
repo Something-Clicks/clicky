@@ -5,6 +5,12 @@ Built from: `claude/fervent-knuth-0fo94q` (the app, 21 commits; fast-forward, no
 Vercel production branch: `main` (confirmed in Vercel project settings). Nothing here was ever pushed to `main` or the app branch.
 Commits: `c6da947` foundation · `1cef428` homepage, consent, legal · `489fa38` migration header · `ed7a445` Stripe TEST ids · later commits are listed in `git log`.
 
+## Nov 27 2026: Trigger.dev durable background jobs (branch `claude/awesome-mendel-qreli5`)
+- Added `trigger.config.ts`, `src/trigger/` (`smoke-test`, `website-review`, `weekly-recheck`), `@trigger.dev/sdk`,
+  `@trigger.dev/build` and the `trigger.dev` CLI (dev). Switch: `BACKGROUND_JOBS=trigger` + `TRIGGER_SECRET_KEY` (never Production).
+- **Waiting for the owner:** log in to Trigger.dev and put the development `TRIGGER_SECRET_KEY` in `.env.local`, then
+  `pnpm exec trigger.dev dev` and confirm the three tasks appear in the dashboard; trigger `smoke-test` with `{"message":"hello"}`.
+
 ## Nov 26 2026: memory, execution, all workflows (branch `claude/awesome-mendel-qreli5`)
 - Migration **20261204120000** (agent memory and execution) + rollback. **Applied only to local throwaway databases.** Not on
   clicky-dev or Production: applying it to clicky-dev is the next step (owner approval per the database rules above).

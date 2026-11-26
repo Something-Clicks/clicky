@@ -59,6 +59,12 @@ export interface StepRecord {
   at: string;
 }
 
+/** A durable background run (Trigger.dev) that is executing this workflow; recorded so a retry is traceable. */
+export interface BackgroundRun {
+  runId: string;
+  attempt: number;
+}
+
 export interface BusinessInput extends BusinessContext {
   website: string;
 }
@@ -134,7 +140,7 @@ export const WORKFLOW_DEADLINE_MS = 105_000;
 
 export async function runWebsiteReview(
   db: WorkflowDb,
-  input: { orgId: string; analysisId: string; business: BusinessInput; request?: string | null },
+  input: { orgId: string; analysisId: string; business: BusinessInput; request?: string | null; background?: BackgroundRun | null },
   deps: AnalysisDeps = {},
 ): Promise<WorkflowOutcome> {
   // One deadline for the whole workflow (the request's limit is 120 s): the model steps get what is left of it.
@@ -145,6 +151,9 @@ export async function runWebsiteReview(
   const workflowId = await openRecord(db, input.orgId, "website_review", input.request ?? null, plan.capabilities, input.analysisId);
   const { businessName, serviceArea, primaryGoal, website } = input.business;
   const profile = { businessName, serviceArea, primaryGoal, website };
+  if (input.background) {
+    step({ step: "run_in_background", capability: null, status: "done", detail: `Running as a durable background job (attempt ${input.background.attempt}).` });
+  }
 
   // 1. Understand the business (Business Intelligence, from the owner's profile).
   const before = expectDone(await MODULES.business_intelligence.run({ profile }), "business_intelligence");

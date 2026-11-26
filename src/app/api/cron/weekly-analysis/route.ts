@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { log } from "@/lib/log";
+import { backgroundJobsEnabled, queueWeeklyRechecks } from "@/lib/server/agent/background";
 import { runWebsiteReview } from "@/lib/server/agent/orchestrator";
 import { createWorkerClient } from "@/lib/supabase/admin";
 
@@ -35,10 +36,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Worker not configured" }, { status: 503 });
   }
 
-  const { data: due, error } = await db.rpc("worker_due_organizations", { p_limit: 2 });
+  // With durable background jobs, every due business is queued (each runs, retries and fails on its own); otherwise at
+  // most 2 run inline here, as before.
+  const background = backgroundJobsEnabled();
+  const { data: due, error } = await db.rpc("worker_due_organizations", { p_limit: background ? 25 : 2 });
   if (error) {
     log.error("cron.weekly_analysis.due_failed", { error: error.message });
     return NextResponse.json({ error: "Could not list due businesses" }, { status: 500 });
+  }
+
+  if (background) {
+    const day = new Date().toISOString().slice(0, 10);
+    const out = await queueWeeklyRechecks((due ?? []).map((o) => ({
+      organizationId: o.organization_id, day,
+      business: { businessName: o.business_name, serviceArea: o.service_area, primaryGoal: o.primary_goal, website: o.website },
+    })));
+    if (out) {
+      log.info("cron.weekly_analysis.queued", { due: due?.length ?? 0, ...out });
+      return NextResponse.json({ queued: out.queued, failed: out.failed });
+    }
   }
 
   const results: { organizationId: string; started: boolean }[] = [];

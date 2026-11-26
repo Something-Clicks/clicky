@@ -3,8 +3,6 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
-import { headers } from "next/headers";
-
 import { log } from "@/lib/log";
 import type { Database, Json } from "@/lib/supabase/types";
 
@@ -31,6 +29,8 @@ export const newToken = () => randomBytes(32).toString("base64url");
 
 /** Keyed hash of the visitor's network address: lets us rate limit without storing the address. */
 export async function visitorHash(): Promise<string> {
+  // Imported here, not at the top: this file is also loaded by the background worker (via track()), which has no request.
+  const { headers } = await import("next/headers");
   const h = await headers();
   const ip = (h.get("x-forwarded-for") ?? "").split(",")[0]!.trim() || h.get("x-real-ip") || "unknown";
   return createHash("sha256").update(`${siteKey()}:${ip}`).digest("hex");

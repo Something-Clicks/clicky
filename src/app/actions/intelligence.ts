@@ -5,6 +5,7 @@ import { after } from "next/server";
 
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
+import { queueWebsiteReview } from "@/lib/server/agent/background";
 import { runWebsiteReview } from "@/lib/server/agent/orchestrator";
 import { track } from "@/lib/server/site";
 import { createClient } from "@/lib/supabase/server";
@@ -44,7 +45,10 @@ export async function startAnalysis(_prev: FormState, _form?: FormData): Promise
   if (free) await track("free_use_consumed", { kind: "analysis" });
   // The visitor gets an answer right away; the analysis keeps running on the server.
   const orgId = ws.organization.id;
-  after(() => runWebsiteReview(supabase, { orgId, analysisId, business: { ...biz, website } }, { notifyOrg: orgId }));
+  // Durable background job when switched on (never in Production); otherwise in-process after the response, as before.
+  const business = { ...biz, website };
+  await queueWebsiteReview({ organizationId: orgId, analysisId, business, request: null, notify: true }, () =>
+    after(() => runWebsiteReview(supabase, { orgId, analysisId, business }, { notifyOrg: orgId })));
   revalidatePath("/app", "layout");
   return { ok: true, message: "Checking your website. This usually takes about a minute." };
 }
