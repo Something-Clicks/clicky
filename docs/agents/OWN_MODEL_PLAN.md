@@ -114,7 +114,9 @@ Break-even: a fixed ~$1,000–2,500/month GPU is cheaper than hosted per-token p
 4. Content Creation (needs a model), Market Research (needs a data source we hold or license), Campaign Planning, authorized Execution.
 5. Production migrations, variables, attorney review, final review, owner approvals (unchanged; none done).
 
-## 8. Decisions needed from you (no deadline pressure; development continues without them)
+## 8. Decisions (ANSWERED Nov 26 2026)
+Owner answers: (1) capped evaluation approved, ≤ $500, ≤ 3 models, temporary usage-billed GPUs, no always-on server; (2) Apache 2.0 / MIT only for production; (3) no training on customer data at launch; V1 (the $49 report, no AI claims) first, V2 the destination. The evaluation is specified in `MODEL_EVALUATION_PLAN.md` and spending is tracked in `EVALUATION_SPEND.md`. The original questions are kept below for the record.
+
 1. Approve phase 1 and the rented-GPU budget, or tell me to stay deterministic-only for now.
 2. Approve the candidate shortlist rules (section 4.2) or add licence requirements.
 3. Approve a consent and terms approach before any customer data is used for adaptation (phase 4).
