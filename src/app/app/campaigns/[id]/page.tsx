@@ -40,6 +40,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     <div className="stack">
       <div>
         <p className="small"><Link className="link" href="/app/campaigns">← Campaigns</Link></p>
+        <div className="eyebrow">Campaign</div>
         <h1 className="h1">{c.title}</h1>
         <p className="sub">{c.goal}</p>
       </div>
@@ -59,7 +60,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       ) : (
         <section className="card stack" aria-labelledby="camp-results">
           <h2 id="camp-results" style={{ margin: 0 }}>How it&apos;s going</h2>
-          <p>{results.done} of {results.total} tasks done{results.skipped ? `, ${results.skipped} skipped` : ""}.</p>
+          <p>{results.done} of {results.total} {results.total === 1 ? "task" : "tasks"} done{results.skipped ? `, ${results.skipped} skipped` : ""}.</p>
           {results.open > 0 ? <p className="small">Next: {list.find((t) => t.status === "approved")?.title ?? "finish the remaining tasks"}.</p> : <p className="small">All done. Check your website again to see what changed.</p>}
           {results.fixesLinked ? <p className="small muted">Website fixes: {results.verifiedFixed} confirmed fixed by a website check, {results.stillFound} still found, {results.awaitingCheck} waiting for the next check.</p> : null}
         </section>

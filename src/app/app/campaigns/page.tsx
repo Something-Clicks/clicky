@@ -28,23 +28,28 @@ export default async function CampaignsPage() {
   return (
     <div className="stack">
       <div>
+        <div className="eyebrow">Your campaigns</div>
         <h1 className="h1">Campaigns</h1>
         <p className="sub">Short task lists to carry out, each with the reason behind it. You approve every one, and you do the work.</p>
       </div>
       <section className="card stack"><CampaignForm again={list.length > 0} />
         <p className="small muted">Built with fixed playbooks from your website check, the details you confirmed, and the sites you compared. A playbook only appears when we found something that calls for it.</p></section>
-      {list.map((c) => {
-        const t = (taskRows ?? []).filter((x) => x.campaign_id === c.id);
-        const done = t.filter((x) => x.status === "done" || x.status === "skipped").length;
-        const [label, tone] = STATUS[c.status] ?? [c.status, ""];
-        return (
-          <section key={c.id} className="card stack">
-            <div className="row between"><h2 style={{ margin: 0 }}><Link className="link" href={`/app/campaigns/${c.id}`}>{c.title}</Link></h2><span className={`pill ${tone}`}>{label}</span></div>
-            <p>{c.summary}</p>
-            <p className="small muted">{done} of {t.length} tasks done</p>
-          </section>
-        );
-      })}
+      <ul className="rows">
+        {list.map((c) => {
+          const t = (taskRows ?? []).filter((x) => x.campaign_id === c.id);
+          const done = t.filter((x) => x.status === "done" || x.status === "skipped").length;
+          const [label, tone] = STATUS[c.status] ?? [c.status, ""];
+          return (
+            <li key={c.id}>
+              <Link className="row-card" href={`/app/campaigns/${c.id}`} style={{ borderLeftColor: c.status === "proposed" ? "var(--yellow)" : "var(--mint)" }}>
+                <div className="between"><h2>{c.title}</h2><span className={`pill ${tone}`}>{label}</span></div>
+                <p>{c.summary}</p>
+                <p className="small muted" style={{ margin: 0 }}>{done} of {t.length} {t.length === 1 ? "task" : "tasks"} done</p>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
       {!list.length ? (
         <p className="muted">Nothing here yet. We build campaigns from your <Link className="link" href="/app">website check</Link>, and from what you <Link className="link" href="/app/research">compare it with</Link>. Press the button above once you have a check.</p>
       ) : null}

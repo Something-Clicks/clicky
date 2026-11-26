@@ -48,6 +48,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     <div className="stack" data-clarity-mask="true">
       <AutoRefresh active={confirming} everyMs={3000} />
       {checkout === "success" && ent.plan ? <TrackEvent name="subscription_completed" id={ent.plan} params={{ plan: ent.plan }} /> : null}
+      <div className="eyebrow">Plan and payments</div>
       <h1 className="h1">Plan and payments</h1>
       {confirming ? (
         <p className="notice" role="status">

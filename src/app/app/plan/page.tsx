@@ -59,6 +59,7 @@ export default async function PlanPage() {
   return (
     <div className="stack">
       <div>
+        <div className="eyebrow">What to do first</div>
         <h1 className="h1">Your plan</h1>
         <p className="sub">What to do first for {ws.business?.businessName || "your business"}, and why. Nothing happens until you approve it.</p>
       </div>

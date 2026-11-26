@@ -31,6 +31,7 @@ export default async function ResearchPage() {
   return (
     <div className="stack">
       <div>
+        <div className="eyebrow">Market research</div>
         <h1 className="h1">Compare</h1>
         <p className="sub">See what other websites show on their homepage that yours doesn&apos;t. We only read public pages.</p>
       </div>
@@ -47,8 +48,8 @@ export default async function ResearchPage() {
                 {SIGNAL_KEYS.map((k) => (
                   <tr key={k}>
                     <th scope="row">{SIGNAL_LABEL[k].shows[0]!.toUpperCase() + SIGNAL_LABEL[k].shows.slice(1)}</th>
-                    <td>{own?.[k] ? "Yes" : "No"}</td>
-                    {read.map((r) => <td key={r.host}>{r.signals[k] ? "Yes" : "No"}</td>)}
+                    <td className={own?.[k] ? "yes" : "no"}>{own?.[k] ? "Yes" : "No"}</td>
+                    {read.map((r) => <td key={r.host} className={r.signals[k] ? "yes" : "no"}>{r.signals[k] ? "Yes" : "No"}</td>)}
                   </tr>
                 ))}
               </tbody>

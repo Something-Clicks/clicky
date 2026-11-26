@@ -38,6 +38,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
           <span className="pill">Step 3 of 3</span>
         </div>
       ) : null}
+      <div className="eyebrow">Marketing analysis</div>
       <h1 className="h1">Website check</h1>
       <p className="sub">
         {complete?.completed_at

@@ -27,6 +27,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
+      <div className="eyebrow">Your priorities</div>
       <h1 className="h1">To do</h1>
       <p className="sub">Most important first. Each one shows the evidence.</p>
       <nav className="steps" aria-label="Filter actions" style={{ marginTop: 0 }}>

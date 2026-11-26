@@ -52,6 +52,7 @@ export default async function ApprovalsPage() {
   return (
     <>
       <AutoRefresh active={(preparing ?? 0) > 0} />
+      <div className="eyebrow">Your approvals</div>
       <h1 className="h1">Drafts</h1>
       <p className="sub">Review, approve, then copy or download. We never publish anything for you.</p>
       {preparing ? (

@@ -29,6 +29,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
           </div>
         </div>
       ) : null}
+      <div className="eyebrow">Your data sources</div>
       <h1 className="h1">Connections</h1>
       <p className="sub">
         A source shows as connected only after you authorize it. You can disconnect at any time, and we explain what

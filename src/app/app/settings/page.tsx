@@ -22,6 +22,7 @@ export default async function SettingsPage() {
   ]);
   return (
     <>
+      <div className="eyebrow">Your account</div>
       <h1 className="h1">Account</h1>
       <div className="stack" style={{ marginBottom: 16 }}>
         <div className="row">

@@ -63,6 +63,7 @@ export default async function BusinessPage() {
   return (
     <div className="stack">
       <div>
+        <div className="eyebrow">What we know</div>
         <h1 className="h1">Business details</h1>
         <p className="sub">
           What we know about {profile.businessName || "your business"}. We use this to make every suggestion fit your business.

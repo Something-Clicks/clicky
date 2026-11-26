@@ -74,6 +74,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </p>
       ) : null}
       <div>
+        <div className="eyebrow">Your workspace</div>
         <h1 className="h1">
           <Greeting />
         </h1>
@@ -111,6 +112,23 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           ) : null}
         </div>
       </div>
+
+      {lastComplete && !running ? (
+        <div className="stats" aria-label="At a glance">
+          <div className="stat">
+            <div className="metric">{open.length}</div>
+            <div className="metric-label">{open.length === 1 ? "Recommendation to review" : "Recommendations to review"}</div>
+          </div>
+          <div className="stat">
+            <div className="metric">{campaignsToReview + (FEATURES.drafts ? approvalsWaiting : 0)}</div>
+            <div className="metric-label">Waiting for your approval</div>
+          </div>
+          <div className="stat">
+            <div className="metric">{relativeDay(lastComplete.completed_at)}</div>
+            <div className="metric-label">Last website check</div>
+          </div>
+        </div>
+      ) : null}
 
       {failedCheck && !running ? (
         <p className="notice error" role="alert">

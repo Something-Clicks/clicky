@@ -76,6 +76,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           {card.impact_priority === "high" ? "High" : card.impact_priority === "low" ? "Low" : "Medium"} impact
         </span>
       </div>
+      <div className="eyebrow">Recommendation</div>
       <h1 className="h1">{card.title}</h1>
       <p className="sub">{card.explanation}</p>
       <div className="two">

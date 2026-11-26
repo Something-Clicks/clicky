@@ -11,7 +11,7 @@ test.describe("campaign creation and owner approval", () => {
     await expect(page.getByText(/Nothing here yet/)).toBeVisible();
     await page.getByRole("button", { name: "Prepare my campaigns" }).click();
     await expect(page.getByText(/Prepared \d+ campaigns? for you to review/)).toBeVisible({ timeout: 60_000 });
-    for (const l of await page.locator("main a[href^='/app/campaigns/']").all()) urls[(await l.innerText()).trim()] = (await l.getAttribute("href"))!;
+    for (const l of await page.locator("main a.row-card").all()) urls[(await l.getByRole("heading").innerText()).trim()] = (await l.getAttribute("href"))!;
     expect(Object.keys(urls)).toEqual(expect.arrayContaining(["Fix what visitors notice first", "Ask happy customers for reviews"]));
     await expect(page.locator("main")).not.toContainText(INTERNALS);
     await expect(page.locator("main")).not.toContainText(/\bAI\b|artificial|automatically (publish|send)/i);
@@ -95,14 +95,14 @@ test.describe("campaign creation and owner approval", () => {
     await page.goto("/app/campaigns");
     await page.getByRole("button", { name: "Refresh the campaigns" }).click();
     await expect(page.getByText(/Prepared \d+ campaigns?/)).toBeVisible({ timeout: 60_000 });
-    const first = page.locator("main a[href^='/app/campaigns/']", { hasText: /./ }).first();
-    const title = (await first.innerText()).trim();
-    await first.click();
+    const rows = page.locator("main a.row-card");
+    const before = await rows.count();
+    await rows.first().click();
     const dismiss = page.getByRole("button", { name: "Not for us" });
     if (await dismiss.count()) {
       await dismiss.click();
       await page.goto("/app/campaigns");
-      await expect(page.locator("main a[href^='/app/campaigns/']", { hasText: title })).toHaveCount(0);
+      await expect(page.locator("main a.row-card")).toHaveCount(before - 1);
     }
   });
 });

@@ -24,6 +24,7 @@ export default async function ActivityPage() {
 
   return (
     <>
+      <div className="eyebrow">A clear record</div>
       <h1 className="h1">History</h1>
       <p className="sub">Checks, drafts, approvals and finished work.</p>
       {error ? (

@@ -24,6 +24,7 @@ export default async function MembersPage() {
 
   return (
     <>
+      <div className="eyebrow">Your team</div>
       <h1 className="h1">Members</h1>
       <p className="sub">Invite people and choose their organization role.</p>
       <div className="card">
