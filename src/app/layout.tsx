@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en-US">
       <body>
         {children}
-        <ConsentBanner />
+        <ConsentBanner clarityId={process.env.CLARITY_ID?.trim() ?? ""} />
       </body>
     </html>
   );

@@ -177,7 +177,7 @@ Branch-scoped Preview variables for this branch point at clicky-dev and Stripe T
 ## Compare and Campaigns (local stack, no model, nothing outside this machine)
 1. `tests/e2e/stack/local-up.sh` (throwaway Postgres `sc_e2e`, every migration, local sign-in and API; never clicky-dev or Production).
 2. Build with the `NEXT_PUBLIC_*` values it prints; start `FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 NODE_USE_ENV_PROXY=1 pnpm exec next start -p 3100`, and a second server on 3101 with `VERCEL_ENV=production` plus the same flags.
-3. `E2E_CAMPAIGNS=1 E2E_PROD_BASE=http://localhost:3101 E2E_DB=postgres://postgres:postgres@localhost:5432/sc_e2e pnpm exec playwright test tests/e2e/campaigns.spec.ts --project=desktop-chromium` (and `--project=iphone-chromium`). It reads real public sites (nodejs.org as the business; pypi.org and huggingface.co compared), so it needs outbound access to them.
+3. `E2E_CAMPAIGNS=1 E2E_PROD_BASE=http://localhost:3101 E2E_DB=postgres://postgres:postgres@localhost:5432/sc_e2e pnpm exec playwright test e2e/specs/ (pnpm test:e2e:local) --project=desktop-chromium` (and `--project=iphone-chromium`). It reads real public sites (nodejs.org as the business; pypi.org and huggingface.co compared), so it needs outbound access to them.
 
 ## Journey tests (clicky-dev + Stripe TEST)
 1. clicky-dev has all migrations. Seed users: SQL editor, `set app.allow_e2e_seed = 'on';` then run `tests/e2e/dev-seed.sql`. Reset between runs: same guard, `tests/e2e/dev-reset.sql`. The 12 e2e accounts are **disabled** after each session (known throwaway password, one is an admin): re-enable with `update auth.users set banned_until = null where email like '%@e2e.test';` and disable again afterwards. Keep the GitHub repository private.
@@ -200,7 +200,7 @@ Do these in order. Stop if any check fails.
 - Store the server-key hash in production (INTEGRATIONS S2) with a **new** production `SITE_SERVER_KEY` (not the dev one).
 
 **2. Add Production variables** (Vercel → Settings → Environment Variables, Production only; names only here)
-`SITE_SERVER_KEY` (new) · `STRIPE_SECRET_KEY` (test key first) · `SUPABASE_SECRET_KEY` · `PAGESPEED_API_KEY` · `EMAIL_FROM` (+ optional `EMAIL_REPLY_TO`) · `NEXT_PUBLIC_GA_MEASUREMENT_ID` · `NEXT_PUBLIC_CLARITY_PROJECT_ID`. Already set: `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `BILLING_WEBHOOK_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, `STRIPE_WEBHOOK_SECRET`. **Do not** set `FREE_PREVIEW_ENABLED` or `STRIPE_ALLOW_LIVE` yet.
+`SITE_SERVER_KEY` (new) · `STRIPE_SECRET_KEY` (test key first) · `SUPABASE_SECRET_KEY` · `PAGESPEED_API_KEY` · `EMAIL_FROM` (+ optional `EMAIL_REPLY_TO`) · `NEXT_PUBLIC_GA_MEASUREMENT_ID` · `CLARITY_ID`. Already set: `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `BILLING_WEBHOOK_KEY`, `CRON_SECRET`, `RESEND_API_KEY`, `STRIPE_WEBHOOK_SECRET`. **Do not** set `FREE_PREVIEW_ENABLED` or `STRIPE_ALLOW_LIVE` yet.
 Production Supabase dashboard: URL configuration, email templates, Resend SMTP, leaked-password protection, Pro plan (INTEGRATIONS S3–S6, S8). Resend domain DNS verified.
 
 **3. Merge and deploy**

@@ -36,7 +36,7 @@ Set in **Vercel → Project `something-clicks` → Settings → Environment Vari
 | `STRIPE_ALLOW_LIVE` | Must be `true` for live keys/events to be accepted | server | — | Production, only after go-live approval | LIVE only | Without it, live keys are refused |
 | `BILLING_WEBHOOK_KEY` | Authorizes the webhook's `billing_*` database functions | **secret** | already set (hash in Supabase) | Production | — | Paid test checkout grants access |
 | `NEXT_PUBLIC_GA_MEASUREMENT_ID` | **New.** Google Analytics 4 (loads only after consent) | public | GA4 → Admin → Data streams → Web → Measurement ID (`G-…`) | Production | — | Accept the banner → GA4 Realtime shows you |
-| `NEXT_PUBLIC_CLARITY_PROJECT_ID` | **New.** Microsoft Clarity (loads only after consent) | public | clarity.microsoft.com → project → Settings → Overview → Project ID | Production | — | Accept the banner → Clarity live view |
+| `CLARITY_ID` | **New.** Microsoft Clarity (official `@microsoft/clarity` package; loads only after consent) | server (passed to the client by the root layout; set at build) | clarity.microsoft.com → project → Settings → Overview → Project ID | Production | — | Accept the banner → Clarity live view |
 
 Product and price ids are **not** environment variables: they live in `src/config/pricing.ts`, per mode.
 
@@ -206,7 +206,7 @@ The app sends page views without query strings and only after consent.
 
 ## Microsoft Clarity
 Create a project for `somethingclicks.com` → Settings → Masking → **Strict** → copy the Project ID →
-`NEXT_PUBLIC_CLARITY_PROJECT_ID`. The app also masks forms, results, drafts and the whole workspace.
+`CLARITY_ID`. The app also masks forms, results, drafts and the whole workspace.
 
 ## Vercel
 - **Plan:** commercial use requires **Pro** (Hobby is personal, non-commercial only).
@@ -224,7 +224,7 @@ Privacy Policy is published.
 
 
 ## Analytics events (GA4, Clarity, Supabase)
-IDs come only from `NEXT_PUBLIC_GA_MEASUREMENT_ID` and `NEXT_PUBLIC_CLARITY_PROJECT_ID` (build-time; unset = nothing loads, no banner). One `ConsentBanner` lives in the root layout. GA4/Clarity events fire only after "Yes" (events raised earlier are held in memory and dropped on "No"). `TrackEvent` fires once per browser session per name; page views carry the path only. Supabase `funnel_events` counts are server-side (or `/api/track` for four browser-side steps) and hold no personal data.
+IDs come only from `NEXT_PUBLIC_GA_MEASUREMENT_ID` and `CLARITY_ID` (build-time; unset = nothing loads, no banner). One `ConsentBanner` lives in the root layout. GA4/Clarity events fire only after "Yes" (events raised earlier are held in memory and dropped on "No"). `TrackEvent` fires once per browser session per name; page views carry the path only. Supabase `funnel_events` counts are server-side (or `/api/track` for four browser-side steps) and hold no personal data.
 
 | Step | GA4 / Clarity (after consent) | Supabase count |
 |---|---|---|

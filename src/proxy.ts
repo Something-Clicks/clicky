@@ -10,7 +10,7 @@ function contentSecurityPolicy(nonce: string): string {
   const ga = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
     ? " https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com"
     : "";
-  const clarity = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID ? " https://*.clarity.ms https://c.bing.com" : "";
+  const clarity = process.env.CLARITY_ID?.trim() ? " https://*.clarity.ms https://c.bing.com" : "";
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,

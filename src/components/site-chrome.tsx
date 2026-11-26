@@ -31,7 +31,7 @@ export function SiteChrome({ signedIn, children }: { signedIn: boolean; children
           <Link href="/faq">FAQ</Link>
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>
-          <ConsentSettingsButton />
+          <ConsentSettingsButton enabled={Boolean(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || process.env.CLARITY_ID?.trim())} />
         </nav>
       </footer>
     </div>

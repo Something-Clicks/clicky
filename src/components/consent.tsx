@@ -1,5 +1,6 @@
 "use client";
 
+import Clarity from "@microsoft/clarity";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -7,15 +8,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * Analytics consent. Nothing loads until the visitor chooses Yes:
  *  - Google Analytics 4 (NEXT_PUBLIC_GA_MEASUREMENT_ID): page views without query strings,
  *    no Google signals, no ad personalization.
- *  - Microsoft Clarity (NEXT_PUBLIC_CLARITY_PROJECT_ID): heatmaps and recordings; elements
- *    marked data-clarity-mask (forms, results, drafts, the whole workspace) are masked.
+ *  - Microsoft Clarity (the server variable CLARITY_ID, passed in by the root layout; official
+ *    @microsoft/clarity package): heatmaps and recordings. Initialized once, only after Yes, with
+ *    ad storage denied. No identify, tags or custom ids are ever set, so no name, email or business
+ *    detail is sent; elements marked data-clarity-mask (forms, results, drafts, the whole workspace)
+ *    are masked.
  * The choice is kept in this browser (localStorage) and can be changed from the footer.
  */
 const KEY = "sc_consent";
 type Choice = "yes" | "no";
 const GA = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "";
-const CLARITY = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID ?? "";
-export const analyticsConfigured = Boolean(GA || CLARITY);
+/** The Clarity project id, handed in by ConsentBanner from the server environment (CLARITY_ID). Never hardcoded. */
+let clarityProject = "";
+const analyticsConfigured = () => Boolean(GA || clarityProject);
 
 function read(): Choice | null {
   try {
@@ -37,7 +42,6 @@ declare global {
   interface Window {
     dataLayer?: unknown[];
     gtag?: (...args: unknown[]) => void;
-    clarity?: ((...args: unknown[]) => void) & { q?: unknown[] };
     __scAnalytics?: boolean;
     __scQueue?: [string, Record<string, string | number | boolean>][];
   }
@@ -66,16 +70,10 @@ function loadAnalytics() {
     s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA)}`;
     document.head.appendChild(s);
   }
-  if (CLARITY) {
-    const c = ((...args: unknown[]) => {
-      (c.q = c.q ?? []).push(args);
-    }) as NonNullable<Window["clarity"]>;
-    window.clarity = c;
-    const s = document.createElement("script");
-    s.async = true;
-    s.src = `https://www.clarity.ms/tag/${encodeURIComponent(CLARITY)}`;
-    document.head.appendChild(s);
-    window.clarity("consent");
+  if (clarityProject) {
+    // The official package injects the Clarity tag. Called once (guarded above) and only after the visitor said Yes.
+    Clarity.init(clarityProject);
+    Clarity.consentV2({ ad_Storage: "denied", analytics_Storage: "granted" });
   }
   // Events raised before analytics finished loading (a page can fire one before the choice is read).
   const queued = window.__scQueue ?? [];
@@ -92,14 +90,14 @@ export function trackPageView() {
 
 /** A GA4 funnel event. Only labels: never emails, names, website text or drafts. */
 export function trackEvent(name: string, params: Record<string, string | number | boolean> = {}) {
-  if (!analyticsConfigured) return;
   if (!window.__scAnalytics) {
-    // Not loaded yet. Held in memory only; dropped if the visitor says No.
-    (window.__scQueue = window.__scQueue ?? []).push([name, params]);
+    // Not loaded yet (or the visitor has not said Yes). Held in memory only, capped, and dropped if the visitor says No.
+    const q = (window.__scQueue = window.__scQueue ?? []);
+    if (q.length < 50) q.push([name, params]);
     return;
   }
   if (GA && window.gtag) window.gtag("event", name, { ...params, page_location: safeLocation() });
-  if (CLARITY && window.clarity) window.clarity("event", name);
+  if (clarityProject) Clarity.event(name);
 }
 
 const RETURN_KEY = "sc_last_visit";
@@ -121,7 +119,7 @@ function checkReturnVisit() {
 
 export const OPEN_CONSENT = "sc:open-consent";
 
-export function ConsentBanner() {
+export function ConsentBanner({ clarityId = "" }: { clarityId?: string }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const first = useRef(true);
@@ -136,7 +134,8 @@ export function ConsentBanner() {
   }, [pathname]);
 
   useEffect(() => {
-    if (!analyticsConfigured) return;
+    clarityProject = clarityId;
+    if (!analyticsConfigured()) return;
     const choice = read();
     if (choice === "yes") {
       loadAnalytics();
@@ -149,7 +148,7 @@ export function ConsentBanner() {
     const reopen = () => setOpen(true);
     window.addEventListener(OPEN_CONSENT, reopen);
     return () => window.removeEventListener(OPEN_CONSENT, reopen);
-  }, []);
+  }, [clarityId]);
 
   const decide = useCallback((v: Choice) => {
     const before = read();
@@ -187,8 +186,8 @@ export function ConsentBanner() {
   );
 }
 
-export function ConsentSettingsButton() {
-  if (!analyticsConfigured) return null;
+export function ConsentSettingsButton({ enabled }: { enabled: boolean }) {
+  if (!enabled) return null;
   return (
     <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_CONSENT))}>
       Cookie settings

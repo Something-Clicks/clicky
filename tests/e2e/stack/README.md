@@ -1,6 +1,6 @@
 # Local end-to-end stack
 
-**Update Nov 26:** `local-up.sh` builds and runs this stack (PostgREST release binary; GoTrue built from its Go module; no Docker, no Mailpit, auto-confirmed sign-ups) and `tests/e2e/campaigns.spec.ts` ran on it: 7/7 desktop and 7/7 iPhone. The text below is the original plan.
+**Update Nov 26:** `local-up.sh` builds and runs this stack (PostgREST release binary; GoTrue built from its Go module; no Docker, no Mailpit, auto-confirmed sign-ups) and `e2e/specs/ (pnpm test:e2e:local)` ran on it: 7/7 desktop and 7/7 iPhone. The text below is the original plan.
 
 
 The full customer journey (Save this → email link → claim in another browser) needs Supabase Auth and the

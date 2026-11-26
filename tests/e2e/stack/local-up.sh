@@ -4,10 +4,10 @@
 # Nothing here touches clicky-dev, Production, Stripe or any paid service. Emails are not sent (auto-confirm).
 # Usage: tests/e2e/stack/local-up.sh [workdir]   then see docs/launch/LAUNCH_CHECKLIST.md, "Compare and Campaigns".
 set -euo pipefail
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 W="${1:-/tmp/sc-stack}"; mkdir -p "$W"; cd "$W"
 JWT="local-test-jwt-secret-at-least-32-characters-long-xx"
 export PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 if [ ! -x postgrest ]; then
   curl -fsSL -o pgrst.tar.xz https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz
@@ -21,7 +21,7 @@ if [ ! -x gotrue ]; then
   (cd auth-src && sed -i '/internal\/forks\/godotenv/d' go.mod && GOFLAGS=-mod=mod go build -o ../gotrue .)
 fi
 
-psql -v ON_ERROR_STOP=1 -q -d postgres -c "drop database if exists sc_e2e" -c "create database sc_e2e"
+psql -v ON_ERROR_STOP=1 -q -d postgres -c "drop database if exists sc_e2e with (force)" -c "create database sc_e2e"
 psql -v ON_ERROR_STOP=1 -q -d sc_e2e <<'SQL'
 create extension if not exists pgcrypto;
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;

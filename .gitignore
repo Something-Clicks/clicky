@@ -173,3 +173,7 @@ next-env.d.ts
 
 # Model evaluation output (may contain raw model outputs and website excerpts)
 /eval-results/
+
+# End-to-end suite: throwaway local sessions
+/e2e/.auth/
+/blob-report/
