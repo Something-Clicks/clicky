@@ -21,5 +21,5 @@ Owner-approved cap: **$500 total** for the whole capped model evaluation (a limi
 | Event | Commit | Date |
 |---|---|---|
 | Plan and criteria written (Milestone 1) | see `git log` for `MODEL_EVALUATION_PLAN.md` | Nov 26 2026 |
-| Evaluation set frozen | not yet | – |
+| Evaluation set frozen (dataset hash `c0b4dd98…`, see `EVALUATION_FREEZE.md`) | the commit containing `evals/model/dataset/FREEZE.json` | Nov 26 2026 |
 | First model run | not yet | – |

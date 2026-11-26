@@ -6,34 +6,23 @@
  * nothing here grades a model. No database, no customer data, nothing is stored in the app.
  */
 import { learnWithModel } from "@/lib/server/agent/modules/business-understanding";
+import { understand } from "@/lib/server/agent/modules/business-intelligence";
 import { sourcePages } from "@/lib/server/agent/modules/business-understanding";
+import type { ProposedFact, StoredFact } from "@/lib/business-profile";
 import type { KnownFact } from "@/lib/server/agent/modules/business-intelligence";
 import { ContentRejected, createContent, type ContentInput, type DraftKind } from "@/lib/server/agent/modules/content-creation";
 import { analyzeWithModel } from "@/lib/server/agent/modules/marketing-analysis-model";
 import { createPlan, PlanRejected } from "@/lib/server/agent/modules/marketing-strategy";
 import { ModelOutputInvalid, type ModelProvider } from "@/lib/server/agent/provider";
 import type { AnalysisDeps } from "@/lib/server/analysis";
+import type { FetchedPage } from "@/lib/server/safe-fetch";
 
 import { checkSite, type SiteReport } from "../sitecheck/run";
+import { checkCase } from "./checks";
+import type { EvalCase } from "./dataset/types";
+import type { CallRecord, CaseRun, TaskResult } from "./types";
 
-export interface CallRecord { task: string; ms: number; inputTokens: number; outputTokens: number; refused: boolean; error: string | null }
-
-export interface TaskResult {
-  site: string;
-  task: string;
-  ok: boolean;
-  /** Why it did not produce usable output: a typed reason, never a raw server message. */
-  failure: string | null;
-  ms: number;
-  /** Model calls this task needed (2 or more means the first answer was unusable). */
-  attempts: number;
-  inputTokens: number;
-  outputTokens: number;
-  /** Counts of what the model proposed and what survived Something Clicks' grounding checks. */
-  yield: { proposed: number; kept: number; rejectedReasons: Record<string, number> } | null;
-  /** The raw material for a person to score. */
-  output: unknown;
-}
+export type { CallRecord, TaskResult } from "./types";
 
 export interface ModelCheckReport {
   provider: string;
@@ -84,37 +73,62 @@ async function timed(site: string, task: string, inner: ModelProvider, run: (p: 
   }
   return {
     site, task, ok, failure, ms: Date.now() - t0, attempts: calls.length,
+    maxCallMs: calls.reduce((m, c) => Math.max(m, c.ms), 0), refusals: calls.filter((c) => c.refused).length,
     inputTokens: calls.reduce((n, c) => n + c.inputTokens, 0), outputTokens: calls.reduce((n, c) => n + c.outputTokens, 0), yield: y, output,
   };
 }
 
-export async function runSite(inner: ModelProvider, website: string, biz: { businessName: string; serviceArea: string | null; primaryGoal: string | null }, deps: AnalysisDeps = {}, ownerNotes: string | null = null): Promise<{ site: SiteReport; tasks: TaskResult[] }> {
+/** Which fixed-check finding each draft kind is written from: the same for every candidate, so drafts are comparable. */
+const DRAFT_SOURCE: Record<DraftKind, string[]> = {
+  meta: ["meta.description_missing", "meta.title_length", "meta.title_missing"],
+  page_copy: ["content.h1_missing", "content.thin_homepage"],
+};
+
+export interface RunSiteOptions {
+  /** Owner-note variants for the plan task (id and the owner's words); each runs as its own task "plan_notes:<id>". */
+  notes?: { id: string; text: string }[];
+}
+
+export async function runSite(inner: ModelProvider, website: string, biz: { businessName: string; serviceArea: string | null; primaryGoal: string | null }, deps: AnalysisDeps = {}, ownerNotes: string | null = null, options: RunSiteOptions = {}): Promise<{ site: SiteReport; tasks: TaskResult[] }> {
   const site = await checkSite(website, biz, deps);
-  if (!site.ok || !site.scan) return { site, tasks: [{ site: website, task: "scan", ok: false, failure: "site_not_scanned", ms: 0, attempts: 0, inputTokens: 0, outputTokens: 0, yield: null, output: site.reason ?? null }] };
+  if (!site.ok || !site.scan) return { site, tasks: [{ site: website, task: "scan", ok: false, failure: "site_not_scanned", ms: 0, attempts: 0, maxCallMs: 0, refusals: 0, inputTokens: 0, outputTokens: 0, yield: null, output: site.reason ?? null }] };
   const scan = site.scan;
-  const known: KnownFact[] = [];
+  let known: KnownFact[] = [];
   const tasks: TaskResult[] = [];
 
-  tasks.push(await timed(website, "understanding", inner, async (p) => {
+  const understandingTask = await timed(website, "understanding", inner, async (p) => {
     const r = await learnWithModel(p, scan, { businessName: biz.businessName, serviceArea: biz.serviceArea });
     return { yield: { proposed: r.accepted.length + r.rejected.length, kept: r.accepted.length, rejectedReasons: histogram(r.rejected.map((x) => x.reason)) }, output: { accepted: r.accepted, rejected: r.rejected } };
-  }));
+  });
+  tasks.push(understandingTask);
+  // As in the product, later steps receive the business details built so far: the fixed extraction plus what the model proposed.
+  {
+    const modelFacts = understandingTask.ok ? (understandingTask.output as { accepted: ProposedFact[] }).accepted : [];
+    const stored: StoredFact[] = [...site.facts, ...modelFacts].map((f, i) => ({ ...f, id: `fact${i}`, status: "proposed", observed_at: new Date().toISOString(), confirmed_at: null }));
+    known = understand({ businessName: biz.businessName, website, serviceArea: biz.serviceArea, primaryGoal: biz.primaryGoal }, stored).known;
+  }
 
-  tasks.push(await timed(website, "findings", inner, async (p) => {
+  const findingsTask = await timed(website, "findings", inner, async (p) => {
     const r = await analyzeWithModel(p, { pages: sourcePages(scan), businessName: biz.businessName, known, alreadyFound: site.findings.map((f) => f.title) });
     return { yield: { proposed: r.cards.length + r.rejected.length, kept: r.cards.length, rejectedReasons: histogram(r.rejected.map((x) => x.reason)) }, output: { cards: r.cards, evidence: r.evidence, rejected: r.rejected } };
-  }));
+  });
+  tasks.push(findingsTask);
 
-  tasks.push(await timed(website, ownerNotes ? "plan_with_notes" : "plan", inner, async (p) => {
-    const r = await createPlan(p, {
-      businessName: biz.businessName, serviceArea: biz.serviceArea, primaryGoal: biz.primaryGoal, known, ownerNotes,
-      cards: site.findings.map((f) => ({ id: f.id, title: f.title, why_it_matters: f.why_it_matters, recommended_action: f.recommended_action, impact: f.impact, confidence: f.confidence, evidence_class: f.evidence_class, stage: "prepared" })),
-    });
-    return { yield: { proposed: r.plan.priorities.length + r.rejected.length, kept: r.plan.priorities.length, rejectedReasons: histogram(r.rejected.map((x) => x.reason)) }, output: r.plan };
-  }));
+  // As in the product, the plan works from every open action: the fixed checks AND the model's own accepted findings.
+  const modelCards = findingsTask.ok ? ((findingsTask.output as { cards: Record<string, unknown>[] }).cards ?? []) : [];
+  const planCards = [
+    ...site.findings.map((f) => ({ id: f.id, title: f.title, why_it_matters: f.why_it_matters, recommended_action: f.recommended_action, impact: f.impact, confidence: f.confidence, evidence_class: f.evidence_class, stage: "prepared" })),
+    ...modelCards.map((c, i) => ({ id: `m${i + 1}`, title: String(c.title), why_it_matters: String(c.why_it_matters), recommended_action: String(c.recommended_action), impact: String(c.impact_priority), confidence: String(c.confidence), evidence_class: String(c.evidence_class ?? "inferred"), stage: "prepared" })),
+  ];
+  const planTask = (name: string, notes: string | null) => timed(website, name, inner, async (p) => {
+    const r = await createPlan(p, { businessName: biz.businessName, serviceArea: biz.serviceArea, primaryGoal: biz.primaryGoal, known, ownerNotes: notes, cards: planCards });
+    return { yield: { proposed: r.plan.priorities.length + r.rejected.length, kept: r.plan.priorities.length, rejectedReasons: histogram(r.rejected.map((x) => x.reason)) }, output: { plan: r.plan, cards: planCards.map((c) => ({ id: c.id, title: c.title, impact: c.impact, check_key: site.findings.find((f) => f.id === c.id)?.check_key ?? "model" })) } };
+  });
+  tasks.push(await planTask(ownerNotes ? "plan_with_notes" : "plan", ownerNotes));
+  for (const n of options.notes ?? []) tasks.push(await planTask(`plan_notes:${n.id}`, n.text));
 
-  const card = site.findings[0];
   for (const kind of ["meta", "page_copy"] as DraftKind[]) {
+    const card = DRAFT_SOURCE[kind].map((k) => site.findings.find((f) => f.check_key === k)).find(Boolean) ?? site.findings[0];
     tasks.push(await timed(website, `draft_${kind}`, inner, async (p) => {
       const input: ContentInput = {
         kind, businessName: biz.businessName, known, ownerNotes: null,
@@ -126,6 +140,19 @@ export async function runSite(inner: ModelProvider, website: string, biz: { busi
     }));
   }
   return { site, tasks };
+}
+
+const fetchFromCase = (c: EvalCase) => async (url: string): Promise<FetchedPage> => {
+  const body = c.pages[new URL(url).pathname || "/"];
+  return { url, status: body ? 200 : 404, contentType: "text/html", body: body ?? "", truncated: false, redirects: [] };
+};
+
+/** Runs one dataset case against a model, then applies every automatic check to what came back. */
+export async function runEvalCase(inner: ModelProvider, c: EvalCase, allBusinessNames: string[] = []): Promise<CaseRun> {
+  const website = `https://${c.id.toLowerCase()}.example/`;
+  const { site, tasks } = await runSite(inner, website, { businessName: c.business.name, serviceArea: c.business.serviceArea, primaryGoal: c.business.primaryGoal },
+    { fetchPage: fetchFromCase(c), pageSpeed: async () => ({ ok: false as const, reason: "not measured" }) }, null, { notes: c.notes.map((n) => ({ id: n.id, text: n.text })) });
+  return { caseId: c.id, tasks, checks: site.ok ? checkCase(c, tasks, allBusinessNames, site.facts) : null };
 }
 
 const pct = (xs: number[], q: number) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(q * xs.length))]! : 0);

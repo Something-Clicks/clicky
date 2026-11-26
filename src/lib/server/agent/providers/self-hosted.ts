@@ -32,6 +32,8 @@ import type { ModelProvider, ModelRawResponse } from "../provider";
 const PROTECTED_BODY_KEYS = new Set(["model", "messages", "stream", "response_format", "max_tokens", "max_completion_tokens", "n", "tools", "tool_choice", "functions", "function_call", "stop"]);
 const MAX_RESPONSE_BYTES = 2_000_000;
 const DEFAULT_ATTEMPT_MS = 75_000;
+/** Fixed decoding for every request, recorded in each evaluation run so results are reproducible and comparable. */
+export const DECODING = { temperature: 0.2, topP: 0.95 } as const;
 
 export interface SelfHostedConfig {
   endpoint: string;
@@ -156,8 +158,8 @@ export function selfHostedProvider(env: Record<string, string | undefined> = pro
         ...cfg.extraBody,
         model: cfg.model,
         stream: false,
-        temperature: 0.2,
-        top_p: 0.95,
+        temperature: DECODING.temperature,
+        top_p: DECODING.topP,
         max_tokens: req.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         messages: [
           { role: "system", content: req.system },

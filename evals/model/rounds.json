@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "note": "One record per scored round: a full run of the 10 scored cases on the frozen dataset, human-scored. A production candidate needs 2 consecutive passes on the same dataset hash. No round has been run.",
+  "rounds": []
+}

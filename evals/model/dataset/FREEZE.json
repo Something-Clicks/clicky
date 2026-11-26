@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "frozenOn": "2026-11-26",
+  "datasetHash": "c0b4dd9836030d2703966688a4b02f746af412bd9f72e593ce5f661069b34cf3",
+  "standardsHash": "d8b476e96d13efe48b53c689e86937ea6ee05c561df214ada2ac08b948fa7040",
+  "cases": [
+    {
+      "id": "D1",
+      "set": "dev",
+      "hash": "4bee71f30f3d94ed313e4e441a218179df26c754f09a70e2da01a1f76a18b9eb"
+    },
+    {
+      "id": "D2",
+      "set": "dev",
+      "hash": "8fde27950dd7c6b43568f55a4808e12879b1f0f9dc936e473c8fca953e271718"
+    },
+    {
+      "id": "D3",
+      "set": "dev",
+      "hash": "640539959bf1c9c4e3d77b0e03901983d45712f846a35b84959de77332fcfa74"
+    },
+    {
+      "id": "D4",
+      "set": "dev",
+      "hash": "ebcfaea6dc9a97ccbc9a52478fda37a202a674e40af18bf115b7710cbc388115"
+    },
+    {
+      "id": "T1",
+      "set": "test",
+      "hash": "43e4a5ddf92efea74968b20ed10c466c76f98210c5b699b61cfc79edfde850a8"
+    },
+    {
+      "id": "T2",
+      "set": "test",
+      "hash": "e4fd18d47e20b4d481c03b50b3a01ccac1e54f6f93439d2707c5484bfa99beed"
+    },
+    {
+      "id": "T3",
+      "set": "test",
+      "hash": "725f9ec2dac38d79bc9233a033f9e4e4b21ad4a6ac76c8d9b12b6f56f84deda9"
+    },
+    {
+      "id": "T4",
+      "set": "test",
+      "hash": "d94372af260d69a7ba67f49d35d0cba98fe3078ad562d53ff9d9937746d50bc2"
+    },
+    {
+      "id": "T5",
+      "set": "test",
+      "hash": "c06aa9156f29b4759df02aa4f52832501046fdce35eb79247cdb6528c7d1860b"
+    },
+    {
+      "id": "T6",
+      "set": "test",
+      "hash": "4c8cc728a509ef837ac90f0424bd96fdbef488d686b93f17f2664b90d35ea92d"
+    },
+    {
+      "id": "T7",
+      "set": "test",
+      "hash": "a1049f0d423ca8259553e391f8f415a8bcafe31ae8bfb590ad0740367d5450d1"
+    },
+    {
+      "id": "T8",
+      "set": "test",
+      "hash": "3c037485e3af32651c7f1815c5c2d03067e150ea9c5cab662c07bf93df538f62"
+    },
+    {
+      "id": "T9",
+      "set": "test",
+      "hash": "1ba6e9fdf2f0524825dd18e492b01ab3ba055cd615cf0f909b4a3652b6ec020f"
+    },
+    {
+      "id": "T10",
+      "set": "test",
+      "hash": "de7f32c528744297724108ddd13406694a4afc6e951cc6c2a57ec636f6e84926"
+    }
+  ],
+  "changeLog": []
+}

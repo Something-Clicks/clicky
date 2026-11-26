@@ -98,7 +98,7 @@ D1 local plumber with schema data · D2 one-page lawn service · D3 restaurant w
 | R1–R4 | Real public business sites, **only with written permission** | the real thing; the same checklist, written before the run |
 
 Tasks per case: business understanding; model findings; a strategy plan (cases T1, T4, T7 also run with owner notes such as "we can't take weekend jobs", "budget under $200 a month", "no phone calls"); two drafts (`meta`, `page_copy`). Reliability repeat: second pass on five cases. About 53 calls per model per pass, about 78 with repeats.
-**Authoring status: specified here, not yet written.** Authoring of pages and ground truth starts after you approve this plan and is committed as a **freeze commit** (its SHA is then recorded in `EVALUATION_SPEND.md` and §11). *Limitation, stated openly:* I write both the pages and the ground truth and I also score; to offset this you (or a person you name) check the ground truth of at least three cases before the freeze and independently score at least 20% of outputs.
+**Authoring status: WRITTEN AND FROZEN Nov 26 2026** (`evals/model/dataset/`, `EVALUATION_FREEZE.md`; originally specified as follows). Authoring of pages and ground truth starts after you approve this plan and is committed as a **freeze commit** (its SHA is then recorded in `EVALUATION_SPEND.md` and §11). *Limitation, stated openly:* I write both the pages and the ground truth and I also score; to offset this you (or a person you name) check the ground truth of at least three cases before the freeze and independently score at least 20% of outputs.
 
 ### 6.3 Permission note for any real site (template)
 "I am the owner/authorized representative of <business> and give Something Clicks written permission to read the public pages of <url> and to store short excerpts and the results in its private evaluation records for model testing. No customer or account data is involved. I can withdraw permission at any time and the excerpts will be deleted." Name, date, signature (email is fine). Stored privately, not in the repository.
@@ -153,7 +153,14 @@ Assumptions (all unmeasured): 48 GB-class GPU at the market range of about $1.1�
 Time is a planning estimate, not a deadline.
 
 ## 11. Change log of pre-registered items
-(empty: nothing has been changed since the plan was written)
+Nov 26 2026, while authoring the frozen dataset (before any model ran; **no threshold was lowered**):
+- Dev case D3 is now a food truck with a menu and weekly schedule instead of a sit-down restaurant (T4 is the restaurant; the two shapes were too close for a dev/test split). Dev cases are never scored.
+- T6 (online retailer) also gets an owner-note plan variant (a competitor note and a capacity limit), so four cases (T1, T4, T6, T7) test constraint and competitor reasoning instead of three.
+- The pass requirements of section 5 are now implemented verbatim in `evals/model/thresholds.ts` and expressed as eight capability scores (1 to 5) in addition to the measured thresholds; a test pins every number. Capability scores must average ≥ 4.0 with no case below 3 (evidence and accuracy ≥ 4.5 with no case below 4), which is consistent with, and no looser than, section 5's "mean ≥ 4.0 on each dimension, no plan below 3.0".
+- Draft inputs come from the fixed-check findings (same for every candidate); the plan sees every open action (fixed checks plus the model's own findings), as in the product.
+- Recall of the fact checklist counts the fixed extraction as well as the model's facts, because the model is told contact details come from the fixed extraction.
+- Removed one checklist item (T5 "we do not guarantee any refund") because Something Clicks' own grounding refuses any text containing "guarantee", so no model could ever record it.
+- Frozen: dataset hash `c0b4dd98…`, see `EVALUATION_FREEZE.md`.
 
 ## 12. Remaining blockers and decisions
 1. Approve or amend the criteria and thresholds above (including the revised cost definition).
@@ -176,3 +183,6 @@ Time is a planning estimate, not a deadline.
 Built, in this repository, with no spend: the `self-hosted` adapter (`src/lib/server/agent/providers/self-hosted.ts`), registered in `provider.ts` but inert unless our server is configured and never in Production; the metering hook for a measured price; a per-adapter attempt allowance for slower models; the stand-in model server and 48 adapter/harness tests; and the model-check harness (`evals/model/`, `pnpm modelcheck`) that drives the real understanding, findings, plan and draft capabilities against any endpoint and records attempts, time, tokens, grounding yield and estimated compute per business, plus the raw outputs for people to score.
 **What this proves:** the code path works end to end against a stand-in. **What it does not prove:** that any model can do the work. No model has run; the frozen evaluation set (§6) is still to be authored; the bundled fixture sites are a smoke set only.
 Open technical fact (only on the first real server start): the exact server launch options and the per-model switch that turns reasoning/"thinking" off (the adapter passes it through `SELF_HOSTED_EXTRA_BODY`); to be read from the chosen server's documentation then.
+
+## 14. Dataset, scoring and freeze status (Nov 26 2026)
+Built and tested with no spend, no GPU and no model: 14 fictional cases with full ground truth (`evals/model/dataset/`), automatic checks (`checks.ts`), the eight-capability scoring system with blinding, pass logic, comparison and the two-consecutive-rounds rule (`scoring.ts`, `thresholds.ts`), the freeze (`FREEZE.json`, generated `EVALUATION_FREEZE.md`) and the commands `pnpm modelcheck` (set=dev|test|all), `pnpm modelscore`, `pnpm modelfreeze`. Tests prove the dataset is consistent with itself, the checks catch what they claim, and the scoring applies the thresholds; they use an answer-key stand-in server and **show nothing about any model's intelligence**. **Still required before a real evaluation:** you (or a delegate) check the ground truth of at least three cases, a model server we operate, and the person who scores.

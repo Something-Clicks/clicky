@@ -73,7 +73,7 @@ describe("runSite drives every capability through the adapter and records what h
 });
 
 describe("summary and report", () => {
-  const t = (over: Partial<TaskResult>): TaskResult => ({ site: "a", task: "plan", ok: true, failure: null, ms: 10_000, attempts: 1, inputTokens: 1000, outputTokens: 500, yield: { proposed: 10, kept: 7, rejectedReasons: {} }, output: null, ...over });
+  const t = (over: Partial<TaskResult>): TaskResult => ({ site: "a", task: "plan", ok: true, failure: null, ms: 10_000, attempts: 1, maxCallMs: 5000, refusals: 0, inputTokens: 1000, outputTokens: 500, yield: { proposed: 10, kept: 7, rejectedReasons: {} }, output: null, ...over });
 
   it("computes usable and first-attempt rates, grounded yield, tokens per second and compute cost per business", () => {
     const tasks = [t({}), t({ site: "a", task: "findings", ms: 20_000, attempts: 2 }), t({ site: "b", ok: false, failure: "unusable:schema_mismatch", yield: null, ms: 30_000 })];
