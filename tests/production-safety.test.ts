@@ -48,3 +48,21 @@ describe('mock / fixture / simulated output can never become real customer resul
     setEnv({ ANONYMOUS_PREVIEW_ENABLED: 'true' }); vi.resetModules(); expect((await import('../src/server/env')).env.anonymousPreview).toBe(true);
   });
 });
+
+describe('development builds can only use allow-listed Supabase projects', () => {
+  const REF = 'ofstvbgaoznipsiqbjjp';
+  const load = async (env: Record<string, string | undefined>) => { setEnv({ NODE_ENV: 'development', DEV_MODE: undefined, ...env }); vi.resetModules(); return import('../src/server/env'); };
+  it('refuses a project that is not listed, or any project when the list is empty', async () => {
+    await expect(load({ NEXT_PUBLIC_SUPABASE_URL: `https://${REF}.supabase.co`, ALLOWED_SUPABASE_REFS: undefined })).rejects.toThrow(/not listed in ALLOWED_SUPABASE_REFS/);
+    await expect(load({ NEXT_PUBLIC_SUPABASE_URL: 'https://ysmwnxvyjougetdlpnba.supabase.co', ALLOWED_SUPABASE_REFS: REF })).rejects.toThrow(/not listed/);
+    await expect(load({ NEXT_PUBLIC_SUPABASE_URL: 'https://evil.example.com', ALLOWED_SUPABASE_REFS: REF })).rejects.toThrow(/not listed/);
+  });
+  it('accepts exactly the allow-listed project; Supabase-less dev builds are unaffected', async () => {
+    expect((await load({ NEXT_PUBLIC_SUPABASE_URL: `https://${REF}.supabase.co`, ALLOWED_SUPABASE_REFS: `other,${REF}` })).supabaseRef()).toBe(REF);
+    await expect(load({ NEXT_PUBLIC_SUPABASE_URL: undefined, ALLOWED_SUPABASE_REFS: undefined })).resolves.toBeDefined();
+  });
+  it('modules holding secrets are marked server-only', async () => {
+    const fs = await import('node:fs');
+    for (const f of ['supabase/clients.ts', 'env.ts', 'billing/stripe.ts', 'email.ts', 'container.ts']) expect(fs.readFileSync(`src/server/${f}`, 'utf8').startsWith("import 'server-only';")).toBe(true);
+  });
+});

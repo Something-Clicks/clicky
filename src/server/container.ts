@@ -1,3 +1,4 @@
+import 'server-only';
 import { after } from 'next/server';
 import { createAgent, type Agent } from '@/agent/orchestrator/agent';
 import type { JobQueue } from '@/agent/orchestrator/orchestrator';

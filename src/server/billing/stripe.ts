@@ -1,3 +1,4 @@
+import 'server-only';
 import Stripe from 'stripe';
 import { AppError, ValidationError } from '@/agent/core/errors';
 import { nowIso } from '@/agent/core/util';

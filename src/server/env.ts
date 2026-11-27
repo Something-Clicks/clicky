@@ -1,3 +1,4 @@
+import 'server-only';
 const b = (v: string | undefined, d = false) => (v === undefined ? d : /^(1|true|yes|on)$/i.test(v));
 export const isProd = process.env.NODE_ENV === 'production';
 
@@ -28,3 +29,11 @@ export const env = {
 };
 export const supabaseConfigured = !!(env.supabaseUrl && env.supabaseAnonKey && env.supabaseServiceKey);
 if (isProd && env.devMode) throw new Error('DEV_MODE must never be enabled in production');
+
+/** Outside production, refuse to talk to any Supabase project that is not explicitly allow-listed (guards against pointing a dev build at production). */
+export const supabaseRef = (url = env.supabaseUrl): string | undefined => url?.match(/^https:\/\/([a-z0-9]{20})\.supabase\.co/i)?.[1]?.toLowerCase();
+if (!isProd && env.supabaseUrl) {
+  const allowed = (process.env.ALLOWED_SUPABASE_REFS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const ref = supabaseRef();
+  if (!ref || !allowed.includes(ref)) throw new Error(`Refusing to start: Supabase project "${ref ?? env.supabaseUrl}" is not listed in ALLOWED_SUPABASE_REFS. Outside production only explicitly allowed development projects may be used.`);
+}

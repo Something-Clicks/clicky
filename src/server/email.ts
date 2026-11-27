@@ -1,3 +1,4 @@
+import 'server-only';
 import { Resend } from 'resend';
 import { env } from './env';
 import type { EmailSender } from '@/agent/capabilities/execution';
