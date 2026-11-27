@@ -46,3 +46,33 @@ describe('OpenAI-compatible provider (hosted or self-hosted models)', () => {
     expect(() => providerFromEnv({ LLM_BASE_URL: 'http://x/v1', LLM_MODEL: 'm', LLM_STRUCTURED: 'bogus' })).toThrow(/LLM_STRUCTURED/); expect(() => providerFromEnv({ LLM_BASE_URL: 'http://x/v1', LLM_MODEL: 'm', LLM_EXTRA_BODY: '{nope' })).toThrow(/valid JSON/);
   });
 });
+
+import { FailoverProvider } from '../src/agent/providers/failover';
+import { modalEndpointKey } from '../src/agent/providers/openai-compatible';
+import { ProviderError } from '../src/agent/core/errors';
+const okP = (name: string) => ({ name, isMock: false, async complete() { return { text: '{"n":1}', model: name, usage: { inputTokens: 1, outputTokens: 1 } }; } });
+const failP = (name: string, e: Error) => ({ name, isMock: false, calls: 0, async complete() { this.calls++; throw e; } });
+describe('hosted GPU primary with local fallback', () => {
+  it('uses the primary when healthy and reports which model answered', async () => {
+    expect((await new FailoverProvider(okP('modal'), okP('local')).complete(req)).model).toBe('modal');
+  });
+  it('falls back only on infrastructure failures, then skips the dead primary during the cool-down', async () => {
+    let t = 0; const p = failP('modal', new ProviderError('connect timeout')); const seen: string[] = [];
+    const f = new FailoverProvider(p, okP('local'), { coolDownMs: 1000, now: () => t, onFallback: (w) => seen.push(w) });
+    expect((await f.complete(req)).model).toBe('local'); expect((await f.complete(req)).model).toBe('local'); expect(p.calls).toBe(1); expect(seen).toHaveLength(1);
+    t = 2000; await f.complete(req); expect(p.calls).toBe(2);
+  });
+  it('does not fall back on a rejected request (non-retryable) or a caller abort', async () => {
+    await expect(new FailoverProvider(failP('modal', new ProviderError('bad key', false)), okP('local')).complete(req)).rejects.toThrow('bad key');
+    const ac = new AbortController(); ac.abort();
+    await expect(new FailoverProvider(failP('modal', new ProviderError('x')), okP('local')).complete(req, ac.signal)).rejects.toThrow('x');
+  });
+  it('providerFromEnv: Modal primary + local fallback, key derived from the Modal token secret and sent as a bearer token', async () => {
+    const e = { MODAL_LLM_URL: 'https://ws--clicky-qwen.modal.run/', MODAL_TOKEN_SECRET: 'as-secret-123', LLM_BASE_URL: 'http://127.0.0.1:8081/v1', LLM_MODEL: 'local' };
+    expect(providerFromEnv(e)!.name).toMatch(/\|fallback:/); expect(providerFromEnv({ ...e, LLM_BASE_URL: undefined })!.name).toMatch(/^openai-compatible/); expect(providerFromEnv({ LLM_BASE_URL: e.LLM_BASE_URL, LLM_MODEL: 'local' })!.name).not.toMatch(/fallback/);
+    expect(modalEndpointKey('as-secret-123')).toMatch(/^[0-9a-f]{64}$/); expect(modalEndpointKey('a')).not.toBe(modalEndpointKey('b'));
+    const a = server(() => reply('{"n":1}')); const key = modalEndpointKey('as-secret-123');
+    await new OpenAICompatibleProvider({ baseUrl: 'https://ws--clicky-qwen.modal.run/v1', apiKey: key, model: 'qwen3-4b-instruct-2507', fetchImpl: a.f }).complete(req);
+    expect(a.seen[0]!.headers.authorization ?? a.seen[0]!.headers.Authorization).toBe(`Bearer ${key}`);
+  });
+});

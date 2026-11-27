@@ -1,5 +1,7 @@
 import { ProviderError } from '../core/errors';
 import { fenceUntrusted } from '../security/untrusted';
+import { createHmac } from 'node:crypto';
+import { FailoverProvider } from './failover';
 import type { LLMProvider, ProviderRequest, ProviderResponse } from './types';
 
 export interface OpenAICompatibleConfig {
@@ -72,8 +74,26 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 }
 
-/** Build a provider from env; undefined if not configured (callers then use the explicit "not connected" provider). */
+/**
+ * Key for the Modal-hosted endpoint, derived (HMAC) from MODAL_TOKEN_SECRET so no extra secret has to be shared: the deploy script
+ * (`infra/modal/serve_qwen.py`) derives the identical value and starts vLLM with it as `--api-key`. Server-side only.
+ */
+export const modalEndpointKey = (tokenSecret: string): string => createHmac('sha256', tokenSecret).update('clicky-llm-endpoint-v1').digest('hex');
+
+/**
+ * Provider from env. A Modal endpoint (MODAL_LLM_URL + MODAL_TOKEN_SECRET) is the primary when configured, with the local/other
+ * OpenAI-compatible endpoint (LLM_BASE_URL) as the fallback; with only one of them configured, that one is used alone.
+ */
 export function providerFromEnv(env: Record<string, string | undefined> = process.env): LLMProvider | undefined {
+  const local = localProviderFromEnv(env);
+  if (!env.MODAL_LLM_URL || !env.MODAL_TOKEN_SECRET) return local;
+  const modal = new OpenAICompatibleProvider({
+    baseUrl: `${env.MODAL_LLM_URL.replace(/\/$/, '')}/v1`, apiKey: modalEndpointKey(env.MODAL_TOKEN_SECRET), model: env.MODAL_LLM_MODEL ?? 'qwen3-4b-instruct-2507',
+    structured: (env.MODAL_LLM_STRUCTURED as OpenAICompatibleConfig['structured']) ?? 'json_schema', timeoutMs: env.MODAL_LLM_TIMEOUT_MS ? Number(env.MODAL_LLM_TIMEOUT_MS) : 600_000,
+  });
+  return local ? new FailoverProvider(modal, local, { onFallback: (w) => console.warn(w) }) : modal;
+}
+function localProviderFromEnv(env: Record<string, string | undefined>): LLMProvider | undefined {
   if (!env.LLM_BASE_URL || !env.LLM_MODEL) return undefined;
   const structured = env.LLM_STRUCTURED as OpenAICompatibleConfig['structured'] | undefined;
   if (structured && !['json_schema', 'json_object', 'json_object_schema', 'none'].includes(structured)) throw new Error('LLM_STRUCTURED must be json_schema, json_object, json_object_schema or none');
