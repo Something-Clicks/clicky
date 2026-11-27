@@ -1,3 +1,4 @@
+import { seedProfile } from './bootstrap';
 import { NotFoundError, ValidationError } from '../core/errors';
 import { daysBetween, nowIso, normalizeText } from '../core/util';
 import type { ProvenanceSource, Provenance } from '../domain/enums';
@@ -39,8 +40,12 @@ export class ProfileService {
   /** The shared (business-level) profile. For the primary site this IS the site's profile. */
   async getInternal(businessId: string): Promise<ProfileRow> {
     const p = await this.db.profiles.get(businessId, businessId);
-    if (!p) throw new NotFoundError('profile');
-    return p;
+    if (p) return p;
+    // A business that exists (organization + owner) but has no working profile yet: create it from what the business record says.
+    const b = await this.db.businesses.get(businessId, businessId);
+    if (!b) throw new NotFoundError('profile');
+    try { return await seedProfile(this.db, businessId, b.name, b.website); }
+    catch (e) { const again = await this.db.profiles.get(businessId, businessId); if (again) return again; throw e; } // lost a creation race
   }
   /** What the agent should use for the active site: shared brand/customer facts, overridden by anything recorded for this site. */
   async effective(ctx: Ctx): Promise<ProfileRow> {

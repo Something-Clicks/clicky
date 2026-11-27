@@ -18,13 +18,15 @@ export async function createBusiness(
     await db.businesses.insert({ id, businessId: id, name, ownerId, website });
     await db.members.insert({ businessId: id, userId: ownerId, role: 'owner' });
   }
-  const prov = { source: 'customer_confirmed' as const, evidence: 'verified' as const, recordedAt: nowIso() };
-  const mk = (value: string) => ({ value, provenance: prov, confirmed: true, updatedAt: prov.recordedAt, conflicts: [], previous: [] });
-  await db.profiles.insert({
-    id, businessId: id,
-    fields: { name: mk(name), ...(website ? { website: mk(website), domain: mk(domain!) } : {}) },
-  });
+  await seedProfile(db, id, name, website, domain);
   await db.sites.insert({ id, businessId: id, name, url: website ?? '', domain: domain ?? '', isPrimary: true, locations: [] });
   await audit.record({ businessId: id, actorType: 'user', actorId: ownerId, action: 'business.create', entityType: 'business', entityId: id });
   return { userId: ownerId, businessId: id };
+}
+
+/** The persistent Business Profile row. Businesses created by other flows (e.g. the existing create_organization RPC) get theirs on first use. */
+export async function seedProfile(db: Db, id: string, name: string, website?: string, domain?: string) {
+  const prov = { source: 'customer_confirmed' as const, evidence: 'verified' as const, recordedAt: nowIso() };
+  const mk = (value: string) => ({ value, provenance: prov, confirmed: true, updatedAt: prov.recordedAt, conflicts: [], previous: [] });
+  return db.profiles.insert({ id, businessId: id, fields: { name: mk(name), ...(website ? { website: mk(website), domain: mk(domain ?? new URL(website).hostname.replace(/^www\./, '')) } : {}) } });
 }

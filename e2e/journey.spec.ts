@@ -99,7 +99,8 @@ test.describe.serial('customer journey', () => {
     await expect(page.locator('.banner.err')).toContainText(/free uses/i);
     await page.goto('/billing'); await expect(page.getByText('3 of 3 free uses used')).toBeVisible(); for (const [n, price] of [['Marketing Report', '$49 one-time'], ['Marketing Assistant', '$79/month'], ['Marketing Studio', '$179/month'], ['Marketing Suite', '$399/month']] as const) { await expect(page.getByRole('heading', { name: n, exact: true })).toBeVisible(); await expect(page.getByText(price).first()).toBeVisible(); }
     await expect(page.getByText('$756/year ($63/month billed annually)')).toBeVisible(); await expect(page.getByText('$1,716/year ($143/month billed annually)')).toBeVisible(); await expect(page.getByText('$3,828/year ($319/month billed annually)')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Get the Marketing Report' })).toBeVisible(); await expect(page.getByRole('button', { name: 'Monthly' })).toHaveCount(3); await expect(page.getByText('Business Plus')).toHaveCount(0); await expect(page.getByText('Multi-Site')).toHaveCount(0);
+    // the e2e price ids cannot be verified against Stripe, so checkout stays closed (fail-closed catalog): no buy buttons, a clear message instead
+    await expect(page.getByText('Not available to purchase yet.')).toHaveCount(4); await expect(page.getByRole('button', { name: 'Get the Marketing Report' })).toHaveCount(0); await expect(page.getByRole('button', { name: 'Monthly' })).toHaveCount(0); await expect(page.getByText('Business Plus')).toHaveCount(0); await expect(page.getByText('Multi-Site')).toHaveCount(0);
   });
 
   test('another customer cannot see this customer’s data', async ({ browser }) => {

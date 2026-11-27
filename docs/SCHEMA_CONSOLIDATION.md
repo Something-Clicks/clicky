@@ -123,3 +123,26 @@ history is inspected.
 Re-pointing sc_ RLS to `organization_members`, dropping duplicate sc_ tables, new org-scoped tables (sites, locations, research,
 campaigns, tasks, metrics, reports, execution requests), the per-request customer-session data layer, and browser journeys
 against clicky-dev. The app still runs on the in-process store plus the sc_ adapter.
+
+## Consolidation result (clicky-dev only; production untouched)
+
+Migrations applied to clicky-dev (project `ofstvbgaoznipsiqbjjp`), in order: `0001` schema (earlier), `gate_model_output_rpcs_behind_server_key` (0002),
+`ground_model_findings` (0003), `consolidate_org_tenancy` (0004). Nothing was applied to production.
+
+* Tenancy/roles/billing now use the EXISTING tables: `organizations`, `organization_members` (owner|member), `subscriptions`, `purchases`, `plan_entitlements`.
+  The agent's working data stays in `sc_*` tables keyed by organization id, with RLS via `organization_members`.
+* Dropped (verified empty, unreferenced): `sc_businesses`, `sc_members`, `sc_billing`, `sc_stripe_events`, `sc_previews`.
+* Owners keep approval authority, enforced in the database (guard trigger): only an owner can approve a deliverable or strategy or authorize an execution request.
+* `sc_uses` rows can only be written for yourself; `sc_audit` is append-only and owner-readable; row identity is immutable; `version` must advance by one.
+* Plan ids: `report/assistant/studio/suite` added to `plan_entitlements`. Read-time mapping in `src/agent/store/org.ts`:
+  marketing_plan, diagnostic_audit -> report; single_site -> assistant; business_plus -> studio; multi_site -> suite. **`starter_ai`, `growth_ai`, `scale_automation` are
+  intentionally unmapped** (a subscription on them grants nothing until you confirm). Their old definitions in `plan_entitlements`: starter_ai = weekly reviews, `meta` drafts;
+  growth_ai and scale_automation = weekly reviews, `all` drafts (identical to single_site/business_plus/multi_site rows). No billing terms (prices, intervals) for them exist in the
+  database (subscriptions/purchases are empty), so their commercial meaning cannot be established from clicky-dev alone. Awaiting your decision.
+* No service-role key exists anywhere in the app. Operations that need a protected credential are refused explicitly (`server_credential_required`):
+  Stripe webhook (writes subscriptions/purchases via `billing_*` RPCs that need the server key), scheduled reviews across tenants, anonymous previews, model-output RPCs
+  (`complete_analysis`, `finish_marketing_workflow`, `add_model_findings`, `save_marketing_plan`, `record_analysis_pages`), invitations of additional members.
+
+## What was verified against real clicky-dev with real customer sessions (supabase-js, publishable key + user JWT)
+`tests/real-customer-sessions.test.ts` (9 tests) and `e2e-real/real-db.spec.ts` (5 browser tests; real login through the UI). Test accounts/organizations (`sc-test-*`) were
+created through the admin SQL channel because signup email is rate-limited and invitations/billing writes need the server credential; test rows are cleaned out-of-band.

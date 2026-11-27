@@ -10,7 +10,7 @@ build touches Supabase, Stripe, Resend, a model provider, Vercel or any producti
    which runs the migration in a real Postgres engine (PGlite).
 2. Auth: enable email + password, set the Site URL and add `https://<app-domain>/auth/callback` as a redirect URL.
    Turn on email confirmation (the app handles both confirmed and unconfirmed flows).
-3. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server only).
+3. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (no service-role key is used or needed by the app).
 4. The Supabase adapter (`src/agent/store/supabase.ts`) is written against the same `Table` interface the tests exercise, but
    **has not been run against a live project** in this build. First task after the migration: run the Playwright journeys
    against a real dev Supabase project (`DEV_MODE` off) and fix anything the adapter surfaces.
