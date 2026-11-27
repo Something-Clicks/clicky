@@ -2,7 +2,10 @@ name: Modal GPU (development)
 
 # Cloud-only deployment of the optional hosted GPU model (infra/modal/serve_qwen.py).
 # Manual trigger only: nothing runs on push, and nothing here touches Vercel, Supabase or production.
-# Needs repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (Settings > Secrets and variables > Actions). Values are never printed.
+#
+# CREDENTIALS: MODAL_TOKEN_ID and MODAL_TOKEN_SECRET must be secrets of the GitHub Environment named `modal` (Settings > Environments > modal),
+# NOT repository secrets. That environment's "Deployment branches and tags" must be limited to `main`. GitHub then refuses to start the job
+# (and withholds the secrets) on any other ref, even if someone edits this file on a branch. The in-file checks below are defence in depth.
 on:
   workflow_dispatch:
     inputs:
@@ -29,45 +32,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Cost modes (deploy, benchmark) refuse to run from any ref other than main. This job holds no secrets and fails loudly.
-  refuse-cost-mode-off-main:
-    if: ${{ (inputs.mode == 'deploy' || inputs.mode == 'benchmark') && github.ref != 'refs/heads/main' }}
+  # Any ref other than main: nothing that can reach Modal credentials starts. This job has no environment and no secrets.
+  refuse-off-main:
+    if: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "::error::deploy and benchmark only run from main (selected ref: $GITHUB_REF). verify and billing may run elsewhere."
+          echo "::error::The Modal workflow only runs from main (selected ref: $GITHUB_REF)."
           exit 1
 
   modal:
-    # The job does not start at all for cost modes on a non-main ref.
-    if: ${{ !((inputs.mode == 'deploy' || inputs.mode == 'benchmark') && github.ref != 'refs/heads/main') }}
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    # HARD BOUNDARY: keep MODAL_TOKEN_ID / MODAL_TOKEN_SECRET as secrets of THIS environment (not repository secrets) and set the
-    # environment's "Deployment branches" to main only. GitHub then withholds them from any other branch, even one that edits this file.
-    environment: modal-gpu
-    env:
-      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-      CLICKY_GPU: ${{ inputs.gpu }}
+    # The ONLY job that references Modal credentials. Environment secrets are available only to jobs that name the environment.
+    environment: modal
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: Install Modal client
-        run: pip install --quiet "modal>=1.6,<2"
 
-      - name: Check secrets exist (names only)
-        run: |
-          [ -n "$MODAL_TOKEN_ID" ] && [ -n "$MODAL_TOKEN_SECRET" ] || { echo "::error::Add repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET first"; exit 1; }
+      # No credentials are present in this step's environment.
+      - name: Install Modal client (pinned)
+        run: pip install --quiet "modal==1.6.4"
 
+      # Credentials are attached only to the steps that call Modal, never to the whole job.
       - name: Verify authentication (read-only, free)
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         run: ./scripts/verify-modal-auth.sh
 
-      - name: Billing report for this month (read-only, free)
+      - name: Billing summary (read-only, free)
         if: inputs.mode == 'billing' || inputs.mode == 'benchmark'
-        run: |
-          modal billing summary 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal billing summary 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
 
       - name: Require explicit cost approval
         if: inputs.mode == 'deploy' || inputs.mode == 'benchmark'
@@ -79,6 +82,10 @@ jobs:
       - name: Deploy endpoint (development app clicky-qwen)
         id: deploy
         if: inputs.mode == 'deploy' || inputs.mode == 'benchmark'
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          CLICKY_GPU: ${{ inputs.gpu }}
         run: |
           modal deploy infra/modal/serve_qwen.py 2>&1 | tee deploy.log
           url=$(grep -Eo 'https://[A-Za-z0-9._-]+\.modal\.run' deploy.log | head -1)
@@ -88,6 +95,7 @@ jobs:
       - name: "Benchmark (GPU cost - cold start and two streamed generations)"
         if: inputs.mode == 'benchmark'
         env:
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           MODAL_LLM_URL: ${{ steps.deploy.outputs.url }}
         run: |
           python infra/modal/benchmark.py | tee bench.json
@@ -95,4 +103,7 @@ jobs:
 
       - name: Stop the app after benchmarking (so nothing keeps running)
         if: inputs.mode == 'benchmark' && always()
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         run: modal app stop clicky-qwen || true
