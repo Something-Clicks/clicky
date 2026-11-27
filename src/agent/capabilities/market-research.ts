@@ -56,7 +56,8 @@ export async function marketResearch(
   usage: { current: Usage },
 ) {
   const queries = uniq([`${input.business.industry ?? ''} marketing trends`, `${input.business.industry ?? ''} customer demand ${input.business.service_areas ?? ''}`].map((s) => s.trim()).filter((s) => s.length > 15));
-  const hits = (await Promise.all(queries.map((q) => input.source.search(q)))).flat();
+  const failures: string[] = [];
+  const hits = (await Promise.all(queries.map((q) => input.source.search(q).catch((e: Error) => { failures.push(e.message); return []; })))).flat();
   const res = await client.generate({
     task: 'market_research', usage, schema: MarketResearchSchema,
     instructions: 'Summarise market and demand findings strictly from the supplied sources, library entries and customer notes. Each finding cites sourceIds. With no external sources, return findings only as "inferred"/"unknown" hypotheses (never "verified"), and list researchQuestions to answer.',
@@ -68,5 +69,5 @@ export async function marketResearch(
       return bad ? `Finding "${bad.claim}" is marked verified but cites no valid source id. Valid ids: ${[...ids].join(', ')}` : null;
     },
   });
-  return { ...res.data, collectedAt: nowIso(), id: newId(), mock: res.mock, model: res.model, externalSource: input.source.name, sourcesUsed: hits.length };
+  return { ...res.data, collectedAt: nowIso(), id: newId(), mock: res.mock, model: res.model, externalSource: input.source.name, sourcesUsed: hits.length, sourceErrors: [...new Set(failures)] };
 }

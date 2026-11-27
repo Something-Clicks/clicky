@@ -6,6 +6,7 @@ import { CampaignService } from '../capabilities/campaign';
 import { CardService } from '../capabilities/cards';
 import { DeliverableService } from '../capabilities/content';
 import { downloadExportAdapter, ExecutionService, recordActivityAdapter, saveToWorkspaceAdapter, testEmailAdapter, type EmailSender } from '../capabilities/execution';
+import { NullDiscovery, type Discovery } from '../research/discovery';
 import { NullResearchSource, type ResearchSource } from '../capabilities/market-research';
 import { PerformanceService } from '../capabilities/performance';
 import { StrategyService } from '../capabilities/strategy';
@@ -22,7 +23,7 @@ import { BrandService } from '../brand';
 import { InsightsService, ProgressService } from '../insights';
 
 export interface AgentDeps {
-  db: Db; provider: LLMProvider; queue: JobQueue; meter?: UsageMeter; crawl?: CrawlOptions; researchSource?: ResearchSource;
+  db: Db; provider: LLMProvider; queue: JobQueue; meter?: UsageMeter; crawl?: CrawlOptions; researchSource?: ResearchSource; discovery?: Discovery;
   emailSender?: EmailSender; limiter?: RateLimiter; hooks?: OrchestratorHooks; backoffMs?: number; gate?: PlanGate;
 }
 
@@ -32,10 +33,10 @@ export class Agent {
   readonly cards: CardService; readonly deliverables: DeliverableService; readonly strategies: StrategyService; readonly campaigns: CampaignService;
   readonly performance: PerformanceService; readonly execution: ExecutionService; readonly orchestrator: Orchestrator;
   async campaignsSync(ctx: import('../store/authz').Ctx, id: string) { const c = await this.campaigns.get(ctx, id); return this.campaigns.syncFromDeliverables(c); }
-  readonly crawl: CrawlOptions; readonly researchSource: ResearchSource; readonly db: Db;
+  readonly crawl: CrawlOptions; readonly researchSource: ResearchSource; readonly discovery: Discovery; readonly db: Db;
   readonly gate: PlanGate; readonly sites: SiteService; readonly brand: BrandService; readonly insights: InsightsService; readonly progress: ProgressService;
   constructor(deps: AgentDeps) {
-    this.db = deps.db; this.gate = deps.gate ?? OPEN_GATE; this.crawl = { maxPages: 8, ...deps.crawl }; this.researchSource = deps.researchSource ?? new NullResearchSource();
+    this.db = deps.db; this.gate = deps.gate ?? OPEN_GATE; this.crawl = { maxPages: 8, ...deps.crawl }; this.researchSource = deps.researchSource ?? new NullResearchSource(); this.discovery = deps.discovery ?? new NullDiscovery();
     this.authz = new Authz(deps.db); this.audit = new AuditLog(deps.db);
     this.profiles = new ProfileService(deps.db, this.authz, this.audit);
     this.context = new ContextBuilder(deps.db, this.authz, this.profiles);

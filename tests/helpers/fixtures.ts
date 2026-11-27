@@ -13,10 +13,10 @@ import type { PlanGate } from '../../src/agent/plans';
 
 export type TestPlan = 'open' | 'free' | 'report' | 'assistant' | 'studio' | 'suite';
 /** `plan: 'open'` = no plan limits (agent library tests). Any other value wires the REAL billing-backed gate and seeds that plan. */
-export async function setup(opts: { provider?: LLMProvider; plan?: TestPlan } = {}) {
+export async function setup(opts: { provider?: LLMProvider; plan?: TestPlan; discovery?: import('../../src/agent/research/discovery').Discovery } = {}) {
   const db = createInMemoryDb(); const queue = new ManualQueue(); const plan = opts.plan ?? 'open';
   const ent = new Entitlements(db); const gate: PlanGate | undefined = plan === 'open' ? undefined : ent;
-  const agent: Agent = createAgent({ db, provider: opts.provider ?? new MockProvider(), queue, backoffMs: 0, gate, crawl: { fetchImpl: fakeFetch, resolve: publicResolver, maxPages: 6 },
+  const agent: Agent = createAgent({ db, provider: opts.provider ?? new MockProvider(), queue, discovery: opts.discovery, backoffMs: 0, gate, crawl: { fetchImpl: fakeFetch, resolve: publicResolver, maxPages: 6 },
     hooks: plan === 'open' ? undefined : { beforeSubmit: (c, t) => ent.assertCanStart(c, t), onCompleted: (c, x) => ent.onCompleted(c, x) } });
   const owner = await createBusiness(db, agent.audit, 'user-owner', { name: 'Summit Plumbing', website: 'https://summitplumbing.example' });
   if (plan === 'report') await db.billing.insert({ businessId: owner.businessId, userId: owner.userId, reportCredits: 1 });

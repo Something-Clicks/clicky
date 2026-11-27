@@ -130,29 +130,42 @@ export const seo_intelligence: CapabilityDef = {
 
 export const market_research: CapabilityDef = {
   id: 'market_research', optional: (t) => t !== 'competitor_research',
-  async preflight({ params, taskType }) { return taskType === 'competitor_research' && !params.competitorUrls?.length ? ['Which competitors should I look at? Paste up to 5 competitor website addresses.'] : []; },
+  async preflight({ agent, params, taskType }) { return taskType === 'competitor_research' && !params.competitorUrls?.length && agent.discovery.name === 'none' ? ['Which competitors should I look at? Paste up to 5 competitor website addresses.'] : []; },
   async run(env) {
     await env.agent.gate.require(env.ctx, 'research_advanced');
     const p = await env.agent.profiles.effective(env.ctx); const sum = ProfileService.summarize(p, ['business']);
     const business = Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, v.value])); const rid: string[] = env.state.researchIds ?? []; const notes: string[] = [];
-    if (env.params.competitorUrls?.length) {
-      const r = await researchCompetitors(env.agent.llm, { business, ownScan: await ownScan(env), competitors: env.params.competitorUrls.map((url) => ({ url })), crawl: env.agent.crawl }, env.usage);
+    // Competitors the customer named are used as given. Otherwise the agent finds candidates itself from public sources (labelled, never silently trusted).
+    let compUrls = env.params.competitorUrls; let discovered: { via: string[]; names: string[] } | undefined;
+    if (!compUrls?.length && env.agent.discovery.name !== 'none') {
+      const first = (v: unknown) => String(Array.isArray(v) ? (v[0] ?? '') : (v ?? '')).trim();
+      const industry = first(business.industry); const area = first(business.service_areas) || first(business.service_area) || first(business.location);
+      if (!industry || !area) env.limitations.push('Competitors could not be discovered automatically because the business type or service area is not known yet.');
+      else {
+        const d = await env.agent.discovery.competitors({ industry, place: area, ownUrl: await websiteUrl(env), limit: 5 });
+        if (d.candidates.length) { compUrls = d.candidates.map((c) => c.website!); discovered = { via: d.sources, names: d.candidates.map((c) => c.name) };
+          env.limitations.push(`Competitors were discovered automatically (${d.sources.join(', ')}) as ${industry} businesses near ${area}, and have not been confirmed by you: ${d.candidates.map((c) => `${c.name} (${c.website})`).join('; ')}.`); }
+        else env.limitations.push(`No competitors were found automatically for ${industry} near ${area}${d.errors.length ? ` (${d.errors.join('; ')})` : ''}; none are guessed.`);
+      }
+    }
+    if (compUrls?.length) {
+      const r = await researchCompetitors(env.agent.llm, { business, ownScan: await ownScan(env), competitors: compUrls.map((url) => ({ url })), crawl: env.agent.crawl }, env.usage);
       env.mock.value ||= r.mock; if (r.model !== 'none') env.models.add(r.model);
       const ids: string[] = [];
       for (const s of r.scans) ids.push((await env.agent.db.scans.insert({ businessId: env.ctx.businessId, siteId: siteOf(env.ctx), scan: s.scan, label: 'competitor', subject: s.subject })).id);
       env.state.competitorScanIds = ids;
       if (r.comparison.competitors.length) {
-        rid.push((await env.agent.db.research.insert({ businessId: env.ctx.businessId, siteId: siteOf(env.ctx), kind: 'competitor', title: `Competitor comparison (${r.comparison.competitors.length})`, data: r.comparison, evidence: 'inferred', source: r.scans.map((s) => s.subject).join(', '), collectedAt: nowIso() })).id);
+        rid.push((await env.agent.db.research.insert({ businessId: env.ctx.businessId, siteId: siteOf(env.ctx), kind: 'competitor', title: `Competitor comparison (${r.comparison.competitors.length}${discovered ? ', discovered automatically' : ''})`, data: discovered ? { ...r.comparison, discovered } : r.comparison, evidence: 'inferred', source: r.scans.map((s) => s.subject).join(', '), collectedAt: nowIso() })).id);
         env.state.competitorFindings = competitorFindings(r.comparison); notes.push(`${r.comparison.competitors.length} competitor(s) compared`);
       }
       for (const s of r.skipped) env.limitations.push(`Competitor ${s.url} could not be read: ${s.reason}`);
       if (!r.comparison.competitors.length && env.exec.taskType === 'competitor_research') throw new ValidationError('None of the competitor websites could be read, so no comparison was made. ' + r.skipped.map((s) => `${s.url}: ${s.reason}`).join('; '), 'competitors_unreadable');
-    } else env.limitations.push('No competitors were supplied, so no competitor comparison was made; competitors are never guessed.');
+    } else if (!env.limitations.some((l) => /competitor/i.test(l))) env.limitations.push('No competitors were supplied or discovered, so no competitor comparison was made; competitors are never guessed.');
     const lib = (await env.agent.db.research.list(env.ctx.businessId, undefined, { newestFirst: true })).filter((r) => inSite(r, env.ctx)).slice(0, 20).map((r) => ({ id: r.id, kind: r.kind, title: r.title, data: r.data, evidence: r.evidence, collectedAt: r.collectedAt }));
     const m = await marketResearch(env.agent.llm, { business, library: lib, source: env.agent.researchSource, notes: env.params.notes }, env.usage);
     env.mock.value ||= m.mock; env.models.add(m.model);
     rid.push((await env.agent.db.research.insert({ businessId: env.ctx.businessId, siteId: siteOf(env.ctx), kind: 'market', title: 'Market research notes', data: { findings: m.findings, researchQuestions: m.researchQuestions, externalSource: m.externalSource, sourcesUsed: m.sourcesUsed }, evidence: m.sourcesUsed ? 'verified' : 'inferred', source: m.externalSource, collectedAt: m.collectedAt })).id);
-    if (!m.sourcesUsed) env.limitations.push('No external market-research source is connected; market findings are hypotheses, not measured data.');
+    if (!m.sourcesUsed) env.limitations.push(m.sourceErrors?.length ? `The market-research source (${m.externalSource}) could not be reached (${m.sourceErrors.join('; ')}); market findings are hypotheses, not measured data.` : 'No external market-research source returned results; market findings are hypotheses, not measured data.');
     env.questions.push(...m.researchQuestions.slice(0, 3));
     env.state.researchIds = rid;
     return notes.concat(`${m.findings.length} market note(s)`).join('; ') + '.';

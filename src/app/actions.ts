@@ -72,9 +72,19 @@ export async function createWorkspace(f: FormData) {
   await guard('/onboarding', async () => {
     const user = await requireUser(); const { db, agent } = (await getContainer());
     const ctx = await createBusiness(db, agent.audit, user.id, { name: s(f, 'name'), website: s(f, 'website') || undefined });
+    const place = s(f, 'place');
+    if (place) await agent.profiles.applyUpdates(ctx, [{ key: 'service_areas', value: [place], provenance: { source: 'customer_supplied', evidence: 'verified', sourceRef: 'onboarding form' } }], { type: 'user', id: user.id });
     const zip = s(f, 'zip'); if (zip && !/^\d{5}$/.test(zip)) throw new AppError('bad_zip', 'Enter a 5-digit ZIP code');
     const run = await agent.orchestrator.submit(ctx, { request: 'Review my website and tell me what to fix', taskType: 'website_audit', params: { zip: zip || undefined, url: s(f, 'website') || undefined } });
     redirect(`/runs/${run.id}`);
+  });
+}
+
+/** The agent looks for the business's own website from its name and place (public sources); the customer confirms which one is theirs. */
+export async function findMyWebsite(f: FormData) {
+  await guard('/onboarding', async () => {
+    await requireUser(); const name = s(f, 'name'); if (!name) throw new AppError('name_required', 'Enter the business name first');
+    redirect(`/onboarding?find=1&name=${encodeURIComponent(name)}&place=${encodeURIComponent(s(f, 'place'))}`);
   });
 }
 

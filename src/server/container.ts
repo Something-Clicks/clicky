@@ -15,6 +15,8 @@ import { env, supabaseConfigured } from './env';
 import { PreviewService } from './previews';
 import { customerClient } from './supabase/clients';
 import { AppError } from '@/agent/core/errors';
+import { PublicDiscovery } from '@/agent/research/discovery';
+import { CompositeSource, DuckDuckGoSource, OpenStreetMapSource, SearxngSource } from '@/agent/research/sources';
 import { fakeFetch, publicResolver } from './dev-fixtures';
 
 /** Runs queued work after the response is sent (Vercel `after`). Swap for Trigger.dev/cron by implementing JobQueue. */
@@ -39,12 +41,18 @@ export function pickProvider(): LLMProvider {
 export interface Container { db: Db; agent: Agent; entitlements: Entitlements; previews: PreviewService }
 const g = globalThis as unknown as { __sc?: Container };
 
+/** Public, keyless discovery and research sources (OpenStreetMap, DuckDuckGo, optional SearXNG). Set DISCOVERY=off to disable. */
+export function researchSources() {
+  if (process.env.DISCOVERY === 'off') return {};
+  const search = new CompositeSource([...(process.env.SEARXNG_URL ? [new SearxngSource(process.env.SEARXNG_URL)] : []), new DuckDuckGoSource()]);
+  return { researchSource: search, discovery: new PublicDiscovery(new OpenStreetMapSource(), search) };
+}
 function build(db: Db): Container {
   const entitlements = new Entitlements(db);
   let agent!: Agent;
   const queue = new AfterQueue((b, e) => agent.orchestrator.run(b, e));
   agent = createAgent({
-    db, provider: pickProvider(), queue, gate: entitlements, crawl: env.devMode && process.env.DEV_FIXTURE_SITES === '1' && !env.isProd ? { fetchImpl: fakeFetch, resolve: publicResolver } : undefined, emailSender: emailSender(), meter: new UsageMeter({}, { maxCostUsdPerRun: 2, maxTokensPerRun: 400_000 }),
+    db, provider: pickProvider(), queue, gate: entitlements, ...researchSources(), crawl: env.devMode && process.env.DEV_FIXTURE_SITES === '1' && !env.isProd ? { fetchImpl: fakeFetch, resolve: publicResolver } : undefined, emailSender: emailSender(), meter: new UsageMeter({}, { maxCostUsdPerRun: 2, maxTokensPerRun: 400_000 }),
     hooks: { beforeSubmit: (ctx, t) => entitlements.assertCanStart(ctx, t), onCompleted: (ctx, x) => entitlements.onCompleted(ctx, x) },
   });
   return { db, agent, entitlements, previews: new PreviewService(db, agent, entitlements) };
