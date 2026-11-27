@@ -14,6 +14,8 @@ describe('OpenAI-compatible provider (hosted or self-hosted models)', () => {
     expect(a.seen[0]!.body.messages[1].content).not.toContain('Return JSON matching');
     const b = server(() => reply('{"n":1}')); await new OpenAICompatibleProvider({ baseUrl: 'http://x/v1', model: 'm', fetchImpl: b.f }).complete(req);
     expect(b.seen[0]!.body.response_format).toEqual({ type: 'json_object' }); expect(b.seen[0]!.body.messages[1].content).toContain('Return JSON matching');
+    const d = server(() => reply('{"n":1}')); await new OpenAICompatibleProvider({ baseUrl: 'http://x/v1', model: 'm', structured: 'json_object_schema', fetchImpl: d.f }).complete(req);
+    expect(d.seen[0]!.body.response_format).toMatchObject({ type: 'json_object', schema: expect.any(Object) });
     const c = server(() => reply('{}')); await new OpenAICompatibleProvider({ baseUrl: 'http://x/v1', model: 'm', structured: 'none', fetchImpl: c.f }).complete(req); expect(c.seen[0]!.body.response_format).toBeUndefined();
   });
   it('merges deployment options (e.g. disable thinking) but can never override the model or messages', async () => {

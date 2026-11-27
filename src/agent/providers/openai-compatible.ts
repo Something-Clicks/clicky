@@ -10,10 +10,11 @@ export interface OpenAICompatibleConfig {
   /**
    * How to ask for JSON:
    *  - "json_schema": constrained decoding against the task's schema (vLLM, llama.cpp, OpenAI). Most reliable for open-weight models.
+   *  - "json_object_schema": llama-cpp-python's server: {type:'json_object', schema} (grammar-constrained).
    *  - "json_object": generic JSON mode (default).
    *  - "none": prompt only (servers without response_format support).
    */
-  structured?: 'json_schema' | 'json_object' | 'none';
+  structured?: 'json_schema' | 'json_object' | 'json_object_schema' | 'none';
   /** Extra request-body fields for this deployment, e.g. {"chat_template_kwargs":{"enable_thinking":false}} for Qwen3. Cannot override model/messages. */
   extraBody?: Record<string, unknown>;
   fetchImpl?: typeof fetch;
@@ -44,6 +45,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     ].filter(Boolean).join('\n\n');
     const mode = this.cfg.structured ?? 'json_object';
     const responseFormat = mode === 'json_schema' && req.jsonSchema ? { type: 'json_schema', json_schema: { name: req.task.replace(/\W/g, '_').slice(0, 60), schema: req.jsonSchema } }
+      : mode === 'json_object_schema' && req.jsonSchema ? { type: 'json_object', schema: req.jsonSchema }
       : mode === 'none' ? undefined : { type: 'json_object' };
     const { model: _m, messages: _x, ...extra } = (this.cfg.extraBody ?? {}) as Record<string, unknown>;
     let res: Response;
@@ -74,7 +76,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 export function providerFromEnv(env: Record<string, string | undefined> = process.env): LLMProvider | undefined {
   if (!env.LLM_BASE_URL || !env.LLM_MODEL) return undefined;
   const structured = env.LLM_STRUCTURED as OpenAICompatibleConfig['structured'] | undefined;
-  if (structured && !['json_schema', 'json_object', 'none'].includes(structured)) throw new Error('LLM_STRUCTURED must be json_schema, json_object or none');
+  if (structured && !['json_schema', 'json_object', 'json_object_schema', 'none'].includes(structured)) throw new Error('LLM_STRUCTURED must be json_schema, json_object, json_object_schema or none');
   let extraBody: Record<string, unknown> | undefined;
   if (env.LLM_EXTRA_BODY) { try { extraBody = JSON.parse(env.LLM_EXTRA_BODY); } catch { throw new Error('LLM_EXTRA_BODY must be valid JSON'); } }
   return new OpenAICompatibleProvider({ baseUrl: env.LLM_BASE_URL, apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, structured, extraBody, timeoutMs: env.LLM_TIMEOUT_MS ? Number(env.LLM_TIMEOUT_MS) : undefined });
