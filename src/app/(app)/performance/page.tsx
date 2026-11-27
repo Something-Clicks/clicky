@@ -1,0 +1,21 @@
+import { submitRequest, uploadMetrics } from '../../actions';
+import { EvidencePill, MockBanner, Notice, one, Pill, type SP, when } from '@/components/ui';
+import { requireWorkspace } from '@/server/auth';
+import { getContainer } from '@/server/container';
+import type { PerformanceReportData } from '@/agent/capabilities/performance';
+
+export default async function Performance({ searchParams }: { searchParams: SP }) {
+  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
+  const reports = await agent.performance.reports(ctx); const r = reports[0]?.data as PerformanceReportData | undefined; const today = new Date().toISOString().slice(0, 10);
+  return (<><h1>Performance</h1><p className="mut">The agent reports only numbers you supply (Search Console, Analytics or email exports). It never estimates traffic, rankings or results.</p><Notice e={one(sp.e)} m={one(sp.m)} />
+    <form action={uploadMetrics} className="card"><h3>Upload results</h3>
+      <label htmlFor="source">Where is this from?</label><select id="source" name="source"><option value="gsc_manual">Google Search Console</option><option value="ga4_manual">Google Analytics</option><option value="email_platform_manual">Email platform</option><option value="csv_upload">Other CSV</option></select>
+      <div className="grid g2"><div><label htmlFor="start">Period start</label><input id="start" name="start" type="date" required max={today} /></div><div><label htmlFor="end">Period end</label><input id="end" name="end" type="date" required max={today} /></div></div>
+      <label htmlFor="file">CSV file</label><input id="file" name="file" type="file" accept=".csv,text/csv" required /><p className="small mut">Columns like query/page, clicks, impressions, position, sessions, conversions (or metric,value,dimension). Re-uploading the same source and period replaces it.</p><button>Import</button></form>
+    <form action={submitRequest} className="card"><input type="hidden" name="back" value="/performance" /><input type="hidden" name="taskType" value="performance_review" /><input type="hidden" name="request" value="Evaluate our latest marketing results" /><div className="row"><span>Compare the latest period with the one before and get next steps.</span><span className="sp" /><button>Run performance review</button></div></form>
+    {r && reports[0] && (<><h2>Latest report</h2><p className="mut small">{r.current.start} to {r.current.end}{r.previous ? ` vs ${r.previous.start} to ${r.previous.end}` : ''} · generated {when(reports[0].createdAt)} · sources: {r.sources.join(', ')}</p><MockBanner show={r.mock} />
+      <div className="card"><table><thead><tr><th>Metric</th><th>Now</th><th>Before</th><th>Change</th><th>Assessment</th></tr></thead><tbody>{r.metrics.map((m) => (<tr key={m.metric}><td>{m.label}{m.caveats.map((c) => <div key={c} className="small mut">{c}</div>)}</td><td>{fmt(m.metric, m.current)}</td><td>{fmt(m.metric, m.previous)}</td><td>{m.pctChange === null ? '—' : `${m.pctChange > 0 ? '+' : ''}${m.pctChange}%`}</td><td><Pill cls={m.assessment === 'improved' ? 'e-verified' : m.assessment === 'declined' ? 'p-critical' : ''}>{m.assessment.replace('_', ' ')}</Pill> <span className="small mut">confidence {m.confidence}</span></td></tr>))}</tbody></table></div>
+      {r.recommendations && <div className="card"><h3>What this suggests</h3><p>{r.recommendations.summary}</p><ul>{r.recommendations.recommendations.map((x, i) => <li key={i}><strong>{x.title}</strong> <EvidencePill v="inferred" /><br />{x.rationale}<div className="small">Next: {x.action}</div></li>)}</ul></div>}
+      <div className="card"><h3>Read this with care</h3><ul>{[...r.dataQuality, ...(r.missingMetrics.length ? [`Not supplied: ${r.missingMetrics.join(', ')}`] : []), ...(r.coincidentActivities.length ? [`${r.coincidentActivities.length} approved or completed activit${r.coincidentActivities.length === 1 ? 'y' : 'ies'} fell in this window; timing coincides with, but does not prove, the changes.`] : [])].map((x) => <li key={x} className="small">{x}</li>)}</ul></div></>)}</>);
+}
+const fmt = (m: string, v?: number) => (v === undefined ? '—' : /rate|ctr/.test(m) ? `${(v * 100).toFixed(2)}%` : Number.isInteger(v) ? v.toLocaleString() : v.toFixed(1));
