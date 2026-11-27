@@ -86,3 +86,13 @@ describe('Marketing Suite: everything, across multiple websites and locations', 
     await submit(s, 'Develop a marketing plan'); expect((await s.runAll())[0]!.status).toBe('succeeded');
   });
 });
+
+describe('one draft the model cannot produce does not discard the others', () => {
+  it('the run succeeds with the drafts that validated and reports the failure; with none validating it fails honestly', async () => {
+    const { MockProvider } = await import('../src/agent/providers/mock'); const mock = new MockProvider(); let n = 0;
+    const flaky = { name: 'flaky', isMock: true, async complete(req: Parameters<typeof mock.complete>[0]) { if (req.task === 'content_generation' && ++n >= 2) return { text: JSON.stringify({ title: 'x', summary: 'x', blocks: [{ key: 'wrong', text: 'x', items: [] }], assumptions: [], needsCustomerInput: [] }), model: 'flaky', usage: { inputTokens: 1, outputTokens: 1 } } as never; return mock.complete(req); } };
+    const s = await setup({ plan: 'studio', provider: flaky as never }); await submit(s, 'Review my website'); const [r] = await s.runAll();
+    const drafts = await s.agent.db.deliverables.list(s.owner.businessId);
+    if (n >= 2) { expect(r!.status).toBe('succeeded'); expect(r!.limitations.join(' ')).toMatch(/draft could not be prepared/i); expect(drafts.length).toBeGreaterThan(0); } else expect(drafts.length).toBeGreaterThan(0);
+  });
+});

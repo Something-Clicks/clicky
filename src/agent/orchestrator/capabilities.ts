@@ -238,14 +238,20 @@ export const content_creation: CapabilityDef = {
     if (env.params.noDrafts) return 'Drafts were not requested for this review.';
     if (!(await env.agent.gate.has(env.ctx, 'drafts_basic'))) { env.limitations.push('Marketing drafts are not part of your plan, so none were prepared. Your findings and next steps are above.'); return 'Drafts not included in this plan; skipped.'; }
     let quota = await env.agent.gate.draftsRemaining(env.ctx); if (quota < 1) { env.limitations.push('You have used all the drafts included in this billing period, so none were prepared.'); return 'Draft limit reached; skipped.'; }
-    const ids: string[] = []; const profile = await env.agent.profiles.effective(env.ctx); const scan = await ownScan(env);
+    const ids: string[] = []; const failures: string[] = []; const profile = await env.agent.profiles.effective(env.ctx); const scan = await ownScan(env);
     const excerpts = (scan?.pages ?? []).filter((p) => p.ok).slice(0, 5).map((p) => ({ url: p.finalUrl, text: [p.title, p.metaDescription, ...p.h1, ...p.h2, p.text.slice(0, 1500)].filter(Boolean).join('\n') }));
     const kwRows = ((await env.agent.db.research.list(env.ctx.businessId, { kind: 'keyword' }, { newestFirst: true })).find((r) => inSite(r, env.ctx))?.data as { rows?: { keyword: string; volume?: number; intent?: string }[] } | undefined)?.rows?.slice(0, 15);
     const gen = async (type: DeliverableType, extra: { cardId?: string; brief?: string; evidence?: unknown; pageUrl?: string }) => {
       if (quota < 1) return;
       if (!(await env.agent.gate.has(env.ctx, draftFeature(type)))) { env.limitations.push(`A ${type.replace(/_/g, ' ')} draft needs Marketing Studio, so it was not prepared.`); return; }
       quota--;
-      const d = await env.agent.deliverables.generate(env.ctx, { type, scanExcerpts: excerpts, keywords: kwRows, suppliedFacts: [env.params.notes ?? '', env.exec.request, ...(env.params.zip ? [`ZIP ${env.params.zip}`] : [])], ...extra }, env.usage);
+      let d;
+      try { d = await env.agent.deliverables.generate(env.ctx, { type, scanExcerpts: excerpts, keywords: kwRows, suppliedFacts: [env.params.notes ?? '', env.exec.request, ...(env.params.zip ? [`ZIP ${env.params.zip}`] : [])], ...extra }, env.usage); }
+      catch (e) {
+        // One draft the model cannot produce reliably must not discard the others. The failure is reported, never papered over with a template.
+        if ((e as { code?: string }).code !== 'invalid_model_output') throw e;
+        quota++; failures.push(`${type.replace(/_/g, ' ')}: ${(e as Error).message}`); env.limitations.push(`A ${type.replace(/_/g, ' ')} draft could not be prepared: the model's output did not pass validation (${(e as Error).message.slice(0, 160)}). Use Retry to try again.`); return;
+      }
       ids.push(d.id);
       const v = d.versions[0]!; env.mock.value ||= /MOCK/.test(v.note ?? '');
     };
@@ -268,7 +274,8 @@ export const content_creation: CapabilityDef = {
     void profile;
     const existing = (env.state.existingDeliverableIds as string[] | undefined) ?? [];
     if (!ids.length && existing.length) { env.state.deliverableIds = [...(env.state.deliverableIds ?? []), ...existing]; return `${existing.length} draft(s) for these findings already exist; linked below instead of writing duplicates.`; }
-    return ids.length ? `${ids.length} editable deliverable(s) prepared for your review.` : 'No deliverable was needed for this request.';
+    if (!ids.length && failures.length && !existing.length) throw new ValidationError(`No draft could be prepared: ${failures.join(' | ')}`, 'invalid_model_output');
+    return ids.length ? `${ids.length} editable deliverable(s) prepared for your review${failures.length ? `; ${failures.length} could not be prepared (see limitations)` : ''}.` : 'No deliverable was needed for this request.';
   },
 };
 

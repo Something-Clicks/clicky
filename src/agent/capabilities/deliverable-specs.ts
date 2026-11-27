@@ -39,7 +39,7 @@ export function validateBlocks(type: DeliverableType, blocks: ContentBlock[]): s
   const spec = DELIVERABLE_SPECS[type];
   const byKey = new Map(blocks.map((b) => [b.key, b]));
   const missing = spec.required.filter((k) => { const b = byKey.get(k); return !b || (!b.text.trim() && !(b.items && b.items.length)); });
-  if (missing.length) return `Missing or empty required blocks for ${type}: ${missing.join(', ')}`;
+  if (missing.length) return `Missing or empty required blocks for ${type}: ${missing.join(', ')}. You returned blocks with keys [${blocks.map((b) => b.key).join(', ')}]; return blocks using EXACTLY the required keys [${spec.required.join(', ')}], each with non-empty "text" or "items" (for list-like blocks put one entry per item in "items", e.g. question and answer together).`;
   for (const [k, max] of Object.entries(spec.maxLen ?? {})) {
     const b = byKey.get(k);
     if (b && b.text.length > max) return `Block "${k}" is ${b.text.length} chars; maximum is ${max}`;
