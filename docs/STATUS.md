@@ -85,3 +85,10 @@ See [OPERATIONS_HANDOFF.md](OPERATIONS_HANDOFF.md) for the exact steps.
 2. Connect a model (`LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY`) in dev; run `npm run eval` and review outputs by hand; tune prompts.
 3. Stripe test mode: set the seven price env vars, run a real Checkout and portal plan change end to end.
 4. Team invitations UI, data export/deletion, shared rate limiting.
+
+## Update: real-database agent workflow (latest)
+`tests/real-agent-workflow.test.ts` runs the central agent through REAL clicky-dev customer sessions with a deterministic provider and a fixture website:
+review -> evidence-backed Action Cards saved and visible to the other member; draft -> member cannot approve, owner approves, execution needs owner
+authorization and verifies. It found and fixed a real bug (members could not write audit records because the insert read the row back and the audit trail is owner-readable).
+It proves workflow, permissions and database behaviour only; **no real model has been connected or tested, so analysis/strategy/content quality is unmeasured.**
+The test is not re-runnable without clearing the sc-test organization's `sc_*` rows (duplicate-execution prevention correctly returns the earlier request).

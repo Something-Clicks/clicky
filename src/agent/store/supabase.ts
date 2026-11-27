@@ -28,7 +28,8 @@ const SQL_NAME: Record<(typeof TABLE_NAMES)[number], string> = {
 const CORE = ['id', 'businessId', 'version', 'createdAt', 'updatedAt'] as const;
 
 export class SupabaseTable<T extends Row> implements Table<T> {
-  constructor(private readonly client: SupabaseLike, private readonly name: string) {}
+  /** `writeOnly`: the caller may INSERT but not SELECT these rows (the audit trail is owner-readable), so the insert must not read the row back. */
+  constructor(private readonly client: SupabaseLike, private readonly name: string, private readonly writeOnly = false) {}
 
   private toRow(r: any): T { // eslint-disable-line @typescript-eslint/no-explicit-any
     return { ...r.data, id: r.id, businessId: r.business_id, version: r.version, createdAt: r.created_at, updatedAt: r.updated_at } as T;
@@ -41,9 +42,9 @@ export class SupabaseTable<T extends Row> implements Table<T> {
   async insert(row: NewRow<T>): Promise<T> {
     const t = nowIso();
     const id = row.id ?? newId();
-    const { data, error } = await this.client.from(this.name)
-      .insert({ id, business_id: row.businessId, version: 1, created_at: t, updated_at: t, data: this.strip(row) })
-      .select().single();
+    const record = { id, business_id: row.businessId, version: 1, created_at: t, updated_at: t, data: this.strip(row) };
+    if (this.writeOnly) { const { error } = await this.client.from(this.name).insert(record); if (error) throw this.fail(error); return this.toRow(record); }
+    const { data, error } = await this.client.from(this.name).insert(record).select().single();
     if (error) throw this.fail(error);
     return this.toRow(data);
   }
@@ -110,7 +111,7 @@ export class SupabaseTable<T extends Row> implements Table<T> {
  */
 export function createSupabaseDb(client: SupabaseLike): Db {
   const orgs = new OrganizationTable(client);
-  const own = Object.fromEntries(TABLE_NAMES.filter((n) => SQL_NAME[n]).map((n) => [n, new SupabaseTable(client, SQL_NAME[n])]));
+  const own = Object.fromEntries(TABLE_NAMES.filter((n) => SQL_NAME[n]).map((n) => [n, new SupabaseTable(client, SQL_NAME[n], n === 'audit')]));
   return { ...own, businesses: orgs, members: new MemberTable(client), billing: new BillingView(client),
     stripeEvents: new ServerOnlyTable('Stripe event processing'), previews: new ServerOnlyTable('Anonymous previews'),
     provision: (name: string, website?: string) => orgs.provision(name, website) } as unknown as Db;
