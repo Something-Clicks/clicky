@@ -245,3 +245,14 @@ describe('model output shape coercion (small open-weight models)', () => {
     expect(r.updates.find((u) => u.key === 'pricing')!.value).toBe('Free audit; $49 report'); expect(r.updates.find((u) => u.key === 'products_services')!.value).toEqual(['SEO', 'Web design']);
   });
 });
+
+import { ProfileService } from '../src/agent/profile/service';
+describe('avoid terms are the customer’s rules, not the model’s guesses', () => {
+  const mk = (source: string, confirmed: boolean) => ({ id: 'p', businessId: 'b', version: 1, createdAt: '', updatedAt: '', fields: { avoid_terms: { value: ['retainers'], confirmed, provenance: { source, evidence: 'inferred', recordedAt: '' }, updatedAt: '', conflicts: [], previous: [] } } }) as never;
+  it('enforces only confirmed or customer-supplied avoid terms', () => {
+    expect(ProfileService.confirmedList(mk('ai_inference', false), 'avoid_terms')).toEqual([]);
+    expect(ProfileService.confirmedList(mk('website', false), 'avoid_terms')).toEqual([]);
+    expect(ProfileService.confirmedList(mk('customer_supplied', false), 'avoid_terms')).toEqual(['retainers']);
+    expect(ProfileService.confirmedList(mk('ai_inference', true), 'avoid_terms')).toEqual(['retainers']);
+  });
+});

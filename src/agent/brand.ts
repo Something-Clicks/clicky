@@ -2,7 +2,7 @@ import { hashContent, normalizeText } from './core/util';
 import type { Finding, SiteRow, WebsiteScan } from './domain/models';
 import type { CardService } from './capabilities/cards';
 import { OPEN_GATE, type PlanGate } from './plans';
-import type { ProfileService } from './profile/service';
+import { ProfileService } from './profile/service';
 import { FIELD_BY_KEY } from './profile/fields';
 import type { AuditLog } from './store/audit';
 import type { Ctx } from './store/authz';
@@ -35,7 +35,7 @@ export class BrandService {
   async report(ctx: Ctx): Promise<BrandReport> {
     await this.authz.require(ctx, 'view'); await this.gate.require(ctx, 'brand_management');
     const base = await this.profiles.getInternal(ctx.businessId); const sites = await this.sites.list(ctx);
-    const avoid = [base.fields.avoid_terms?.value ?? []].flat(); const keyMsgs = [base.fields.key_messages?.value ?? []].flat(); const bizName = [base.fields.name?.value ?? ''].flat().join(' ');
+    const avoid = ProfileService.confirmedList(base, 'avoid_terms'); const keyMsgs = [base.fields.key_messages?.value ?? []].flat(); const bizName = [base.fields.name?.value ?? ''].flat().join(' ');
     const limitations: string[] = []; const out: BrandReport['sites'] = [];
     for (const site of sites) {
       const scan = await this.latestScan(ctx, site.id); const findings: Finding[] = [];

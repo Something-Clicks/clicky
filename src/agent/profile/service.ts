@@ -145,4 +145,6 @@ export class ProfileService {
   }
   static text(p: ProfileRow, key: string): string | undefined { const v = p.fields[key]?.value; return v === undefined ? undefined : [v].flat().join('; '); }
   static list(p: ProfileRow, key: string): string[] { const v = p.fields[key]?.value; return v === undefined ? [] : [v].flat(); }
+  /** Only what the customer confirmed or supplied. Model-inferred guesses must never be enforced as the customer's rules. */
+  static confirmedList(p: ProfileRow, key: string): string[] { const f = p.fields[key]; return f && (f.confirmed || f.provenance.source === 'customer_confirmed' || f.provenance.source === 'customer_supplied') ? [f.value].flat() : []; }
 }

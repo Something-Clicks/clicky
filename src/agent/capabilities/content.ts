@@ -43,7 +43,7 @@ export class DeliverableService {
     const profile = await this.profiles.effective(ctx);
     const spec = DELIVERABLE_SPECS[input.type];
     const corpus = factsCorpus(profile, [...(input.corpusExtra ?? []), ...(input.suppliedFacts ?? []), ...(input.scanExcerpts ?? []).map((s) => s.text), JSON.stringify(input.keywords ?? [])]);
-    const avoid = ProfileService.list(profile, 'avoid_terms');
+    const avoid = ProfileService.confirmedList(profile, 'avoid_terms');
     let flagsFinal: ClaimFlag[] = [];
     const res = await this.llm.generate({
       task: 'content_generation', usage, schema: ContentSchema,
@@ -81,7 +81,7 @@ Use the brand voice, tone, key messages and preferred terms; never use avoid_ter
     const shape = validateBlocks(d.type, edit.blocks); if (shape) throw new ValidationError(shape);
     const profile = await this.profiles.effective(ctx);
     const cur = this.current(d);
-    const flags = computeFlags(edit.blocks, factsCorpus(profile), ProfileService.list(profile, 'avoid_terms')).map((f) => cur.flags.find((c) => c.excerpt === f.excerpt && c.acknowledgedBy) ?? f);
+    const flags = computeFlags(edit.blocks, factsCorpus(profile), ProfileService.confirmedList(profile, 'avoid_terms')).map((f) => cur.flags.find((c) => c.excerpt === f.excerpt && c.acknowledgedBy) ?? f);
     const v: DeliverableVersion = { n: d.versions.length + 1, title: edit.title ?? cur.title, summary: cur.summary, blocks: edit.blocks, assumptions: cur.assumptions, needsCustomerInput: cur.needsCustomerInput, author: ctx.userId, note: edit.note, createdAt: nowIso(), contentHash: '', flags };
     v.contentHash = hashOf(v);
     const upd = await this.db.deliverables.update(ctx.businessId, id, { versions: [...d.versions, v], currentVersion: v.n, status: 'in_review', approval: undefined, rejection: undefined }, d.version);
