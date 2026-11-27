@@ -26,7 +26,7 @@ describe('mock / fixture / simulated output can never become real customer resul
   it('the app refuses to start in production without Supabase configured (no silent in-memory data)', async () => {
     vi.doMock('next/server', () => ({ after: (f: () => void) => f() }));
     setEnv({ NODE_ENV: 'production', DEV_MODE: undefined, NEXT_PUBLIC_SUPABASE_URL: undefined, SUPABASE_SERVICE_ROLE_KEY: undefined }); vi.resetModules();
-    const m = await import('../src/server/container'); expect(() => m.getContainer()).toThrow(/Supabase is not configured/);
+    const m = await import('../src/server/container'); await expect(m.getContainer()).rejects.toThrow(/Supabase is not configured/);
   });
   it('a mock-generated draft or strategy cannot be approved or actioned if it ever exists in production', async () => {
     const { agent, owner, runAll } = await setup(); await agent.orchestrator.submit(owner, { request: 'Develop a marketing plan' }); await runAll();

@@ -7,7 +7,7 @@ import { TASK_LABEL } from '@/agent/orchestrator/workflows';
 
 const PRESETS = [['Improve my homepage headline', 'homepage_copy'], ['Research my competitors', 'competitor_research'], ['Develop a marketing plan', 'marketing_plan'], ['Review my website', 'website_audit']] as const;
 export default async function Dashboard({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams; const { ctx, business } = await requireWorkspace(); const { agent, entitlements } = getContainer();
+  const sp = await searchParams; const { ctx, business } = await requireWorkspace(); const { agent, entitlements } = (await getContainer());
   const [board, runs, usage, comp] = await Promise.all([agent.cards.board(ctx, { status: ['new', 'ready_for_review', 'drafting', 'approved'] }), agent.orchestrator.list(ctx, 5), entitlements.status(ctx), agent.profiles.completeness(ctx.businessId)]);
   return (<>
     <h1>{business.name}</h1><Notice e={one(sp.e)} m={one(sp.m)} />

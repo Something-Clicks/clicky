@@ -28,7 +28,7 @@ export const Provenance = z.object({
 });
 export type Provenance = z.infer<typeof Provenance>;
 
-export const Role = z.enum(['owner', 'admin', 'editor', 'viewer']);
+export const Role = z.enum(['owner', 'member']);
 export type Role = z.infer<typeof Role>;
 
 /** Spec §8 deliverable types. */

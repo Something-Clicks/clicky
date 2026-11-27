@@ -53,10 +53,10 @@ describe('plans', () => {
     await use(ent, owner, 3); await expect(ent.require(owner, 'drafts_basic')).rejects.toMatchObject({ code: 'usage_limit' });
   });
   it('Marketing Report credit funds exactly one website review and nothing else', async () => {
-    const { ent, owner, db } = await setup({ plan: 'report' }); await use(ent, owner, 3, 'content_request');
+    const { ent, owner } = await setup({ plan: 'report' }); await use(ent, owner, 3, 'content_request');
     expect(await ent.has(owner, 'website_review')).toBe(true); expect(await ent.has(owner, 'drafts_basic')).toBe(false);
     await expect(ent.require(owner, 'drafts_basic')).rejects.toMatchObject({ code: 'plan_required' }); await ent.assertCanStart(owner, 'website_audit');
-    await ent.recordUse(owner, { executionId: 'rev', task: 'website_audit' }); expect((await db.billing.list(owner.businessId))[0]!.reportCredits).toBe(0);
+    await ent.recordUse(owner, { executionId: 'rev', task: 'website_audit' }); expect((await ent.status(owner)).reportCredits).toBe(0);
     await expect(ent.assertCanStart(owner, 'website_audit')).rejects.toMatchObject({ code: 'usage_limit' });
   });
   it('drafts are metered per period for subscribers; reviews are not', async () => {

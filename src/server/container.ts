@@ -13,7 +13,8 @@ import { Entitlements } from './billing/entitlements';
 import { emailSender } from './email';
 import { env, supabaseConfigured } from './env';
 import { PreviewService } from './previews';
-import { adminClient } from './supabase/clients';
+import { customerClient } from './supabase/clients';
+import { AppError } from '@/agent/core/errors';
 import { fakeFetch, publicResolver } from './dev-fixtures';
 
 /** Runs queued work after the response is sent (Vercel `after`). Swap for Trigger.dev/cron by implementing JobQueue. */
@@ -38,10 +39,7 @@ export function pickProvider(): LLMProvider {
 export interface Container { db: Db; agent: Agent; entitlements: Entitlements; previews: PreviewService }
 const g = globalThis as unknown as { __sc?: Container };
 
-export function getContainer(): Container {
-  if (g.__sc) return g.__sc;
-  if (!supabaseConfigured && !env.devMode) throw new Error('Supabase is not configured. Set the NEXT_PUBLIC_SUPABASE_* and SUPABASE_SERVICE_ROLE_KEY variables (or DEV_MODE=1 for local development).');
-  const db = supabaseConfigured ? createSupabaseDb(adminClient()) : createInMemoryDb();
+function build(db: Db): Container {
   const entitlements = new Entitlements(db);
   let agent!: Agent;
   const queue = new AfterQueue((b, e) => agent.orchestrator.run(b, e));
@@ -49,5 +47,30 @@ export function getContainer(): Container {
     db, provider: pickProvider(), queue, gate: entitlements, crawl: env.devMode && process.env.DEV_FIXTURE_SITES === '1' && !env.isProd ? { fetchImpl: fakeFetch, resolve: publicResolver } : undefined, emailSender: emailSender(), meter: new UsageMeter({}, { maxCostUsdPerRun: 2, maxTokensPerRun: 400_000 }),
     hooks: { beforeSubmit: (ctx, t) => entitlements.assertCanStart(ctx, t), onCompleted: (ctx, x) => entitlements.onCompleted(ctx, x) },
   });
-  return (g.__sc = { db, agent, entitlements, previews: new PreviewService(db, agent, entitlements) });
+  return { db, agent, entitlements, previews: new PreviewService(db, agent, entitlements) };
+}
+
+/**
+ * The container for the CURRENT request. With Supabase configured, every database call is made with the signed-in customer's own
+ * session (publishable key + their access token), so row-level security decides what they can see and change. Background work
+ * started from this request keeps using that same session. Without Supabase (DEV_MODE only) an in-memory store is used.
+ */
+export async function getContainer(): Promise<Container> {
+  if (supabaseConfigured) {
+    const c = await customerClient();
+    if (!c) throw new AppError('unauthenticated', 'Sign in to continue', 401);
+    return build(createSupabaseDb(c.client));
+  }
+  if (!env.devMode) throw new Error('Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or DEV_MODE=1 for local development).');
+  return (g.__sc ??= build(createInMemoryDb()));
+}
+
+/**
+ * Work that has no customer session (Stripe webhooks, scheduled reviews across tenants, anonymous previews) must write to rows no
+ * customer owns, which needs a protected server credential. This app does not hold one, so with Supabase configured these
+ * operations are refused explicitly instead of silently bypassing row-level security.
+ */
+export async function getServerContainer(): Promise<Container> {
+  if (supabaseConfigured) throw new AppError('server_credential_required', 'This operation needs a protected server credential that is not configured', 503);
+  return getContainer();
 }

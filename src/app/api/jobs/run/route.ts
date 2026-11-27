@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { getContainer } from '@/server/container';
+import { getServerContainer } from '@/server/container';
 import { env } from '@/server/env';
 import { queueScheduledReviews } from '@/server/scheduled';
 
@@ -15,11 +15,11 @@ const authorised = (req: Request) => { const tok = (req.headers.get('authorizati
 /** Vercel Cron calls GET with the CRON_SECRET bearer token: queues the weekly scheduled reviews. */
 export async function GET(req: Request) {
   if (!authorised(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const { agent, db, entitlements } = getContainer(); return NextResponse.json(await queueScheduledReviews(db, agent, entitlements));
+  const { agent, db, entitlements } = (await getServerContainer()); return NextResponse.json(await queueScheduledReviews(db, agent, entitlements));
 }
 export async function POST(req: Request) {
   if (!authorised(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const { agent } = getContainer(); const body = (await req.json().catch(() => ({}))) as { businessId?: string; executionId?: string };
+  const { agent } = (await getServerContainer()); const body = (await req.json().catch(() => ({}))) as { businessId?: string; executionId?: string };
   if (!body.businessId) return NextResponse.json({ error: 'businessId required' }, { status: 400 });
   if (body.executionId) { const r = await agent.orchestrator.run(body.businessId, body.executionId); return NextResponse.json({ status: r.status }); }
   return NextResponse.json({ recovered: await agent.orchestrator.recoverStale(body.businessId) });

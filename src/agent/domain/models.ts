@@ -279,7 +279,7 @@ export interface UsageRow extends Row { userId: string; task: string; model: str
 
 // ---------- Product: usage, billing, previews ----------
 /** One saved, completed output. Errors, blocked attempts and retries never create one (business plan: free-use rules). */
-export interface UseRow extends Row { userId: string; kind: 'preview' | 'output' | 'draft'; executionId?: string; previewId?: string; task?: string }
+export interface UseRow extends Row { userId: string; kind: 'preview' | 'output' | 'draft'; executionId?: string; previewId?: string; task?: string; paidCredit?: boolean }
 export interface BillingRow extends Row {
   userId: string; stripeCustomerId?: string; reportCredits: number;
   subscription?: { id: string; plan: 'assistant' | 'studio' | 'suite'; interval: 'month' | 'year'; status: string; currentPeriodStart: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean };

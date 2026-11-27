@@ -30,27 +30,21 @@ describe('tenant isolation', () => {
 });
 
 describe('role permissions', () => {
-  it('viewer can read but not run, edit, approve, ingest or authorize', async () => {
-    const { agent, owner, addMember, card } = await seeded(); await addMember('v', 'viewer'); const v = { userId: 'v', businessId: owner.businessId }; const did = card.card.deliverableId!;
-    await agent.cards.board(v); await agent.deliverables.get(v, did);
-    const d = await agent.deliverables.get(v, did); const blocks = d.versions[0]!.blocks;
-    await expect(agent.orchestrator.submit(v, { request: 'Review my website' })).rejects.toMatchObject({ status: 403 });
-    await expect(agent.deliverables.edit(v, did, { blocks })).rejects.toMatchObject({ status: 403 });
-    await expect(agent.deliverables.approve(v, did, 1)).rejects.toMatchObject({ status: 403 });
-    await expect(agent.cards.decide(v, card.id, 'dismiss')).rejects.toMatchObject({ status: 403 });
-    await expect(agent.profiles.applyUpdates(v, [{ key: 'pricing', value: 'x', provenance: { source: 'customer_confirmed', evidence: 'verified' } }], { type: 'user', id: 'v' })).rejects.toMatchObject({ status: 403 });
+  it('a member can work (run, edit, decide cards) but cannot approve, authorize or manage members', async () => {
+    const { agent, owner, addMember, card } = await seeded(); await addMember('m', 'member'); const m = { userId: 'm', businessId: owner.businessId }; const did = card.card.deliverableId!;
+    await agent.cards.board(m); const d = await agent.deliverables.get(m, did); const blocks = d.versions[0]!.blocks;
+    await agent.deliverables.edit(m, did, { blocks });
+    await expect(agent.deliverables.approve(m, did, 2)).rejects.toMatchObject({ status: 403 });
+    await agent.deliverables.approve(owner, did, (await agent.deliverables.get(owner, did)).versions.at(-1)!.n);
+    const req = await agent.execution.request(m, { deliverableId: did, action: 'save_to_workspace' });
+    await expect(agent.execution.authorize(m, req.id)).rejects.toMatchObject({ status: 403 });
+    await expect(agent.execution.execute(m, req.id)).rejects.toMatchObject({ status: 403 });
+    await agent.execution.authorize(owner, req.id); expect((await agent.execution.execute(owner, req.id)).status).toBe('verified');
   });
-  it('editor can approve content but cannot authorize execution; admin can', async () => {
-    const { agent, owner, addMember, card } = await seeded(); await addMember('e', 'editor'); await addMember('a', 'admin');
-    const e = { userId: 'e', businessId: owner.businessId }, a = { userId: 'a', businessId: owner.businessId }; const did = card.card.deliverableId!;
-    await agent.deliverables.approve(e, did, 1);
-    const req = await agent.execution.request(e, { deliverableId: did, action: 'save_to_workspace' });
-    await expect(agent.execution.authorize(e, req.id)).rejects.toMatchObject({ status: 403 });
-    await expect(agent.execution.execute(e, req.id)).rejects.toMatchObject({ status: 403 });
-    await agent.execution.authorize(a, req.id); expect((await agent.execution.execute(a, req.id)).status).toBe('verified');
-  });
-  it('only an owner can manage members; the permission matrix has no model-reachable grant', async () => {
-    const { agent, owner, addMember } = await seeded(); await addMember('a', 'admin');
-    expect(await agent.authz.can('a', owner.businessId, 'manage_members')).toBe(false); expect(await agent.authz.can(owner.userId, owner.businessId, 'manage_members')).toBe(true);
+  it('a non-member sees nothing; only an owner can manage members', async () => {
+    const { agent, owner, addMember } = await seeded(); await addMember('m', 'member');
+    const nobody = { userId: 'nobody', businessId: owner.businessId };
+    await expect(agent.orchestrator.submit(nobody, { request: 'Review my website' })).rejects.toMatchObject({ status: 403 });
+    expect(await agent.authz.can('m', owner.businessId, 'manage_members')).toBe(false); expect(await agent.authz.can(owner.userId, owner.businessId, 'manage_members')).toBe(true);
   });
 });

@@ -6,11 +6,10 @@ export type Permission =
   | 'view' | 'run_agent' | 'edit_profile' | 'edit_content' | 'approve_content'
   | 'decide_cards' | 'authorize_execution' | 'ingest_data' | 'manage_members';
 
+// Two roles, matching the existing database. Owners keep approval and authorization authority; members do the work.
 const MATRIX: Record<Role, Permission[]> = {
   owner: ['view', 'run_agent', 'edit_profile', 'edit_content', 'approve_content', 'decide_cards', 'authorize_execution', 'ingest_data', 'manage_members'],
-  admin: ['view', 'run_agent', 'edit_profile', 'edit_content', 'approve_content', 'decide_cards', 'authorize_execution', 'ingest_data'],
-  editor: ['view', 'run_agent', 'edit_profile', 'edit_content', 'approve_content', 'decide_cards', 'ingest_data'],
-  viewer: ['view'],
+  member: ['view', 'run_agent', 'edit_profile', 'edit_content', 'decide_cards', 'ingest_data'],
 };
 
 /** `siteId` is the active website (defaults to the primary site, whose id equals the businessId). */

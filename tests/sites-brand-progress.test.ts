@@ -57,8 +57,8 @@ describe('multiple websites: each site is its own workspace on one shared accoun
     await expect(agent.sites.get(owner, other.businessId)).rejects.toMatchObject({ status: 404 });
     await expect(agent.sites.add({ userId: 'user-other', businessId: owner.businessId }, { name: 'x', url: 'x.example' })).rejects.toMatchObject({ status: 403 });
   });
-  it('only people with the right role can add sites or locations', async () => {
-    const { agent, owner, addMember } = await suite(); await addMember('v', 'viewer'); const v = { userId: 'v', businessId: owner.businessId };
+  it('only members of the business can add sites or locations', async () => {
+    const { agent, owner } = await suite(); const v = { userId: 'v', businessId: owner.businessId };
     await expect(agent.sites.add(v, { name: 'x', url: 'x.example' })).rejects.toMatchObject({ status: 403 }); await expect(agent.sites.addLocation(v, owner.businessId, { name: 'L' })).rejects.toMatchObject({ status: 403 });
     await expect(agent.sites.remove(v, owner.businessId)).rejects.toMatchObject({ status: 403 }); await expect(agent.sites.remove(owner, owner.businessId)).rejects.toMatchObject({ code: 'primary_site' });
   });

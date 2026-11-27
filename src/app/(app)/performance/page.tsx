@@ -5,7 +5,7 @@ import { getContainer } from '@/server/container';
 import type { PerformanceReportData } from '@/agent/capabilities/performance';
 
 export default async function Performance({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   const reports = await agent.performance.reports(ctx); const r = reports[0]?.data as PerformanceReportData | undefined; const today = new Date().toISOString().slice(0, 10);
   return (<><h1>Performance</h1><p className="mut">The agent reports only numbers you supply (Search Console, Analytics or email exports). It never estimates traffic, rankings or results.</p><Notice e={one(sp.e)} m={one(sp.m)} />
     <form action={uploadMetrics} className="card"><h3>Upload results</h3>

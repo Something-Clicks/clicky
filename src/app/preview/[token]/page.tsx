@@ -2,11 +2,11 @@ import Link from 'next/link';
 import AutoRefresh from '@/components/AutoRefresh';
 import { EvidencePill, MockBanner, PriorityPill } from '@/components/ui';
 import { buildCard } from '@/agent/capabilities/cards';
-import { getContainer } from '@/server/container';
+import { getServerContainer } from '@/server/container';
 
 export const dynamic = 'force-dynamic';
 export default async function Preview({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params; const { previews } = getContainer();
+  const { token } = await params; const { previews } = (await getServerContainer());
   const p = await previews.byToken(token).catch(() => undefined);
   if (!p) return <main className="wrap"><h1>Preview not found</h1><p><Link href="/">Start a new analysis</Link></p></main>;
   const working = p.status === 'queued' || p.status === 'running'; const r = p.result;

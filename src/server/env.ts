@@ -7,7 +7,6 @@ export const env = {
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-  supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   /** In-memory data + dev cookie auth, for local development and automated tests only. Refused in production. */
   devMode: b(process.env.DEV_MODE),
   llmProvider: process.env.LLM_PROVIDER, // 'mock' (non-production only) | unset => LLM_BASE_URL/LLM_MODEL
@@ -27,7 +26,7 @@ export const env = {
   cronSecret: process.env.CRON_SECRET,
   hashSalt: process.env.IP_HASH_SALT ?? 'dev-salt',
 };
-export const supabaseConfigured = !!(env.supabaseUrl && env.supabaseAnonKey && env.supabaseServiceKey);
+export const supabaseConfigured = !!(env.supabaseUrl && env.supabaseAnonKey);
 if (isProd && env.devMode) throw new Error('DEV_MODE must never be enabled in production');
 
 /** Outside production, refuse to talk to any Supabase project that is not explicitly allow-listed (guards against pointing a dev build at production). */

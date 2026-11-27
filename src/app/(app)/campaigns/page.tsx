@@ -5,7 +5,7 @@ import { requireWorkspace } from '@/server/auth';
 import { getContainer } from '@/server/container';
 
 export default async function Campaigns({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams; const { ctx } = await requireWorkspace(); const cs = await Promise.all((await getContainer().agent.campaigns.list(ctx)).map((c) => getContainer().agent.campaignsSync(ctx, c.id)));
+  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent: ag } = await getContainer(); const cs = await Promise.all((await ag.campaigns.list(ctx)).map((c) => ag.campaignsSync(ctx, c.id)));
   return (<><h1>Campaigns</h1><Notice e={one(sp.e)} />
     <form action={submitRequest} className="card"><input type="hidden" name="back" value="/campaigns" /><input type="hidden" name="taskType" value="campaign" /><h3>Plan a campaign</h3>
       <label htmlFor="goal">What should it achieve? Which service?</label><input id="goal" name="goal" required placeholder="e.g. Get more drain cleaning enquiries before winter" /><input type="hidden" name="request" value="Prepare a promotional campaign" />

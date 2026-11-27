@@ -5,7 +5,7 @@ import { requireWorkspace } from '@/server/auth';
 import { getContainer } from '@/server/container';
 
 export default async function Insights() {
-  const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   if (!(await agent.gate.has(ctx, 'insights'))) return <Locked feature="insights" title="Insights" />;
   const i = await agent.insights.summary(ctx);
   return (<><h1>Insights</h1><p className="mut">Everything the agent has learned about your competitors, search terms, audience and results in one place. Every figure here was supplied by you or retrieved by the agent; nothing is estimated.</p>

@@ -8,7 +8,7 @@ import { getContainer } from '@/server/container';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params; const rid = req.nextUrl.searchParams.get('rid'); const user = await getSessionUser();
   if (!user) return new NextResponse('Unauthorized', { status: 401 });
-  const { db, agent } = getContainer();
+  const { db, agent } = (await getContainer());
   try {
     const m = (await db.members.listAcross({ userId: user.id }))[0]; if (!m) return new NextResponse('Not found', { status: 404 });
     const ctx = { userId: user.id, businessId: m.businessId };

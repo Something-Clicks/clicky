@@ -22,6 +22,6 @@ export async function setup(opts: { provider?: LLMProvider; plan?: TestPlan } = 
   if (plan === 'report') await db.billing.insert({ businessId: owner.businessId, userId: owner.userId, reportCredits: 1 });
   if (['assistant', 'studio', 'suite'].includes(plan)) await db.billing.insert({ businessId: owner.businessId, userId: owner.userId, reportCredits: 0, subscription: { id: 'sub_t', plan: plan as 'assistant', interval: 'month', status: 'active', currentPeriodStart: new Date(Date.now() - 86400000).toISOString(), currentPeriodEnd: new Date(Date.now() + 29 * 86400000).toISOString(), cancelAtPeriodEnd: false } });
   const runAll = async () => { const out = []; while (queue.jobs.length) { const j = queue.jobs.shift()!; out.push(await agent.orchestrator.run(j.businessId, j.executionId)); } return out; };
-  const addMember = (userId: string, role: 'admin' | 'editor' | 'viewer') => db.members.insert({ businessId: owner.businessId, userId, role });
+  const addMember = (userId: string, role: 'member') => db.members.insert({ businessId: owner.businessId, userId, role });
   return { db, agent, queue, owner, runAll, addMember, ent };
 }

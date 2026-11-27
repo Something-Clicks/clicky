@@ -5,7 +5,7 @@ import { orNotFound, requireWorkspace } from '@/server/auth';
 import { getContainer } from '@/server/container';
 
 export default async function Campaign({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SP }) {
-  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   const c = await orNotFound(agent.campaignsSync(ctx, id));
   const title = (k: string) => c.tasks.find((t) => t.key === k)?.title ?? k;
   return (<><p><Link href="/campaigns">← Campaigns</Link></p><h1>{c.name}</h1><Notice e={one(sp.e)} />

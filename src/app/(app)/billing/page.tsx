@@ -6,7 +6,7 @@ import { FREE_USES } from '@/server/billing/plans';
 import { getContainer } from '@/server/container';
 
 export default async function Billing({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams; const { ctx } = await requireWorkspace(); const u = await getContainer().entitlements.status(ctx); const st = one(sp.status);
+  const sp = await searchParams; const { ctx } = await requireWorkspace(); const u = await (await getContainer()).entitlements.status(ctx); const st = one(sp.status);
   const subscribed = !!u.subscriptionStatus && !['free', 'report'].includes(u.plan);
   return (<><h1>Plan and billing</h1><Notice e={one(sp.e)} />{st === 'success' && <div className="banner ok">Thanks! Your payment is being confirmed. This page updates when Stripe confirms it.</div>}{st === 'cancelled' && <div className="banner">Checkout cancelled. Nothing was charged.</div>}
     <div className="card"><h2 style={{ marginTop: 0 }}>Your plan: {u.planName}</h2>

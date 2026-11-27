@@ -30,7 +30,7 @@ function fake(opts: { denyInsert?: boolean; denyUpdate?: boolean; cap?: number }
     maybeSingle() { const r = this.run(); return Promise.resolve(r.error ? r : { data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data, error: null }); }
     then<A, Z>(ok?: (v: any) => A | PromiseLike<A>, bad?: (e: unknown) => Z | PromiseLike<Z>) { return Promise.resolve(this.run()).then(ok, bad); }
   }
-  const client: SupabaseLike = { from: () => new B() };
+  const client: SupabaseLike = { from: () => new B(), rpc: () => Promise.resolve({ data: null, error: null }) };
   return { client, rows, calls };
 }
 const mk = (o?: Parameters<typeof fake>[0]) => { const f = fake(o); return { ...f, t: new SupabaseTable<R>(f.client, 'sc_test') }; };

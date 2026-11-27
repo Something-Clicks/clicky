@@ -3,6 +3,7 @@ import { newId, nowIso } from '../core/util';
 import type { Db } from './db';
 import { TABLE_NAMES } from './db';
 import type { NewRow, Row, Table, Where } from './table';
+import { BillingView, MemberTable, OrganizationTable, ServerOnlyTable } from './org';
 
 /**
  * Minimal structural type for supabase-js so this module needs no hard dependency.
@@ -13,14 +14,15 @@ import type { NewRow, Row, Table, Where } from './table';
  */
 export interface SupabaseLike {
   from(table: string): any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  rpc(fn: string, args?: Record<string, unknown>): any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 const SQL_NAME: Record<(typeof TABLE_NAMES)[number], string> = {
-  businesses: 'sc_businesses', sites: 'sc_sites', members: 'sc_members', profiles: 'sc_profiles', scans: 'sc_scans',
+  businesses: '', sites: 'sc_sites', members: '', profiles: 'sc_profiles', scans: 'sc_scans',
   research: 'sc_research', findings: 'sc_findings', cards: 'sc_cards', deliverables: 'sc_deliverables',
   strategies: 'sc_strategies', campaigns: 'sc_campaigns', executionRequests: 'sc_execution_requests',
   metrics: 'sc_metrics', reports: 'sc_reports', workflows: 'sc_workflows', audit: 'sc_audit', usage: 'sc_usage',
-  uses: 'sc_uses', billing: 'sc_billing', stripeEvents: 'sc_stripe_events', previews: 'sc_previews',
+  uses: 'sc_uses', billing: '', stripeEvents: '', previews: '',
 };
 
 const CORE = ['id', 'businessId', 'version', 'createdAt', 'updatedAt'] as const;
@@ -101,6 +103,15 @@ export class SupabaseTable<T extends Row> implements Table<T> {
   }
 }
 
+/**
+ * A Db bound to ONE signed-in customer's session (supabase-js client created with the publishable key + the user's access token).
+ * Tenancy, roles and billing come from the existing organizations / organization_members / subscriptions / purchases tables;
+ * the agent's working data lives in sc_* tables. Every query is subject to row-level security.
+ */
 export function createSupabaseDb(client: SupabaseLike): Db {
-  return Object.fromEntries(TABLE_NAMES.map((n) => [n, new SupabaseTable(client, SQL_NAME[n])])) as unknown as Db;
+  const orgs = new OrganizationTable(client);
+  const own = Object.fromEntries(TABLE_NAMES.filter((n) => SQL_NAME[n]).map((n) => [n, new SupabaseTable(client, SQL_NAME[n])]));
+  return { ...own, businesses: orgs, members: new MemberTable(client), billing: new BillingView(client),
+    stripeEvents: new ServerOnlyTable('Stripe event processing'), previews: new ServerOnlyTable('Anonymous previews'),
+    provision: (name: string, website?: string) => orgs.provision(name, website) } as unknown as Db;
 }

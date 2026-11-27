@@ -6,7 +6,7 @@ import { getContainer } from '@/server/container';
 import { inSite } from '@/agent/store/authz';
 
 export default async function Sites({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams; const { ctx, site } = await requireWorkspace(); const { agent, entitlements } = getContainer();
+  const sp = await searchParams; const { ctx, site } = await requireWorkspace(); const { agent, entitlements } = (await getContainer());
   const sites = await agent.sites.list(ctx); const multi = await agent.gate.has(ctx, 'multi_site'); const locs = await agent.gate.has(ctx, 'locations'); const lim = await agent.gate.limits(ctx); const used = await agent.sites.locationCount(ctx); void entitlements;
   const cards = await agent.cards.boardAllSites(ctx); const scans = await agent.db.scans.list(ctx.businessId, { label: 'own_site' }, { newestFirst: true });
   return (<><h1>Websites and locations</h1><Notice e={one(sp.e)} m={one(sp.m)} />

@@ -13,9 +13,11 @@ export async function createBusiness(
   if (!name) throw new ValidationError('Business name is required');
   let website: string | undefined; let domain: string | undefined;
   if (input.website) { const u = parseSafeUrl(input.website); website = u.origin; domain = u.hostname.replace(/^www\./, ''); }
-  const id = newId();
-  await db.businesses.insert({ id, businessId: id, name, ownerId, website });
-  await db.members.insert({ businessId: id, userId: ownerId, role: 'owner' });
+  const id = db.provision ? await db.provision(name, website) : newId();
+  if (!db.provision) {
+    await db.businesses.insert({ id, businessId: id, name, ownerId, website });
+    await db.members.insert({ businessId: id, userId: ownerId, role: 'owner' });
+  }
   const prov = { source: 'customer_confirmed' as const, evidence: 'verified' as const, recordedAt: nowIso() };
   const mk = (value: string) => ({ value, provenance: prov, confirmed: true, updatedAt: prov.recordedAt, conflicts: [], previous: [] });
   await db.profiles.insert({

@@ -6,7 +6,7 @@ import { getContainer } from '@/server/container';
 export const dynamic = 'force-dynamic';
 const LINKS = [['/dashboard', 'Dashboard'], ['/board', 'Action Board'], ['/ask', 'Ask the agent'], ['/deliverables', 'Drafts'], ['/progress', 'Progress'], ['/insights', 'Insights'], ['/profile', 'Business Profile'], ['/research', 'Research'], ['/strategy', 'Strategy'], ['/campaigns', 'Campaigns'], ['/performance', 'Performance'], ['/sites', 'Sites'], ['/brand', 'Brand'], ['/billing', 'Plan']] as const;
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { ctx, business, site } = await requireWorkspace(); const { entitlements, agent } = getContainer(); const u = await entitlements.status(ctx); const usable = await agent.sites.usable(ctx);
+  const { ctx, business, site } = await requireWorkspace(); const { entitlements, agent } = (await getContainer()); const u = await entitlements.status(ctx); const usable = await agent.sites.usable(ctx);
   return (<>
     <a href="#main" className="skip">Skip to content</a>
     <nav className="nav" aria-label="Main"><div className="wrap"><span className="brand">Something Clicks</span>{LINKS.map(([h, l]) => <Link key={h} href={h}>{l}</Link>)}<span className="sp" />

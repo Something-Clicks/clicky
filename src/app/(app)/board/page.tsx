@@ -7,7 +7,7 @@ import type { CardStatus } from '@/agent/domain/models';
 const GROUPS: [string, CardStatus[]][] = [['To review', ['new', 'drafting', 'ready_for_review']], ['Approved', ['approved', 'authorized', 'executing']], ['Done', ['executed', 'verified']], ['Set aside', ['rejected', 'dismissed', 'failed']]];
 export default async function Board({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams; const { ctx } = await requireWorkspace(); const cat = one(sp.category);
-  const all = await getContainer().agent.cards.board(ctx, { category: cat }); const cats = [...new Set((await getContainer().agent.cards.board(ctx)).map((c) => c.card.category))];
+  const all = await (await getContainer()).agent.cards.board(ctx, { category: cat }); const cats = [...new Set((await (await getContainer()).agent.cards.board(ctx)).map((c) => c.card.category))];
   return (<><h1>Action Board</h1><p className="mut">Findings ranked by what is most likely to make a difference, easiest and best-evidenced first.</p>
     <div className="row"><Link className={`pill ${!cat ? 'e-verified' : ''}`} href="/board">All</Link>{cats.map((c) => <Link key={c} className={`pill ${cat === c ? 'e-verified' : ''}`} href={`/board?category=${c}`}>{c.replace(/_/g, ' ')}</Link>)}</div>
     {!all.length && <div className="card">No cards yet. <Link href="/ask">Ask the agent to review your website.</Link></div>}

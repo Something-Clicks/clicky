@@ -5,7 +5,7 @@ import { requireWorkspace } from '@/server/auth';
 import { getContainer } from '@/server/container';
 
 export default async function Strategy({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = getContainer(); const s = await agent.strategies.latest(ctx); const d = s?.data;
+  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer()); const s = await agent.strategies.latest(ctx); const d = s?.data;
   return (<><h1>Marketing strategy</h1><Notice e={one(sp.e)} m={one(sp.m)} />
     <form action={submitRequest} className="card"><input type="hidden" name="back" value="/strategy" /><input type="hidden" name="taskType" value="marketing_plan" /><input type="hidden" name="request" value="Develop a marketing plan" /><div className="row"><span>{s ? 'Create an updated strategy from your latest findings.' : 'The agent will read your site, research and findings, then draft a plan specific to your business.'}</span><span className="sp" /><button>{s ? 'Update strategy' : 'Develop a marketing plan'}</button></div></form>
     {s && d && (<><MockBanner show={s.mock} /><div className="row"><Pill>{s.status}</Pill><span className="mut small">Drafted {when(s.createdAt)}</span><span className="sp" />{s.status === 'draft' && <form action={approveStrategy}><input type="hidden" name="id" value={s.id} /><button>Approve strategy</button></form>}</div>

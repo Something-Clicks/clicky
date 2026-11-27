@@ -5,7 +5,7 @@ import { requireWorkspace } from '@/server/auth';
 import { getContainer } from '@/server/container';
 
 export default async function Progress() {
-  const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   if (!(await agent.gate.has(ctx, 'progress_tracking'))) return <Locked feature="progress_tracking" title="Progress" />;
   const p = await agent.progress.summary(ctx);
   return (<><h1>Progress</h1><p className="mut">What has improved since your first review and what is next. When a later review no longer finds an issue, it is marked resolved automatically.</p>

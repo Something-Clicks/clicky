@@ -5,7 +5,7 @@ import { orNotFound, requireWorkspace } from '@/server/auth';
 import { getContainer } from '@/server/container';
 
 export default async function CardPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SP }) {
-  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   const row = await orNotFound(agent.cards.get(ctx, id)); const c = row.card; const deps = await Promise.all(c.dependencies.map((d) => agent.cards.get(ctx, d).catch(() => undefined)));
   return (<><p><Link href="/board">← Action Board</Link></p><h1>{c.title}</h1><Notice e={one(sp.e)} m={one(sp.m)} />
     <div className="row"><PriorityPill label={c.priority.label} /><EvidencePill v={c.evidenceClass} /><span className="pill">confidence {c.confidence}</span><span className="pill">effort {c.estimatedEffort}</span><span className="pill">{c.status.replace('_', ' ')}</span><span className="pill">{c.category.replace(/_/g, ' ')}</span></div>

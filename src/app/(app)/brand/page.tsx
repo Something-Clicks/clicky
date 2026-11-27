@@ -7,7 +7,7 @@ import { PROFILE_FIELDS } from '@/agent/profile/fields';
 
 const BRAND = PROFILE_FIELDS.filter((f) => f.category === 'brand');
 export default async function Brand({ searchParams }: { searchParams: SP }) {
-  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   if (!(await agent.gate.has(ctx, 'brand_management'))) return <Locked feature="brand_management" title="Brand" />;
   const rep = await agent.brand.report(ctx); const sites = await agent.sites.list(ctx); const shared = Object.fromEntries(rep.shared.map((f) => [f.key, f.value]));
   return (<><h1>Brand across your websites</h1><Notice e={one(sp.e)} m={one(sp.m)} /><p className="mut">One set of brand guidance for every website, with optional overrides per website. The agent uses it for every draft and checks each website against it.</p>

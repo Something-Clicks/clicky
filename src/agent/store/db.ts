@@ -23,6 +23,8 @@ export interface Db {
   billing: Table<M.BillingRow>;
   stripeEvents: Table<M.StripeEventRow>;
   previews: Table<M.PreviewRow>;
+  /** Real Supabase only: creates organization + owner membership + profile in one call (existing create_organization RPC) and returns its id. */
+  provision?(name: string, website?: string): Promise<string>;
 }
 
 export const TABLE_NAMES = [

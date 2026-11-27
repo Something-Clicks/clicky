@@ -7,9 +7,9 @@ import { DELIVERABLE_SPECS } from '@/agent/capabilities/deliverable-specs';
 
 const ACTION_LABEL: Record<string, string> = { save_to_workspace: 'Save to my workspace', download_export: 'Prepare a download', record_activity: 'Record that I published it myself', send_transactional_email: 'Email me a test copy' };
 export default async function Editor({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SP }) {
-  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   const d = await orNotFound(agent.deliverables.get(ctx, id)); const v = agent.deliverables.current(d); const reqs = await agent.execution.list(ctx, id); const role = await agent.authz.role(ctx.userId, ctx.businessId);
-  const canAuthorize = role === 'owner' || role === 'admin'; const open = v.flags.filter((f) => f.severity === 'high' && !f.acknowledgedBy); const approved = d.status === 'approved';
+  const canAuthorize = role === 'owner'; const open = v.flags.filter((f) => f.severity === 'high' && !f.acknowledgedBy); const approved = d.status === 'approved';
   return (<>
     <p><Link href="/deliverables">← Drafts</Link>{d.cardId && <> · <Link href={`/board/${d.cardId}`}>Action Card</Link></>}</p>
     <h1>{v.title}</h1><div className="row"><Pill>{DELIVERABLE_SPECS[d.type].label}</Pill><Pill cls={approved ? 'e-verified' : ''}>{d.status}</Pill><span className="mut small">Version {v.n} · by {v.author === 'agent' ? 'the agent' : 'you'} · {when(v.createdAt)}</span></div>

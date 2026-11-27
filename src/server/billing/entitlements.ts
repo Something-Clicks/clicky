@@ -33,7 +33,7 @@ export class Entitlements implements PlanGate {
     const userId = await this.owner(ctx);
     const [bill, uses, flying] = await Promise.all([this.billing(userId, ctx.businessId), this.userUses(userId), this.inflight(userId, ctx.runId)]);
     const freeUsed = uses.filter((u) => u.kind !== 'draft').length + flying.length; const freeRemaining = Math.max(0, FREE_USES - freeUsed);
-    const credits = bill?.reportCredits ?? 0; const sub = this.activeSub(bill);
+    const credits = Math.max(0, (bill?.reportCredits ?? 0) - uses.filter((u) => u.paidCredit).length); const sub = this.activeSub(bill);
     if (sub) {
       const q = QUOTAS[sub.plan as SubscriptionPlan]; const used = uses.filter((u) => u.kind === 'draft' && u.createdAt >= sub.currentPeriodStart).length; const left = Math.max(0, q.drafts - used);
       return { plan: sub.plan as PlanId, planName: PLAN_NAME[sub.plan as PlanId], features: PLAN_FEATURES[sub.plan as PlanId], subscriptionStatus: sub.status, periodEnd: sub.currentPeriodEnd, freeUsed, freeRemaining, reportCredits: credits, draftsUsed: used, draftsLimit: q.drafts, draftsRemaining: left, maxSites: q.sites, maxLocations: q.locations, canStartOutput: true };
@@ -66,9 +66,9 @@ export class Entitlements implements PlanGate {
   async recordUse(ctx: Ctx, o: { executionId?: string; task: string; previewId?: string; kind?: 'output' | 'preview' | 'draft' }): Promise<void> {
     if (o.executionId && (await this.db.uses.list(ctx.businessId, { executionId: o.executionId })).length) return; // exactly once per run
     const userId = await this.owner(ctx); const before = await this.userUses(userId); const bill = await this.billing(userId, ctx.businessId);
-    if (!this.activeSub(bill) && FREE_USES - before.filter((u) => u.kind !== 'draft').length <= 0 && o.task === 'website_audit' && bill && bill.reportCredits > 0)
-      await this.db.billing.update(ctx.businessId, bill.id, { reportCredits: bill.reportCredits - 1 }, bill.version);
-    await this.db.uses.insert({ businessId: ctx.businessId, userId, kind: o.kind ?? 'output', executionId: o.executionId, previewId: o.previewId, task: o.task });
+    // A paid Marketing Report credit is consumed by writing a ledger row (billing rows are read-only for customers).
+    const paidCredit = !this.activeSub(bill) && FREE_USES - before.filter((u) => u.kind !== 'draft').length <= 0 && o.task === 'website_audit' && !!bill && bill.reportCredits - before.filter((u) => u.paidCredit).length > 0;
+    await this.db.uses.insert({ businessId: ctx.businessId, userId, kind: o.kind ?? 'output', executionId: o.executionId, previewId: o.previewId, task: o.task, ...(paidCredit ? { paidCredit: true } : {}) });
   }
   /** A workflow finished: subscribers are charged one draft per draft created; free/report customers one use per saved output. */
   async onCompleted(ctx: Ctx, exec: WorkflowExecutionRow) {

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const sb = await userClient(); const { error } = await sb.auth.exchangeCodeForSession(code);
     if (!error) {
       const { data } = await sb.auth.getUser();
-      if (data.user && preview) await getContainer().previews.claim(preview, { id: data.user.id }).catch(() => undefined);
+      if (data.user && preview) await (await getContainer()).previews.claim(preview, { id: data.user.id }).catch(() => undefined);
       return NextResponse.redirect(`${env.appUrl}/dashboard`);
     }
   }

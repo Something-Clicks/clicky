@@ -8,7 +8,7 @@ import { TASK_LABEL } from '@/agent/orchestrator/workflows';
 
 export const dynamic = 'force-dynamic';
 export default async function Run({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SP }) {
-  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = getContainer();
+  const { id } = await params; const sp = await searchParams; const { ctx } = await requireWorkspace(); const { agent } = (await getContainer());
   const r = await orNotFound(agent.orchestrator.get(ctx, id)); const active = r.status === 'queued' || r.status === 'running';
   const st = r.state as { cardIds?: string[]; deliverableIds?: string[]; strategyId?: string; campaignId?: string; reportId?: string; focusCardIds?: string[] };
   return (<>
