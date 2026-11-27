@@ -14,7 +14,7 @@ no Stripe product or price was created or changed, no model hosting was bought.*
 | Accessibility (axe, WCAG 2.0/2.1 A+AA, serious/critical) | no violations on all 16 signed-in pages (incl. Suite pages with data) and 4 public pages, mobile + desktop |
 | No horizontal scroll | verified on every page above at 390px and 1280px |
 | Lighthouse, production build, public pages (`/`, `/pricing`, `/login`, `/signup`), mobile + desktop | performance **100**, accessibility **98-100**, best-practices **100**, SEO **100** |
-| Lighthouse, signed-in pages (dev server; performance not enforced there) | see "Lighthouse (signed-in)" below |
+| Lighthouse, 14 signed-in pages + preview, with a Suite account holding real data (dev server, so performance is indicative only) | accessibility **98-100**, best-practices **100**, SEO **100**; performance 88-100 on the dev server |
 | Production build (`next build`) | succeeds, 30 routes |
 
 The browser journeys go through the real UI, real server actions, the real Stripe webhook route (genuinely signed test events),
