@@ -97,3 +97,29 @@ kept server-side only; it is lower-privilege than a service-role key (it can onl
 
 Provider/model layer (OpenAI-compatible adapter: JSON-schema constrained output, reasoning-tag stripping), `server-only` guard and project-ref
 allowlist, adapter hardening (error mapping, pagination), and continued agent quality work. None of it depends on the database decision.
+
+## Model-output RPC review (clicky-dev, verified)
+
+| RPC | Gate before | Verdict | Action |
+| --- | --- | --- | --- |
+| `complete_analysis` | org membership only | **Unsafe**: any member could write fabricated evidence and cards | Gated behind server key (migration 0002). Verified: authenticated member gets 42501; implementation in `app_private` has no client grant |
+| `finish_marketing_workflow` | org membership only | **Unsafe**: any member could write workflow results | Same fix, same verification |
+| `add_model_findings` | dev flag + server key + membership | Gated, but no DB rule that verified/inferred cards cite evidence, and "observed" excerpts are caller-supplied | **Open**: add evidence-citation CHECK/trigger in the next migration |
+| `save_marketing_plan` | dev flag + server key + membership | Sound (shape/ownership validated) | None |
+| `complete_agent_run`, `propose_business_facts` | dev flag + server key + membership | Gated | None |
+
+Consequence: without the server secret (`x-agent-key`), none of the model-output writes can succeed. A customer session cannot
+fabricate AI findings, but the real agent cannot save them either. That path is **unverified end to end** until the user
+supplies or approves the protected credential. Not requested.
+
+## Old plan IDs (clicky-dev): history
+`subscriptions` and `purchases` are empty in dev, so there are no historical records to remap there. `plan_entitlements` has 8 rows
+and both tables FK to it. Proposed read-time mapping (no rows altered, no Stripe change):
+marketing_plan, diagnostic_audit -> report; single_site (and starter_ai/growth_ai/scale_automation pending a check against any
+production history) -> assistant; business_plus -> studio; multi_site -> suite. Needs your confirmation before the production
+history is inspected.
+
+## Still not done in this consolidation
+Re-pointing sc_ RLS to `organization_members`, dropping duplicate sc_ tables, new org-scoped tables (sites, locations, research,
+campaigns, tasks, metrics, reports, execution requests), the per-request customer-session data layer, and browser journeys
+against clicky-dev. The app still runs on the in-process store plus the sc_ adapter.
