@@ -1,0 +1,84 @@
+name: Modal GPU (development)
+
+# Cloud-only deployment of the optional hosted GPU model (infra/modal/serve_qwen.py).
+# Manual trigger only: nothing runs on push, and nothing here touches Vercel, Supabase or production.
+# Needs repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (Settings > Secrets and variables > Actions). Values are never printed.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "verify = auth check only (free) | billing = read-only spend report (free) | deploy = build + deploy the endpoint (no GPU runs until a request arrives; small CPU image-build cost) | benchmark = deploy + send benchmark requests (GPU cost)"
+        type: choice
+        default: verify
+        options: [verify, billing, deploy, benchmark]
+      gpu:
+        description: "GPU for deploy/benchmark"
+        type: choice
+        default: L4
+        options: [L4, A10]
+      confirm:
+        description: 'Type exactly "I APPROVE MODAL COST" to run deploy or benchmark (ignored for verify/billing)'
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modal-gpu
+  cancel-in-progress: false
+
+jobs:
+  modal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      CLICKY_GPU: ${{ inputs.gpu }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install Modal client
+        run: pip install --quiet "modal>=1.6,<2"
+
+      - name: Check secrets exist (names only)
+        run: |
+          [ -n "$MODAL_TOKEN_ID" ] && [ -n "$MODAL_TOKEN_SECRET" ] || { echo "::error::Add repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET first"; exit 1; }
+
+      - name: Verify authentication (read-only, free)
+        run: ./scripts/verify-modal-auth.sh
+
+      - name: Billing report for this month (read-only, free)
+        if: inputs.mode == 'billing' || inputs.mode == 'benchmark'
+        run: |
+          modal billing summary 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Require explicit cost approval
+        if: inputs.mode == 'deploy' || inputs.mode == 'benchmark'
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          [ "$CONFIRM" = "I APPROVE MODAL COST" ] || { echo "::error::deploy/benchmark need confirm = I APPROVE MODAL COST"; exit 1; }
+
+      - name: Deploy endpoint (development app clicky-qwen)
+        id: deploy
+        if: inputs.mode == 'deploy' || inputs.mode == 'benchmark'
+        run: |
+          modal deploy infra/modal/serve_qwen.py 2>&1 | tee deploy.log
+          url=$(grep -Eo 'https://[A-Za-z0-9._-]+\.modal\.run' deploy.log | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          { echo "### Endpoint"; echo "MODAL_LLM_URL=$url"; echo; echo "Set this (not secret) as MODAL_LLM_URL in the app environment you want to use it (Preview first)."; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Benchmark (GPU cost - cold start and two streamed generations)"
+        if: inputs.mode == 'benchmark'
+        env:
+          MODAL_LLM_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          python infra/modal/benchmark.py | tee bench.json
+          { echo "### Benchmark (${{ inputs.gpu }})"; echo '```json'; cat bench.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop the app after benchmarking (so nothing keeps running)
+        if: inputs.mode == 'benchmark' && always()
+        run: modal app stop clicky-qwen || true
