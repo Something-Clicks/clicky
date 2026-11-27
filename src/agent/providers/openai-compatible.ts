@@ -50,7 +50,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const { model: _m, messages: _x, ...extra } = (this.cfg.extraBody ?? {}) as Record<string, unknown>;
     let res: Response;
     try {
-      res = await (this.cfg.fetchImpl ?? fetch)(`${this.cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      res = await (this.cfg.fetchImpl ?? longFetch(this.cfg.timeoutMs ?? 120_000))(`${this.cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(this.cfg.apiKey ? { authorization: `Bearer ${this.cfg.apiKey}` } : {}) },
         body: JSON.stringify({
@@ -80,4 +80,17 @@ export function providerFromEnv(env: Record<string, string | undefined> = proces
   let extraBody: Record<string, unknown> | undefined;
   if (env.LLM_EXTRA_BODY) { try { extraBody = JSON.parse(env.LLM_EXTRA_BODY); } catch { throw new Error('LLM_EXTRA_BODY must be valid JSON'); } }
   return new OpenAICompatibleProvider({ baseUrl: env.LLM_BASE_URL, apiKey: env.LLM_API_KEY, model: env.LLM_MODEL, structured, extraBody, timeoutMs: env.LLM_TIMEOUT_MS ? Number(env.LLM_TIMEOUT_MS) : undefined });
+}
+
+/**
+ * Node's built-in fetch gives up after 5 minutes without response headers, which is shorter than a long generation on a modest CPU or
+ * a busy GPU queue. Use undici directly with timeouts matching the configured request timeout (still honours HTTP(S)_PROXY / NO_PROXY).
+ */
+const dispatchers = new Map<number, Promise<{ f: typeof fetch; d: unknown }>>();
+export function longFetch(timeoutMs: number): typeof fetch {
+  return (async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    if (!dispatchers.has(timeoutMs)) dispatchers.set(timeoutMs, import('undici').then((u) => ({ f: u.fetch as unknown as typeof fetch, d: new u.EnvHttpProxyAgent({ headersTimeout: timeoutMs + 5_000, bodyTimeout: timeoutMs + 5_000 }) })));
+    const { f, d } = await dispatchers.get(timeoutMs)!;
+    return f(url, { ...init, dispatcher: d } as RequestInit);
+  }) as typeof fetch;
 }
