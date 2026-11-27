@@ -29,9 +29,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Cost modes (deploy, benchmark) refuse to run from any ref other than main. This job holds no secrets and fails loudly.
+  refuse-cost-mode-off-main:
+    if: ${{ (inputs.mode == 'deploy' || inputs.mode == 'benchmark') && github.ref != 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::deploy and benchmark only run from main (selected ref: $GITHUB_REF). verify and billing may run elsewhere."
+          exit 1
+
   modal:
+    # The job does not start at all for cost modes on a non-main ref.
+    if: ${{ !((inputs.mode == 'deploy' || inputs.mode == 'benchmark') && github.ref != 'refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # HARD BOUNDARY: keep MODAL_TOKEN_ID / MODAL_TOKEN_SECRET as secrets of THIS environment (not repository secrets) and set the
+    # environment's "Deployment branches" to main only. GitHub then withholds them from any other branch, even one that edits this file.
+    environment: modal-gpu
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
