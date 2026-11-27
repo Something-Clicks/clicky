@@ -16,7 +16,7 @@ test('real website -> real model -> saved Action Cards and drafts -> reopened fr
   const runUrl = page.url(); console.log('RUN', runUrl);
   // wait for the run to finish (real model on CPU: minutes)
   const deadline = Date.now() + 50 * 60_000; let body = '';
-  while (Date.now() < deadline) { await page.reload(); body = await page.locator('body').innerText(); if (/Succeeded|Failed|needs your input|Complete/i.test(body) && !/Queued|Running/i.test(body.split('\n').slice(0, 12).join(' '))) break; await page.waitForTimeout(20_000); }
+  while (Date.now() < deadline) { await page.reload(); body = await page.locator('body').innerText(); const st = body.match(/Status:\s*\n?\s*(\w+)/)?.[1]; console.log('status', st, new Date().toISOString()); if (st && !['queued', 'running'].includes(st)) break; await page.waitForTimeout(20_000); }
   console.log('RUN PAGE\n' + body.slice(0, 3000));
   await page.screenshot({ path: 'test-results/real-run.png', fullPage: true });
   await page.goto('/board'); const board = await page.locator('body').innerText(); console.log('BOARD\n' + board.slice(0, 4000));

@@ -68,7 +68,13 @@ const throttle = async (ms = 1100) => { const wait = lastNominatim + ms - Date.n
 
 export class OpenStreetMapSource {
   readonly name = 'OpenStreetMap';
-  constructor(private readonly f: FetchLike = fetch as unknown as FetchLike, private readonly nominatim = 'https://nominatim.openstreetmap.org', private readonly overpass = 'https://overpass-api.de/api/interpreter') {}
+  /** Overpass is run by volunteers on several public mirrors; try each in turn (a mirror that resets or rate-limits us is skipped). */
+  constructor(private readonly f: FetchLike = fetch as unknown as FetchLike, private readonly nominatim = 'https://nominatim.openstreetmap.org', private readonly overpass: string | string[] = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {}
+  private async overpassQuery(q: string): Promise<string> {
+    const errs: string[] = [];
+    for (const ep of [this.overpass].flat()) { try { return await get(this.f, this.name, ep, { method: 'POST', body: `data=${encodeURIComponent(q)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' } }, 40_000); } catch (e) { errs.push(`${new URL(ep).hostname}: ${(e as Error).message.replace(/^OpenStreetMap: /, '')}`); } }
+    throw new SourceError(this.name, `Overpass unreachable (${errs.join('; ')})`);
+  }
 
   async geocode(place: string): Promise<{ lat: number; lon: number; bbox: [number, number, number, number]; display: string } | undefined> {
     await throttle();
@@ -84,7 +90,7 @@ export class OpenStreetMapSource {
     const [s, w, n, e] = g.bbox; const dy = Math.min(n - s, 0.5), dx = Math.min(e - w, 0.7); const cy = (s + n) / 2, cx = (w + e) / 2;
     const box = [cy - dy / 2, cx - dx / 2, cy + dy / 2, cx + dx / 2].map((v) => v.toFixed(5)).join(',');
     const parts = tags.flatMap(([k, v]) => [`nwr["${k}"="${v}"]["website"](${box});`, `nwr["${k}"="${v}"]["contact:website"](${box});`]).join('');
-    const body = await get(this.f, this.name, this.overpass, { method: 'POST', body: `data=${encodeURIComponent(`[out:json][timeout:25];(${parts});out center tags 60;`)}`, headers: { 'content-type': 'application/x-www-form-urlencoded' } }, 40_000);
+    const body = await this.overpassQuery(`[out:json][timeout:25];(${parts});out center tags 60;`);
     const els = (JSON.parse(body) as { elements: { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[] }).elements ?? [];
     const out: BusinessCandidate[] = [];
     for (const el of els) {

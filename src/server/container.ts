@@ -44,7 +44,8 @@ const g = globalThis as unknown as { __sc?: Container };
 /** Public, keyless discovery and research sources (OpenStreetMap, DuckDuckGo, optional SearXNG). Set DISCOVERY=off to disable. */
 export function researchSources() {
   if (process.env.DISCOVERY === 'off') return {};
-  const search = new CompositeSource([...(process.env.SEARXNG_URL ? [new SearxngSource(process.env.SEARXNG_URL)] : []), new DuckDuckGoSource()]);
+  // DuckDuckGo's HTML endpoint blocks automated clients and its terms do not offer a public API, so it is opt-in only (DISCOVERY_WEB=duckduckgo).
+  const search = new CompositeSource([...(process.env.SEARXNG_URL ? [new SearxngSource(process.env.SEARXNG_URL)] : []), ...(process.env.DISCOVERY_WEB === 'duckduckgo' ? [new DuckDuckGoSource()] : [])]);
   return { researchSource: search, discovery: new PublicDiscovery(new OpenStreetMapSource(), search) };
 }
 function build(db: Db): Container {
