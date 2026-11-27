@@ -238,3 +238,10 @@ describe('performance intelligence', () => {
     setClock(() => new Date(Date.now() + 20 * 86400000)); const f = await agent.performance.followUpFindings(owner); expect(f).toHaveLength(1); expect(f[0]!.title).toMatch(/Supply performance data/);
   });
 });
+
+describe('model output shape coercion (small open-weight models)', () => {
+  it('fits list/text shape to the profile field without changing the words', () => {
+    const r = groundUnderstanding({ fields: [{ key: 'pricing', value: ['Free audit', '$49 report'], evidence: 'inferred' }, { key: 'products_services', value: 'SEO; Web design', evidence: 'inferred' }], openQuestions: [] } as never, undefined);
+    expect(r.updates.find((u) => u.key === 'pricing')!.value).toBe('Free audit; $49 report'); expect(r.updates.find((u) => u.key === 'products_services')!.value).toEqual(['SEO', 'Web design']);
+  });
+});

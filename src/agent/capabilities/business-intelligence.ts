@@ -3,7 +3,7 @@ import type { EvidenceClass } from '../domain/enums';
 import type { WebsiteScan } from '../domain/models';
 import type { StructuredClient } from '../providers/structured';
 import type { Usage } from '../providers/usage';
-import { PROFILE_KEYS } from '../profile/fields';
+import { FIELD_BY_KEY, PROFILE_KEYS } from '../profile/fields';
 import type { FieldUpdate } from '../profile/service';
 import { BusinessUnderstandingSchema, type BusinessUnderstanding } from './contracts';
 
@@ -32,8 +32,12 @@ export function groundUnderstanding(out: BusinessUnderstanding, scan: WebsiteSca
       const q = f.quote ? normalizeText(f.quote) : '';
       if (!q || q.length < 8 || !corpus.includes(q)) { ev = 'inferred'; downgraded.push(f.key); }
     }
+    // Small models often return a list where the profile expects text (or the reverse). Fit the SHAPE to the field; the words are the model's own.
+    const kind = FIELD_BY_KEY.get(f.key)?.kind; let value = f.value;
+    if (kind === 'text' && Array.isArray(value)) value = value.filter(Boolean).join('; ');
+    if (kind === 'list' && !Array.isArray(value)) value = String(value).split(/\s*[;\n]\s*/).filter(Boolean);
     updates.push({
-      key: f.key, value: f.value,
+      key: f.key, value,
       provenance: {
         source: ev === 'verified' ? 'website' : 'ai_inference', evidence: ev,
         sourceRef: f.sourceUrl ?? scan?.finalUrl ?? scan?.startUrl,
