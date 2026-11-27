@@ -73,3 +73,13 @@ describe('claim guard', () => {
     expect(detectUnsupportedClaims('Licensed and insured.', 'We are a plumber.').length).toBeGreaterThan(0);
   });
 });
+
+describe('guarantee claims: disclaimers are not promises', () => {
+  it('flags a promise but not a plain disclaimer', async () => {
+    const { detectUnsupportedClaims } = await import('../src/agent/security/claims');
+    expect(detectUnsupportedClaims('We guarantee top rankings.', '').some((f) => f.type === 'guarantee')).toBe(true);
+    expect(detectUnsupportedClaims('We explain the expected benefit, but no one can honestly guarantee rankings, calls or revenue.', '').some((f) => f.type === 'guarantee')).toBe(false);
+    expect(detectUnsupportedClaims("We don't guarantee results.", '').some((f) => f.type === 'guarantee')).toBe(false);
+    expect(detectUnsupportedClaims('Not sure? Our money-back guarantee has no strings.', '').some((f) => f.type === 'guarantee')).toBe(true);
+  });
+});

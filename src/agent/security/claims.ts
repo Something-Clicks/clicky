@@ -18,6 +18,8 @@ const PATTERNS: Pattern[] = [
   { type: 'outcome_promise', severity: 'high', re: /\b(double|triple|10x)\s+(your\s+)?(revenue|sales|leads|traffic)|guaranteed results\b/gi, message: 'Outcome promise cannot be supported.' },
 ];
 
+const NEGATED = /(\b(no|not|never|cannot|nor|neither|without)\b|n['’]t\b)[^.!?]*$/i;
+
 /**
  * Detects claims a model must not fabricate. A claim is "supported" only if its literal text
  * appears in the supplied facts corpus (profile facts, retrieved website text, customer input).
@@ -30,6 +32,8 @@ export function detectUnsupportedClaims(text: string, supportedCorpus: string, b
     for (const m of text.matchAll(new RegExp(p.re.source, p.re.flags))) {
       const lit = normalizeText(m[0]);
       if (corpus.includes(lit)) continue;
+      // "No one can guarantee rankings" disclaims a guarantee; it does not make one. Only the plain-negation case is exempted.
+      if (p.type === 'guarantee' && /guarantee/i.test(m[0]) && NEGATED.test(text.slice(Math.max(0, (m.index ?? 0) - 45), m.index ?? 0))) continue;
       const k = `${p.type}:${lit}`;
       if (seen.has(k)) continue;
       seen.add(k);

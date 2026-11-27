@@ -96,3 +96,14 @@ describe('one draft the model cannot produce does not discard the others', () =>
     if (n >= 2) { expect(r!.status).toBe('succeeded'); expect(r!.limitations.join(' ')).toMatch(/draft could not be prepared/i); expect(drafts.length).toBeGreaterThan(0); } else expect(drafts.length).toBeGreaterThan(0);
   });
 });
+
+describe('retrying a run never duplicates drafts already written', () => {
+  it('a second pass over the same focus cards links the existing drafts', async () => {
+    const s = await setup({ plan: 'studio' }); await submit(s, 'Review my website'); await s.runAll();
+    const before = (await s.agent.db.deliverables.list(s.owner.businessId)).length; expect(before).toBeGreaterThan(0);
+    const run = (await s.agent.db.workflows.list(s.owner.businessId))[0]!;
+    await s.agent.db.workflows.update(s.owner.businessId, run.id, { status: 'failed', steps: run.steps.map((st) => (st.capability === 'content_creation' ? { ...st, status: 'failed' as const } : st)) } as never);
+    await s.agent.orchestrator.retry(s.owner, run.id); await s.runAll();
+    expect((await s.agent.db.deliverables.list(s.owner.businessId)).length).toBe(before);
+  });
+});

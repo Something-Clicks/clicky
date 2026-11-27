@@ -266,6 +266,8 @@ export const content_creation: CapabilityDef = {
     } else {
       for (const cid of env.state.focusCardIds ?? []) {
         const card = await env.agent.cards.get(env.ctx, cid);
+        // A retry resumes after an earlier attempt that already wrote this card's draft: link it, never write a duplicate.
+        if (card.card.deliverableId) { env.state.existingDeliverableIds = [...new Set([...((env.state.existingDeliverableIds as string[] | undefined) ?? []), card.card.deliverableId])]; continue; }
         const home = scan?.pages[0];
         await gen(card.card.deliverableType!, { cardId: cid, brief: `${card.card.title}. ${card.card.recommendation}`, evidence: { finding: card.card.finding, evidence: card.card.evidence, currentHeadline: home?.h1[0] ?? home?.title, ctas: home?.ctas }, pageUrl: home?.finalUrl });
       }
