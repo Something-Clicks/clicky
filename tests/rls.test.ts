@@ -19,6 +19,8 @@ beforeAll(async () => {
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     grant usage on schema public to anon, authenticated, service_role; grant usage on schema auth to anon, authenticated;
     grant execute on function auth.uid() to anon, authenticated;
+    -- Mimic Supabase: new public tables are granted ALL to anon/authenticated/service_role by default.
+    alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   `);
   await db.exec(readFileSync('supabase/migrations/0001_schema.sql', 'utf8'));
   await db.exec(`
@@ -42,6 +44,10 @@ describe('Supabase RLS (tenant isolation)', () => {
   it('a user with no membership sees nothing; an unauthenticated caller sees nothing', async () => {
     expect(await as('33333333-3333-3333-3333-333333333333', () => rows('select id from sc_cards'))).toEqual([]);
     expect(await as(null, () => rows('select id from sc_cards'))).toEqual([]);
+  });
+  it('clients cannot truncate, and anon has no access at all (default grants are removed)', async () => {
+    await expect(as(A, () => db.exec('truncate sc_cards'))).rejects.toThrow(/permission denied/i);
+    await db.exec(`set role anon`); await expect(db.query('select * from sc_cards')).rejects.toThrow(/permission denied/i); await db.exec('reset role');
   });
   it('clients cannot write at all (insert / update / delete are rejected)', async () => {
     await expect(as(A, () => db.exec(`insert into sc_cards (id, business_id, data) values ('x','biz-a','{}')`))).rejects.toThrow(/permission denied/i);

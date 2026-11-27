@@ -27,8 +27,8 @@ begin
     execute format('create index if not exists %I on public.%I using gin (data jsonb_path_ops)', t || '_data_idx', t);
     execute format('alter table public.%I enable row level security', t);
     execute format('alter table public.%I force row level security', t);
-    execute format('revoke all on public.%I from anon', t);
-    execute format('revoke insert, update, delete on public.%I from authenticated', t);
+    -- Supabase's default privileges grant ALL on new public tables to anon/authenticated: remove them all, then grant back SELECT only where intended.
+    execute format('revoke all on public.%I from anon, authenticated', t);
   end loop;
 end $$;
 
@@ -73,5 +73,12 @@ create policy sc_audit_admin_read on public.sc_audit for select to authenticated
   using (sc_private.has_role(business_id, array['owner','admin']));
 
 -- sc_previews (anonymous previews) and sc_stripe_events: RLS on with NO policies = service role only.
-grant select on all tables in schema public to authenticated;
-revoke select on public.sc_previews, public.sc_stripe_events from authenticated;
+-- Grant read access ONLY on this app's own tables. Never "all tables in schema public": the schema may hold other apps' tables
+-- (their privileges must not change). sc_previews and sc_stripe_events get no grant at all (service role only).
+do $$
+declare t text;
+begin
+  foreach t in array array['sc_businesses','sc_sites','sc_members','sc_profiles','sc_scans','sc_research','sc_findings','sc_cards','sc_deliverables','sc_strategies','sc_campaigns','sc_execution_requests','sc_metrics','sc_reports','sc_workflows','sc_audit','sc_usage','sc_uses','sc_billing'] loop
+    execute format('grant select on public.%I to authenticated', t);
+  end loop;
+end $$;

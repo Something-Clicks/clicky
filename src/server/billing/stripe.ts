@@ -3,6 +3,7 @@ import { AppError, ValidationError } from '@/agent/core/errors';
 import { nowIso } from '@/agent/core/util';
 import type { Db } from '@/agent/store/db';
 import type { SubscriptionPlan } from './plans';
+import { cachedCatalog, keyOf, verifyCatalog, type CatalogKey, type PriceCheck } from './catalog';
 import { env } from '../env';
 
 let client: Stripe | undefined;
@@ -22,9 +23,14 @@ export const planForPrice = (id?: string): SubscriptionPlan | undefined => {
   if (!id) return undefined; const p = P();
   return [p.assistantMonthly, p.assistantAnnual].includes(id) ? 'assistant' : [p.studioMonthly, p.studioAnnual].includes(id) ? 'studio' : [p.suiteMonthly, p.suiteAnnual].includes(id) ? 'suite' : undefined;
 };
-export const available = (p: Product, interval: 'month' | 'year' = 'month'): boolean => { try { priceFor(p, interval); return true; } catch { return false; } };
+const configuredIds = (): Partial<Record<CatalogKey, string>> => ({ marketing_report: P().marketingReport, 'marketing_assistant:month': P().assistantMonthly, 'marketing_assistant:year': P().assistantAnnual, 'marketing_studio:month': P().studioMonthly, 'marketing_studio:year': P().studioAnnual, 'marketing_suite:month': P().suiteMonthly, 'marketing_suite:year': P().suiteAnnual });
+/** Every configured price id checked against Stripe (cached). Anything unverified is not purchasable. */
+export const catalogStatus = (): Promise<PriceCheck[]> => cachedCatalog(() => (env.stripeSecret ? verifyCatalog(stripe() as never, configuredIds(), { production: env.isProd, key: env.stripeSecret }) : Promise.resolve((Object.keys(configuredIds()) as CatalogKey[]).map((key) => ({ key, ok: false, reason: 'Stripe is not configured' })))));
+export const available = async (p: Product, interval: 'month' | 'year' = 'month'): Promise<boolean> => (await catalogStatus()).find((c) => c.key === keyOf(p, interval))?.ok === true;
+async function assertPurchasable(p: Product, interval: 'month' | 'year'): Promise<void> { if (!(await available(p, interval))) throw new AppError('price_unverified', 'This plan cannot be purchased right now.', 503); }
 
 export async function createCheckout(db: Db, o: { userId: string; businessId: string; email?: string; product: Product; interval?: 'month' | 'year' }): Promise<string> {
+  await assertPurchasable(o.product, o.interval ?? 'month');
   const price = priceFor(o.product, o.interval); const bill = (await db.billing.list(o.businessId, { userId: o.userId }))[0];
   const meta = { userId: o.userId, businessId: o.businessId, product: o.product };
   const s = await stripe().checkout.sessions.create({

@@ -15,7 +15,8 @@
     "lighthouse:app": "MODE=app tsx scripts/lighthouse.ts",
     "build": "next build",
     "dev": "next dev",
-    "start": "next start"
+    "start": "next start",
+    "stripe:verify": "tsx scripts/verify-stripe-catalog.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
