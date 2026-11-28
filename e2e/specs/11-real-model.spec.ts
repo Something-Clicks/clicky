@@ -9,7 +9,7 @@
  * standard (docs/agents/MODEL_EVALUATION_PLAN.md), never by this test.
  */
 import { expect, test } from "../fixtures";
-import { sql } from "../fixtures/env";
+import { COMPARE_SITES, sql } from "../fixtures/env";
 
 test.skip(process.env.E2E_MODEL !== "1", "needs a model server (E2E_MODEL=1)");
 test.describe.configure({ mode: "serial" });
@@ -61,5 +61,25 @@ test.describe("real website, real model", () => {
     if (Number(written) > 0) expect(sql(`select count(*) from public.campaign_tasks where campaign_id = '${id}' and deliverable_model is not null and deliverable_model_by ->> 'model' <> '${process.env.E2E_EXPECT_MODEL ?? "qwen2.5-1.5b-instruct-q4_k_m"}'`)).toBe("0");
     const spend = sql(`select count(*) || ' calls, ' || coalesce(sum(input_tokens),0) || ' in, ' || coalesce(sum(output_tokens),0) || ' out' from public.model_usage where organization_id = '${owner.orgId}'`);
     console.log(`USAGE RECORDED: ${spend}`);
+  });
+
+  test("comparing real sites adds a written summary in which every point cites a source that was actually read", async ({ page, owner }) => {
+    await page.goto("/app/research");
+    await page.getByLabel(/Websites to compare/).fill(COMPARE_SITES.join("\n"));
+    await page.getByRole("button", { name: "Compare" }).click();
+    await expect(page.getByText(/Compared \d+ websites?\./)).toBeVisible({ timeout: 600_000 });
+    const raw = sql(`select coalesce(result -> 'summary' -> 'points', '[]'::jsonb)::text || '|' || coalesce((select string_agg(host, ',') from public.competitor_scans where organization_id = '${owner.orgId}' and status = 'done'), '') from public.marketing_workflows where organization_id = '${owner.orgId}' and kind = 'competitor_research' order by started_at desc limit 1`);
+    const [pointsJson, hosts] = [raw.slice(0, raw.lastIndexOf("|")), raw.slice(raw.lastIndexOf("|") + 1)];
+    const points = JSON.parse(pointsJson) as { statement: string; kind: string; sources: string[]; evidence_class: string }[];
+    const known = new Set(["own", ...hosts.split(",").filter(Boolean)]);
+    console.log(`RESEARCH SUMMARY (${points.length} points)\n${points.map((p) => `- [${p.kind}] ${p.statement} (sources: ${p.sources.join(", ")})`).join("\n")}`);
+    // Whatever the model wrote: nothing survives without a real source, and it is never presented as measured.
+    for (const p of points) { expect(p.sources.length).toBeGreaterThan(0); for (const src of p.sources) expect(known.has(src)).toBe(true); expect(p.evidence_class).toBe("inferred"); }
+    await page.reload();
+    if (points.length) {
+      await expect(page.getByText(/our reading, not a measurement/).first()).toBeVisible();
+      // The statement of what was NOT researched is fixed text, always shown with the summary.
+      await expect(page.getByText(/We did not look up traffic, rankings, ad spend or customer reviews/)).toBeVisible();
+    }
   });
 });
