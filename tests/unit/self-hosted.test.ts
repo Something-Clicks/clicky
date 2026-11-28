@@ -79,7 +79,7 @@ describe("provider selection is the only way in, and Production is closed", () =
   const full = { MARKETING_MODEL_PROVIDER: "self-hosted", SELF_HOSTED_MODEL_URL: "https://m.example.com", SELF_HOSTED_MODEL_TOKEN: TOKEN, SELF_HOSTED_MODEL_ID: "m1" };
 
   it("is registered, but a configured server alone activates nothing; the provider switch is needed too", () => {
-    expect(registeredProviders()).toEqual(["self-hosted"]);
+    expect(registeredProviders()).toEqual(["groq", "self-hosted"]);
     expect(getModelProvider({})).toBeNull();
     expect(getModelProvider({ ...full, MARKETING_MODEL_PROVIDER: "" })).toBeNull();
     expect(getModelProvider({ ...full, MARKETING_MODEL_PROVIDER: "other" })).toBeNull();

@@ -24,10 +24,10 @@ import { FetchBlockedError, type FetchedPage } from "@/lib/server/safe-fetch";
 import { cardStage, completionBasis, stageCounts } from "@/lib/stages";
 
 describe("model provider", () => {
-  it("has only the self-hosted adapter, which stays inert until our own server is configured: no hosted-AI key or other setting switches a model on", () => {
-    expect(registeredProviders()).toEqual(["self-hosted"]);
+  it("has the groq and self-hosted adapters, each inert until configured: no key or other setting alone switches a model on", () => {
+    expect(registeredProviders()).toEqual(["groq", "self-hosted"]);
     expect(getModelProvider({})).toBeNull();
-    for (const id of ["anthropic", "anthropic-dev", "openai", "gemini", "self-hosted", "test-double"]) {
+    for (const id of ["anthropic", "anthropic-dev", "openai", "gemini", "openrouter", "groq", "self-hosted", "test-double"]) {
       expect(getModelProvider({ MARKETING_MODEL_PROVIDER: id, ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "x", GEMINI_API_KEY: "x" })).toBeNull();
       expect(getModelProvider({ MARKETING_MODEL_PROVIDER: id, VERCEL_ENV: "preview" })).toBeNull();
     }

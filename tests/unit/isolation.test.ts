@@ -20,7 +20,7 @@ describe("model features stay off without an approved provider", () => {
     process.env.OPENAI_API_KEY = "sk-test-not-real";
     process.env.GEMINI_API_KEY = "test-not-real";
     process.env.MARKETING_MODEL_PROVIDER = "anthropic";
-    expect(registeredProviders()).toEqual(["self-hosted"]);
+    expect(registeredProviders()).toEqual(["groq", "self-hosted"]);
     expect(getModelProvider()).toBeNull();
   });
 

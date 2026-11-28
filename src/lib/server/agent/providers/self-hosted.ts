@@ -142,7 +142,7 @@ export async function postFollowingModalResult(cfg: Pick<SelfHostedConfig, "endp
 }
 
 /** Reads at most `max` bytes of a response body. */
-async function readCapped(res: Response, max: number): Promise<string> {
+export async function readCapped(res: Response, max: number): Promise<string> {
   const reader = res.body?.getReader();
   if (!reader) return "";
   const chunks: Uint8Array[] = [];
@@ -171,7 +171,7 @@ export function extractJson(content: string): unknown {
   }
 }
 
-const schemaName = (task: string) => task.replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 60) || "answer";
+export const schemaName = (task: string) => task.replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 60) || "answer";
 
 interface ChatResponse {
   model?: unknown;

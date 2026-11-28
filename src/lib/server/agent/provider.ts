@@ -4,16 +4,18 @@ import { z } from "zod";
 
 import { log } from "@/lib/log";
 
+import { groqProvider } from "./providers/groq";
 import { selfHostedProvider } from "./providers/self-hosted";
 
 /**
  * Provider-neutral interface for language-model calls made by the marketing agent.
  *
- * STATUS: one adapter is registered, "self-hosted" (providers/self-hosted.ts): it speaks the common chat-completions
- * HTTP protocol to an open-weight model server that Something Clicks runs itself. It is inert unless the server's URL, token
- * and model id are configured, it never runs in Production, and an unpriced model is never called, so with nothing
- * configured `getModelProvider()` returns null and every capability that needs a model reports "blocked" (never
- * placeholder output). No external hosted AI provider is used (owner decision, Nov 25 2026; docs/agents/OWN_MODEL_PLAN.md).
+ * STATUS: two adapters are registered. "groq" (providers/groq.ts) is the primary provider (owner decision, Nov 27 2026, which
+ * supersedes the Nov 25 "no hosted provider" decision): fixed Groq address, key and model from the server environment.
+ * "self-hosted" (providers/self-hosted.ts) speaks the same protocol to an open-weight server we run (deferred). Each is inert
+ * unless fully configured, never runs in Production, and an unpriced model is never called, so with nothing configured
+ * `getModelProvider()` returns null and every capability that needs a model reports "blocked" (never placeholder output).
+ * Provider selection is MARKETING_MODEL_PROVIDER. There is no automatic fallback: OpenRouter is NOT enabled and not built.
  *
  * Rules every adapter must keep:
  * - Server-side only; keys come from server environment variables, never NEXT_PUBLIC_.
@@ -89,6 +91,7 @@ export class ModelOutputInvalid extends Error {
  * evidence of model capability.
  */
 const PROVIDERS: Record<string, (env: Record<string, string | undefined>) => ModelProvider | null> = {
+  groq: (env) => groqProvider(env),
   "self-hosted": (env) => selfHostedProvider(env),
 };
 

@@ -18,6 +18,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { groqProvider } from "@/lib/server/agent/providers/groq";
 import { DECODING, selfHostedProvider } from "@/lib/server/agent/providers/self-hosted";
 import type { FetchedPage } from "@/lib/server/safe-fetch";
 
@@ -26,7 +27,8 @@ import type { FreezeRecord } from "./freeze";
 import { runEvalCase, runSite, summarize, toMarkdown, type ModelCheckReport } from "./run";
 import type { CaseRun, ModelRun } from "./types";
 
-const provider = selfHostedProvider(process.env);
+// MODELCHECK_PROVIDER=groq runs the dataset against Groq (GROQ_API_KEY, GROQ_MODEL and the two GROQ_PRICE_* variables); the default is the self-hosted server.
+const provider = process.env.MODELCHECK_PROVIDER === "groq" ? groqProvider(process.env) : selfHostedProvider(process.env);
 const urls = (process.env.MODELCHECK_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const fixtures = process.env.MODELCHECK_FIXTURES === "1";
 const set = process.env.MODELCHECK_SET as "dev" | "test" | "all" | undefined;
