@@ -107,6 +107,7 @@ Write a plan the owner can act on:
 - not_now: at most 5 open actions you would leave for later, each with a short reason.
 
 Rules:
+- A detail marked disputed:true has sources that disagree and the owner has not decided: do not rely on it; put the question in questions_for_owner.
 - Use only the material given. Never invent services, customers, prices, competitors, reviews, results or market facts. If something is not known, ask in questions_for_owner.
 - Never promise outcomes: no rankings, guaranteed results, percentages, revenue or traffic figures, or "more customers by...". Describe what becomes clearer or easier.
 - Be specific. Advice that would fit any business ("post on social media", "improve your SEO", "build your brand") is not allowed; name the page, the service, the customer or the detail it concerns.
@@ -229,7 +230,7 @@ export async function createPlan(provider: ModelProvider, input: PlanInput): Pro
     name: input.businessName,
     service_area: input.serviceArea,
     goal: input.primaryGoal,
-    details: input.known.map((k) => ({ name: k.field, value: k.value, confirmed_by_owner: k.confirmed, evidence: k.evidence_class })),
+    details: input.known.map((k) => ({ name: k.field, value: k.value, confirmed_by_owner: k.confirmed, evidence: k.evidence_class, ...(k.disputed ? { disputed: true } : {}) })),
   };
   const open = cards.map((c) => ({ reference: c.ref, title: c.title, why_it_matters: c.why_it_matters, what_to_do: c.recommended_action, impact: c.impact, confidence: c.confidence, evidence: c.evidence_class, stage: c.stage }));
   const notes = input.ownerNotes ? `\n<owner_notes>${input.ownerNotes.replace(/</g, "(")}</owner_notes>` : "";

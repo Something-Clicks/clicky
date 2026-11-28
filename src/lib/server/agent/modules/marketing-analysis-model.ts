@@ -71,6 +71,7 @@ Rules:
 - Every finding quotes the page it is about: copy exact words (page_key = the key attribute). Quote what is there; if the problem is something missing, quote the nearby text that shows it is missing.
 - evidence_class: "verified" when the quote shows the problem directly; "inferred" when it is your interpretation (explain in basis); "estimated" only with stated assumptions.
 - Never invent figures, rankings, traffic, conversion rates, revenue or results. Never promise outcomes. Benefits describe what becomes clearer or easier.
+- A business detail marked disputed:true has sources that disagree and the owner has not decided: do not treat it as true.
 - Plain, friendly words for an owner with no marketing background. One or two sentences per field.
 - Meaningful business problems over cosmetic ones. At most 5 findings; none if the site is already clear.
 - Use what <business> says the business is, but judge only what the website shows.`;
@@ -172,7 +173,7 @@ export async function analyzeWithModel(
   provider: ModelProvider,
   input: { pages: SourcePage[]; businessName: string; known: KnownFact[]; alreadyFound: string[]; deadlineAt?: number },
 ): Promise<ModelFindings> {
-  const business = { name: input.businessName, details: input.known.map((k) => ({ [k.field]: k.value, confirmed_by_owner: k.confirmed })) };
+  const business = { name: input.businessName, details: input.known.map((k) => ({ [k.field]: k.value, confirmed_by_owner: k.confirmed, ...(k.disputed ? { disputed: true } : {}) })) };
   const r = await generateStructured(
     {
       task: "marketing_analysis.review",
