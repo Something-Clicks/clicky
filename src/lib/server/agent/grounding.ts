@@ -32,15 +32,22 @@ export function findQuote(pages: SourcePage[], pageKey: string, quote: string): 
   return null;
 }
 
+/**
+ * List numbering is not a figure: "1) Call us", "2. We assess", a heading "### 3. Tips". Found by a real model run, where numbered steps and
+ * outlines were refused as "numbers not in your details". Only a 1-2 digit number at the start of a line (with "." or ")") or written "n)" in
+ * running text is treated as numbering; any other number, including "500 customers", is still checked.
+ */
+const withoutEnumerators = (t: string) => t.replace(/(^|\n)[ \t]*(?:#{1,6}[ \t]*)?\d{1,2}[.)][ \t]+/g, "$1").replace(/(^|[\s:;])\d{1,2}\)(?=\s)/g, "$1").replace(/\b(step|tip|reason|part|section|phase|point|question|option|item)\s+\d{1,2}\b/gi, "$1");
+
 /** Numbers in a text that appear nowhere in the source (possible invention). Bracketed placeholders are ignored. */
 export function unsupportedNumbers(text: string, source: string): string[] {
   const s = norm(source);
-  const nums = text.replace(/\[[^\]]*\]/g, "").match(/\d[\d,.:/-]*\d|\d/g) ?? [];
+  const nums = withoutEnumerators(text.replace(/\[[^\]]*\]/g, "")).match(/\d[\d,.:/-]*\d|\d/g) ?? [];
   return [...new Set(nums)].filter((n) => !s.includes(n));
 }
 
 /** Promises and claims Something Clicks never makes on a business's behalf. */
-const PROMISES = /\b(guarantee[ds]?|guaranteed|number one|best in (town|the city|the state)|rank (first|higher|#\s?1)|award[- ]winning|double your|triple your)\b|#\s?1\b/i;
+const PROMISES = /\b(guarantee[ds]?|guaranteed|number one|best in (town|the city|the state)|rank (first|higher|#\s?1)|award[- ]winning|double your|triple your)\b|(?<![#\w])#\s?1\b(?![.)])/i;
 
 /** Every promise phrase in `text`, as written. */
 export const promisePhrases = (text: string): string[] => [...text.matchAll(new RegExp(PROMISES.source, "gi"))].map((m) => m[0]);

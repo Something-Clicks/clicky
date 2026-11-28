@@ -810,7 +810,7 @@ export async function runCampaignDrafts(
       step({ step: `draft_${t.position}`, capability: "content_creation", status: "done", detail: `Wrote “${t.title.slice(0, 80)}”.` });
     } catch (error) {
       rejected += 1;
-      log.warn("campaign.draft_failed", { workflowId, task: t.id, error });
+      log.warn("campaign.draft_failed", { workflowId, task: t.id, channel: t.channel, ...(error instanceof ContentRejected ? { reason: error.reason, figures: error.detail } : {}), error });
       const plain = error instanceof ContentRejected ? error.message : error instanceof ModelBudgetExceeded ? "The usage limit for this business was reached." : error instanceof ModelThrottled ? throttleMessage(error) : "This draft didn't finish; the template is still there.";
       step({ step: `draft_${t.position}`, capability: "content_creation", status: "failed", detail: `“${t.title.slice(0, 80)}”: ${plain}` });
       if (error instanceof ModelBudgetExceeded || (error instanceof ModelThrottled && error.kind !== "too_large")) break;

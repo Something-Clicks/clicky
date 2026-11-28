@@ -62,16 +62,26 @@ describe.skipIf(!provider || (!fixtures && urls.length === 0 && !set))("model ch
     for (const c of chosen) {
       const kept = done.get(c.id);
       if (kept) { cases.push(kept); console.log(`Case ${c.id}: reused from checkpoint.`); continue; }
-      try {
-        cases.push(await runEvalCase(provider!, c, names));
-        writeFileSync(checkpointFile, JSON.stringify({ model: provider!.model ?? "unknown", datasetHash: datasetHash(), gitCommit: gitCommit(), cases } satisfies Checkpoint));
-        console.log(`Case ${c.id}: done and saved (${cases.length}/${chosen.length}).`);
-      } catch (error) {
-        if (!(error instanceof ModelThrottled)) throw error;
-        pausedUntil = error.resumeAt;
-        console.log(`PAUSED on ${c.id}: the free allowance is used up (${error.kind}). Resume ${resumeSentence(error.resumeAt)} with the same command; ${cases.length}/${chosen.length} cases are saved in ${checkpointFile}.`);
-        break;
+      // A per-minute limit is waited out and the case redone whole (up to 6 times); a daily limit (or a request that can never fit) pauses the run.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          cases.push(await runEvalCase(provider!, c, names));
+          writeFileSync(checkpointFile, JSON.stringify({ model: provider!.model ?? "unknown", datasetHash: datasetHash(), gitCommit: gitCommit(), cases } satisfies Checkpoint));
+          console.log(`Case ${c.id}: done and saved (${cases.length}/${chosen.length}).`);
+          break;
+        } catch (error) {
+          if (!(error instanceof ModelThrottled)) throw error;
+          if (error.kind === "minute" && attempt < 6) {
+            console.log(`Case ${c.id}: the free per-minute allowance was busy; waiting ${Math.ceil(error.retryAfterMs / 1000) + 2}s and redoing the case (attempt ${attempt}).`);
+            await new Promise((r) => setTimeout(r, error.retryAfterMs + 2_000));
+            continue;
+          }
+          pausedUntil = error.resumeAt;
+          console.log(`PAUSED on ${c.id}: the free allowance is used up (${error.kind}). Resume ${resumeSentence(error.resumeAt)} with the same command; ${cases.length}/${chosen.length} cases are saved in ${checkpointFile}.`);
+          break;
+        }
       }
+      if (pausedUntil !== null) break;
     }
     if (pausedUntil !== null) { expect(cases.length).toBeLessThan(chosen.length); return; }
     const freeze = JSON.parse(readFileSync(join(__dirname, "dataset", "FREEZE.json"), "utf8")) as FreezeRecord;

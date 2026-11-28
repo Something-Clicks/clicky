@@ -59,7 +59,8 @@ Rules:
 - Respect the lengths in <brief>.`;
 
 export class ContentRejected extends Error {
-  constructor(public readonly reason: string, message: string) {
+  /** `detail`: for the server log only (the offending figures, never the text), so a refusal can be told from a false positive. */
+  constructor(public readonly reason: string, message: string, public readonly detail?: string) {
     super(message);
     this.name = "ContentRejected";
   }
@@ -90,8 +91,9 @@ export function checkDraft(kind: DraftKind, out: Record<string, string>, source:
     if (!text) throw new ContentRejected("empty_field", "The draft came back incomplete, so we didn't keep it. Please try again.");
     const problem = claimProblemIn(text);
     if (problem) throw new ContentRejected(problem, "The draft made a promise or claim we can't back up, so we didn't keep it. Please try again.");
-    if (unsupportedNumbers(text, source).length) {
-      throw new ContentRejected("figure_not_in_source", "The draft used a number that isn't in your business details, so we didn't keep it. Please try again.");
+    const figures = unsupportedNumbers(text, source);
+    if (figures.length) {
+      throw new ContentRejected("figure_not_in_source", "The draft used a number that isn't in your business details, so we didn't keep it. Please try again.", figures.slice(0, 6).join(", "));
     }
     if (text.length > max * 1.25) throw new ContentRejected("too_long", "The draft came back too long, so we didn't keep it. Please try again.");
     return { key, label, text };
@@ -209,7 +211,8 @@ export function checkTaskDraft(kind: ChannelKind, out: Record<string, string>, s
     const found = claimProblemIn(text);
     const problem = names_promises && found === "promise" ? null : found;
     if (problem) throw new ContentRejected(problem, "The draft made a promise or claim we can't back up, so we didn't keep it. Please try again.");
-    if (unsupportedNumbers(text, source).length) throw new ContentRejected("figure_not_in_source", "The draft used a number that isn't in your business details, so we didn't keep it. Please try again.");
+    const figures = unsupportedNumbers(text, source);
+    if (figures.length) throw new ContentRejected("figure_not_in_source", "The draft used a number that isn't in your business details, so we didn't keep it. Please try again.", figures.slice(0, 6).join(", "));
     if (text.length > max * 1.25) throw new ContentRejected("too_long", "The draft came back too long, so we didn't keep it. Please try again.");
     return { key, label, text };
   });
