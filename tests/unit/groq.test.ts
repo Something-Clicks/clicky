@@ -15,6 +15,8 @@ import { groqStrictSchema } from "@/lib/server/agent/providers/groq-schema";
 
 import { completion, json, startStub, type Stub } from "../support/model-stub";
 
+interface Node { type?: string; required?: string[]; additionalProperties?: unknown; $schema?: unknown; enum?: string[]; items?: Node; minLength?: unknown; properties: Record<string, Node> }
+
 const KEY = "gsk_" + "a".repeat(40);
 const base = { GROQ_API_KEY: KEY, GROQ_MODEL: "openai/gpt-oss-120b" };
 const priced = { ...base, GROQ_PRICE_INPUT_PER_MTOK: "0.15", GROQ_PRICE_OUTPUT_PER_MTOK: "0.6" };
@@ -74,7 +76,7 @@ describe("the schema sent to Groq's strict mode", () => {
       $schema: "https://json-schema.org/draft/2020-12/schema", type: "object",
       properties: { title: { type: "string", minLength: 1, maxLength: 60 }, tags: { type: "array", items: { type: "string" }, maxItems: 3 }, kind: { type: "string", enum: ["a", "b"] }, inner: { type: "object", properties: { n: { type: "number", minimum: 0 } } } },
       required: ["title"], additionalProperties: true,
-    }) as Record<string, any>;
+    }) as Node;
     expect(out.$schema).toBeUndefined();
     expect(out.required).toEqual(["title", "tags", "kind", "inner"]);
     expect(out.additionalProperties).toBe(false);
@@ -86,7 +88,7 @@ describe("the schema sent to Groq's strict mode", () => {
 
   it("is what zod's own schema becomes for the agent's strict objects", () => {
     const schema = z.object({ headline: z.string().min(1), items: z.array(z.object({ q: z.string() }).strict()).max(3) }).strict();
-    const out = groqStrictSchema(z.toJSONSchema(schema)) as Record<string, any>;
+    const out = groqStrictSchema(z.toJSONSchema(schema)) as Node;
     expect(out.required).toEqual(["headline", "items"]);
     expect(out.properties.items.items.required).toEqual(["q"]);
   });
@@ -110,7 +112,7 @@ describe("the request it sends", () => {
   it("sends best-effort mode when strict is switched off, and no reasoning field by default", async () => {
     stub = await startStub((_s, res) => json(res, 200, completion('{"a":"ok"}')));
     await groqProvider({ ...base, GROQ_STRICT: "0" }, { baseUrl: stub.url })!.generate(req);
-    expect((stub.seen[0]!.body.response_format as any).json_schema.strict).toBe(false);
+    expect((stub.seen[0]!.body.response_format as { json_schema: { strict: boolean } }).json_schema.strict).toBe(false);
     expect(stub.seen[0]!.body).not.toHaveProperty("reasoning_effort");
   });
 });
