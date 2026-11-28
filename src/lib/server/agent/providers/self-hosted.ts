@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHmac } from "node:crypto";
+
 import { log } from "@/lib/log";
 
 import { estimateInputTokens } from "../metering";
@@ -24,7 +26,7 @@ import type { ModelProvider, ModelRawResponse } from "../provider";
  *                                   dollars per million tokens, from MEASURED amortized compute cost. With no price the
  *                                   model is "unpriced" and the app's metering refuses every call (fail closed).
  *
- * Safety: no redirects are followed (the token cannot be forwarded elsewhere), the response is size-capped, errors never
+ * Safety: no redirects are followed except Modal's same-origin 303 result URL (the token cannot be forwarded elsewhere), the response is size-capped, errors never
  * include the server's text or the token, and if the server omits token counts they are estimated high so spend is never
  * hidden. Provider selection and the Production block live in provider.ts.
  */
@@ -73,9 +75,23 @@ const num = (v: string | undefined) => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+/**
+ * Modal endpoints (infra/modal/serve_qwen.py) are protected by a key derived from the Modal API secret, so no second secret has to be
+ * created or shared: HMAC-SHA256(MODAL_TOKEN_SECRET, "clicky-llm-endpoint-v1"). Used only when SELF_HOSTED_MODEL_TOKEN is not set
+ * AND the endpoint is on a Modal host, so the derived key can never be sent anywhere else.
+ */
+export function modalEndpointToken(secret: string): string {
+  return createHmac("sha256", secret).update("clicky-llm-endpoint-v1").digest("hex");
+}
+const isModalHost = (endpoint: string) => {
+  try { const h = new URL(endpoint).hostname; return h.endsWith(".modal.run") || h.endsWith(".modal.direct"); } catch { return false; }
+};
+
 export function readSelfHostedConfig(env: Record<string, string | undefined>): SelfHostedConfig | null {
   const endpoint = parseEndpoint(env.SELF_HOSTED_MODEL_URL);
-  const token = env.SELF_HOSTED_MODEL_TOKEN?.trim() ?? "";
+  const explicit = env.SELF_HOSTED_MODEL_TOKEN?.trim() ?? "";
+  const modalSecret = env.MODAL_TOKEN_SECRET?.trim();
+  const token = explicit || (endpoint && modalSecret && isModalHost(endpoint) ? modalEndpointToken(modalSecret) : "");
   const model = env.SELF_HOSTED_MODEL_ID?.trim() ?? "";
   if (!endpoint || token.length < 16 || !/^[A-Za-z0-9._\-/:]{1,100}$/.test(model)) return null;
 
@@ -102,6 +118,27 @@ export function readSelfHostedConfig(env: Record<string, string | undefined>): S
     attemptTimeoutMs: attempt === null ? DEFAULT_ATTEMPT_MS : Math.min(600_000, Math.max(10_000, Math.round(attempt))),
     price: input !== null && output !== null ? { input, output } : null,
   };
+}
+
+
+/**
+ * POSTs to the model server. No redirect is ever followed EXCEPT Modal's own "result URL" for a request that outlived its 150-second
+ * HTTP window (HTTP 303, same origin, https): the answer is then fetched with GET from that same origin, still under the one attempt
+ * timeout. Any other redirect, or a redirect to another origin, is refused so the token can never be forwarded elsewhere.
+ */
+export async function postFollowingModalResult(cfg: Pick<SelfHostedConfig, "endpoint" | "token">, body: string, signal: AbortSignal): Promise<Response> {
+  const headers = { "content-type": "application/json", authorization: `Bearer ${cfg.token}` };
+  const origin = new URL(cfg.endpoint).origin;
+  let res = await fetch(cfg.endpoint, { method: "POST", headers, body, signal, cache: "no-store", redirect: "manual" });
+  for (let hops = 0; res.status >= 300 && res.status < 400; hops++) {
+    const location = res.headers.get("location");
+    await res.body?.cancel();
+    let next: URL | null = null;
+    try { next = location ? new URL(location, cfg.endpoint) : null; } catch { next = null; }
+    if (res.status !== 303 || !next || next.origin !== origin || hops >= 20) throw new SelfHostedError("The model server tried to redirect the request; refused.", res.status);
+    res = await fetch(next, { method: "GET", headers: { authorization: headers.authorization }, signal, cache: "no-store", redirect: "manual" });
+  }
+  return res;
 }
 
 /** Reads at most `max` bytes of a response body. */
@@ -168,14 +205,7 @@ export function selfHostedProvider(env: Record<string, string | undefined> = pro
         response_format: { type: "json_schema", json_schema: { name: schemaName(req.task), schema: req.jsonSchema, strict: true } },
       };
 
-      const res = await fetch(cfg.endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${cfg.token}` },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(req.timeoutMs ?? cfg.attemptTimeoutMs),
-        cache: "no-store",
-        redirect: "error",
-      });
+      const res = await postFollowingModalResult(cfg, JSON.stringify(body), AbortSignal.timeout(req.timeoutMs ?? cfg.attemptTimeoutMs));
       if (!res.ok) {
         await res.body?.cancel();
         throw new SelfHostedError(`The model server answered with status ${res.status}.`, res.status);

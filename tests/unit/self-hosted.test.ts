@@ -9,7 +9,7 @@ import { z } from "zod";
 import { meteredProvider, ModelBudgetExceeded } from "@/lib/server/agent/metering";
 import { costMicro } from "@/lib/server/agent/pricing";
 import { generateStructured, getModelProvider, ModelOutputInvalid, registeredProviders } from "@/lib/server/agent/provider";
-import { extractJson, readSelfHostedConfig, selfHostedProvider } from "@/lib/server/agent/providers/self-hosted";
+import { extractJson, modalEndpointToken, readSelfHostedConfig, selfHostedProvider } from "@/lib/server/agent/providers/self-hosted";
 
 import { completion, json, sampleFromSchema, startStub, type Stub } from "../support/model-stub";
 
@@ -32,6 +32,15 @@ describe("configuration fails closed", () => {
       { ...base, SELF_HOSTED_MODEL_URL: "" }, { ...base, SELF_HOSTED_MODEL_URL: "not a url" }, { ...base, SELF_HOSTED_MODEL_TOKEN: "short" },
       { ...base, SELF_HOSTED_MODEL_TOKEN: "" }, { ...base, SELF_HOSTED_MODEL_ID: "" }, { ...base, SELF_HOSTED_MODEL_ID: "bad id with spaces" },
     ]) expect(readSelfHostedConfig(bad)).toBeNull();
+  });
+
+  it("derives the endpoint key from the Modal API secret ONLY for Modal hosts and only when no explicit token is set", () => {
+    const modal = { SELF_HOSTED_MODEL_URL: "https://ws--clicky-qwen-serve.modal.run", SELF_HOSTED_MODEL_ID: "qwen3-4b-instruct-2507", MODAL_TOKEN_SECRET: "as-test-secret-value" };
+    expect(readSelfHostedConfig(modal)!.token).toBe(modalEndpointToken("as-test-secret-value"));
+    expect(modalEndpointToken("as-test-secret-value")).toMatch(/^[0-9a-f]{64}$/);
+    expect(readSelfHostedConfig({ ...modal, SELF_HOSTED_MODEL_TOKEN: TOKEN })!.token).toBe(TOKEN);
+    expect(readSelfHostedConfig({ ...modal, SELF_HOSTED_MODEL_URL: "https://models.example.com" })).toBeNull(); // never derived for other hosts
+    expect(readSelfHostedConfig({ ...modal, MODAL_TOKEN_SECRET: "" })).toBeNull();
   });
 
   it("requires https (plain http only for localhost) and refuses credentials, queries and fragments in the URL", () => {
@@ -245,5 +254,29 @@ describe("inside the agent's own controls", () => {
 describe("the stand-in's schema sampler (test helper)", () => {
   it("produces values that satisfy simple schemas", () => {
     expect(sampleFromSchema({ type: "object", properties: { a: { type: "string" }, b: { type: "array" }, c: { enum: ["q", "r"] } }, required: ["a", "b", "c"] })).toEqual({ a: "x", b: [], c: "q" });
+  });
+});
+
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { postFollowingModalResult } from "@/lib/server/agent/providers/self-hosted";
+
+describe("long requests: only Modal's same-origin 303 result URL is followed", () => {
+  const serve = async (handler: Parameters<typeof createServer>[1]) => { const srv = createServer(handler); await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r)); return { srv, url: `http://127.0.0.1:${(srv.address() as AddressInfo).port}` }; };
+  it("follows 303 to the same origin with the same bearer, via GET, and returns the final answer", async () => {
+    const seen: string[] = [];
+    const { srv, url } = await serve((rq, rs) => {
+      seen.push(`${rq.method} ${rq.url} auth=${rq.headers.authorization === `Bearer ${TOKEN}`}`);
+      if (rq.method === "POST") { rs.writeHead(303, { location: "/v1/chat/completions?__modal_function_call_id=fc-1" }); rs.end(); } else { rs.writeHead(200, { "content-type": "application/json" }); rs.end('{"ok":true}'); }
+    });
+    try { const res = await postFollowingModalResult({ endpoint: `${url}/v1/chat/completions`, token: TOKEN }, "{}", AbortSignal.timeout(5000)); expect(res.status).toBe(200); expect(seen).toEqual(["POST /v1/chat/completions auth=true", "GET /v1/chat/completions?__modal_function_call_id=fc-1 auth=true"]); } finally { srv.close(); }
+  });
+  it("refuses a redirect to another origin (token must never leave) and any non-303 redirect", async () => {
+    const other = await serve((rq, rs) => { rs.writeHead(200); rs.end("should never be reached with a token"); });
+    const { srv, url } = await serve((rq, rs) => { rs.writeHead(rq.url?.includes("307") ? 307 : 303, { location: rq.url?.includes("307") ? "/x" : `${other.url}/steal` }); rs.end(); });
+    try {
+      await expect(postFollowingModalResult({ endpoint: `${url}/v1/chat/completions`, token: TOKEN }, "{}", AbortSignal.timeout(5000))).rejects.toThrow(/redirect/);
+      await expect(postFollowingModalResult({ endpoint: `${url}/307`, token: TOKEN }, "{}", AbortSignal.timeout(5000))).rejects.toThrow(/redirect/);
+    } finally { srv.close(); other.srv.close(); }
   });
 });
