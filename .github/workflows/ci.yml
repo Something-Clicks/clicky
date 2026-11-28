@@ -63,9 +63,9 @@ jobs:
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
-      # Stand-in analytics ids so the consent tests can see what would load. Never real ids.
+      # Stand-in analytics ids so the consent tests can see what would load. Never real ids. (CLARITY_ID is the server variable the root layout reads; the old NEXT_PUBLIC_CLARITY_PROJECT_ID name is no longer used.)
       NEXT_PUBLIC_GA_MEASUREMENT_ID: G-CISTANDIN1
-      NEXT_PUBLIC_CLARITY_PROJECT_ID: cistandin1
+      CLARITY_ID: cistandin1
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
