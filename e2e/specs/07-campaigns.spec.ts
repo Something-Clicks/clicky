@@ -107,15 +107,18 @@ test.describe("campaign creation and owner approval", () => {
   });
 });
 
-test.describe("campaigns are hidden where the switch is off (Production behaviour)", () => {
-  test("the screens do not exist on a server run as Production", async ({ page, owner }) => {
+test.describe("campaigns in Production (released, no model)", () => {
+  test("Compare and Campaigns exist on a server run as Production; nothing that needs a model or a third party is offered", async ({ page, owner }) => {
     const base = process.env.E2E_PROD_BASE;
-    test.skip(!base, "Set E2E_PROD_BASE to a server started with VERCEL_ENV=production");
+    test.skip(!base, "Set E2E_PROD_BASE to a server started with VERCEL_ENV=production and no FEATURE_* variables");
     await logIn(page, owner.email);
-    for (const path of ["/app/campaigns", "/app/research"]) {
-      await page.goto(`${base}${path}`);
-      await expect(page.getByRole("heading", { name: /couldn.t find/i }).first()).toBeVisible();
-      await expect(page.getByRole("button", { name: /Compare|Prepare my campaigns/ })).toHaveCount(0);
-    }
+    await page.goto(`${base}/app/campaigns`);
+    await expect(page.getByRole("heading", { level: 1, name: "Campaigns" })).toBeVisible();
+    await page.goto(`${base}/app/research`);
+    await expect(page.getByRole("heading", { level: 1, name: "Compare" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Compare" })).toBeVisible();
+    // Discovery sends a place and a service phrase to third parties: off in Production until the policy wording is approved.
+    await expect(page.getByRole("heading", { name: "Find similar businesses" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Find similar businesses/ })).toHaveCount(0);
   });
 });

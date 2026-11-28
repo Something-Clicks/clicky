@@ -134,8 +134,8 @@ test.describe("internal agent review (platform admin)", () => {
   });
 });
 
-test.describe("hidden in Production", () => {
-  test("with VERCEL_ENV=production the plan, business details and agent review do not exist for anyone", async ({ browser }, info) => {
+test.describe("Production: released screens exist, internal review stays hidden", () => {
+  test("with VERCEL_ENV=production the plan and business details are released, and the agent review does not exist for anyone", async ({ browser }, info) => {
     test.skip(!PROD_BASE || suffix(info) === "m", "needs a second server started with VERCEL_ENV=production (E2E_PROD_BASE)");
     const ctx = await browser.newContext(info.project.use);
     const page = await ctx.newPage();
@@ -143,12 +143,11 @@ test.describe("hidden in Production", () => {
     // The signed-in layout streams first, so the HTTP status can read 200; what matters is what the person sees.
     for (const [path, heading] of [["/app/plan", "Your plan"], ["/app/business", "Business details"]] as const) {
       await page.goto(`${PROD_BASE}${path}`);
-      await expect(page.getByText("We couldn't find that.")).toBeVisible();
-      await expect(page.getByRole("heading", { name: heading, level: 1 })).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
     }
     await page.goto(`${PROD_BASE}/app`);
-    await expect(page.getByRole("link", { name: "Your plan" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Business details" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Your plan" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Business details" })).toBeVisible();
     await ctx.close();
     const admin = await browser.newContext(info.project.use);
     const ap = await admin.newPage();

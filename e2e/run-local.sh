@@ -21,7 +21,8 @@ psql -q "postgres://postgres:postgres@localhost:5432/sc_e2e" -c "insert into app
 pnpm build
 pkill -f "next start -p 3100" 2>/dev/null || true; pkill -f "next start -p 3101" 2>/dev/null || true
 FEATURE_AGENT=1 FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 FEATURE_STRATEGY=1 NODE_USE_ENV_PROXY=1 nohup pnpm exec next start -p 3100 > "$W/next.log" 2>&1 &
-VERCEL_ENV=production FEATURE_AGENT=1 FEATURE_CAMPAIGNS=1 FEATURE_BUSINESS_PROFILE=1 FEATURE_STRATEGY=1 NODE_USE_ENV_PROXY=1 nohup pnpm exec next start -p 3101 > "$W/next-prod.log" 2>&1 &
+# Production has NO FEATURE_* variables (the model-free screens are released in code), exactly as on Vercel.
+VERCEL_ENV=production NODE_USE_ENV_PROXY=1 nohup pnpm exec next start -p 3101 > "$W/next-prod.log" 2>&1 &
 trap 'pkill -f "next start -p 3100" 2>/dev/null || true; pkill -f "next start -p 3101" 2>/dev/null || true' EXIT
 sleep 6
 E2E_SUITE=1 E2E_PORT=3100 E2E_PROD_BASE=http://localhost:3101 E2E_CLARITY_ID="$CLARITY_TEST_ID" E2E_GA_ID="$GA_TEST_ID" \

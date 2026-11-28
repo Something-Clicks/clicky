@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { FEATURES } from "@/config/features";
+import { discoveryAvailable, FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { parseSiteList, readSignals, type DiscoverState, type SiteSignals } from "@/lib/research";
@@ -65,7 +65,7 @@ const lastDiscovery = new Map<string, number>();
  * Saves nothing and reads none of their pages: the owner picks which to compare, and only then are their homepages read.
  */
 export async function findCompetitors(_prev: DiscoverState, _form: FormData): Promise<DiscoverState> {
-  if (!FEATURES.campaigns) return { error: "Finding similar businesses isn't available yet." };
+  if (!FEATURES.campaigns || !discoveryAvailable()) return { error: "Finding similar businesses isn't available yet." };
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };
   const orgId = ws.organization.id;

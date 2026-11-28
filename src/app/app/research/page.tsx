@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { removeComparison } from "@/app/actions/campaigns";
 import { CompareForm, DiscoverForm } from "@/components/agent-forms";
-import { FEATURES } from "@/config/features";
+import { discoveryAvailable, FEATURES } from "@/config/features";
 import { requireOrganization } from "@/lib/auth";
 import { compareSignals, readSignals, SIGNAL_LABEL, SIGNAL_KEYS, type SiteSignals } from "@/lib/research";
 import { createClient } from "@/lib/supabase/server";
@@ -39,7 +39,7 @@ export default async function ResearchPage() {
         <p className="sub">See what other websites show on their homepage that yours doesn&apos;t. We only read public pages.</p>
       </div>
       {!own && others.length === 0 && !ws.business?.website ? <p className="notice">Add your website first so we can compare it. <Link className="link" href="/app/onboarding">Add it</Link></p> : null}
-      <section className="card stack"><h2 style={{ marginTop: 0 }}>Find similar businesses</h2><DiscoverForm /></section>
+      {discoveryAvailable() ? <section className="card stack"><h2 style={{ marginTop: 0 }}>Find similar businesses</h2><DiscoverForm /></section> : null}
       <section className="card stack"><h2 style={{ marginTop: 0 }}>{others.length ? "Compare again" : "Or type the websites you know"}</h2><CompareForm /></section>
 
       {summary?.points.length ? (

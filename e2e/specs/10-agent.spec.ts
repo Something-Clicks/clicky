@@ -102,13 +102,13 @@ test.describe("Ask, research, execute and measure", () => {
     await noSideScroll(page);
   });
 
-  test("none of these screens exist in Production, whatever the switches say", async ({ page }) => {
-    test.skip(!PROD, "needs the production-mode server (E2E_PROD_BASE)");
-    // The app's not-found page (streamed inside the signed-in layout, as for every switched-off screen such as /app/plan).
-    for (const path of ["/app/ask", "/app/results", "/app/library"]) {
+  test("in Production Ask, Results and Research exist, and nothing says a model is writing", async ({ page }) => {
+    test.skip(!PROD, "needs the production-mode server (E2E_PROD_BASE, no FEATURE_* variables)");
+    for (const [path, heading] of [["/app/ask", "Ask"], ["/app/results", "Results"], ["/app/library", "Research"]] as const) {
       await page.goto(`${PROD}${path}`);
-      await expect(page.getByRole("heading", { name: "We couldn't find that." })).toBeVisible();
-      await expect(page.getByRole("link", { name: /^(Ask|Results|Research)$/ })).toHaveCount(0);
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await expect(page.locator("main")).not.toContainText(INTERNALS);
+      await expect(page.locator("main")).not.toContainText(/\bAI\b|language model|\bagents?\b/i);
     }
   });
 });
