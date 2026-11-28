@@ -82,7 +82,7 @@ describe("the schema sent to Groq's strict mode", () => {
     expect(out.additionalProperties).toBe(false);
     expect(out.properties.title).toEqual({ type: "string" });
     expect(out.properties.tags).toEqual({ type: "array", items: { type: "string" } });
-    expect(out.properties.kind.enum).toEqual(["a", "b"]);
+    expect(out.properties.kind!.enum).toEqual(["a", "b"]);
     expect(out.properties.inner).toEqual({ type: "object", properties: { n: { type: "number" } }, required: ["n"], additionalProperties: false });
   });
 
@@ -90,7 +90,7 @@ describe("the schema sent to Groq's strict mode", () => {
     const schema = z.object({ headline: z.string().min(1), items: z.array(z.object({ q: z.string() }).strict()).max(3) }).strict();
     const out = groqStrictSchema(z.toJSONSchema(schema)) as Node;
     expect(out.required).toEqual(["headline", "items"]);
-    expect(out.properties.items.items.required).toEqual(["q"]);
+    expect(out.properties.items!.items!.required).toEqual(["q"]);
   });
 });
 
