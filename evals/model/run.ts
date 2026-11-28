@@ -13,7 +13,7 @@ import type { KnownFact } from "@/lib/server/agent/modules/business-intelligence
 import { ContentRejected, createContent, type ContentInput, type DraftKind } from "@/lib/server/agent/modules/content-creation";
 import { analyzeWithModel } from "@/lib/server/agent/modules/marketing-analysis-model";
 import { createPlan, PlanRejected } from "@/lib/server/agent/modules/marketing-strategy";
-import { ModelOutputInvalid, type ModelProvider } from "@/lib/server/agent/provider";
+import { ModelOutputInvalid, ModelThrottled, type ModelProvider } from "@/lib/server/agent/provider";
 import type { AnalysisDeps } from "@/lib/server/analysis";
 import type { FetchedPage } from "@/lib/server/safe-fetch";
 
@@ -68,6 +68,9 @@ async function timed(site: string, task: string, inner: ModelProvider, run: (p: 
   try {
     ({ yield: y, output } = await run(provider));
   } catch (error) {
+    // The provider's free allowance ran out. That is NOT the model failing a task, so it is never recorded as one: the whole case
+    // is abandoned and run again when the allowance returns (modelcheck.eval.ts checkpoints finished cases).
+    if (error instanceof ModelThrottled) throw error;
     ok = false;
     failure = failureOf(error);
   }

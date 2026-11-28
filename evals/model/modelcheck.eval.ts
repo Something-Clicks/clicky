@@ -13,12 +13,14 @@
  * .md summary of the AUTOMATIC measurements. Quality is judged by people with `pnpm modelscore`.
  */
 import { execSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { ModelThrottled } from "@/lib/server/agent/provider";
 import { groqProvider } from "@/lib/server/agent/providers/groq";
+import { resumeSentence } from "@/lib/server/agent/providers/groq-limits";
 import { DECODING, selfHostedProvider } from "@/lib/server/agent/providers/self-hosted";
 import type { FetchedPage } from "@/lib/server/safe-fetch";
 
@@ -44,7 +46,34 @@ describe.skipIf(!provider || (!fixtures && urls.length === 0 && !set))("model ch
     const chosen = (set === "dev" ? DEV_SET : set === "test" ? TEST_SET : ALL_CASES).filter((c) => !process.env.MODELCHECK_CASES || process.env.MODELCHECK_CASES.split(",").map((s) => s.trim()).includes(c.id));
     const names = ALL_CASES.map((c) => c.business.name);
     const cases: CaseRun[] = [];
-    for (const c of chosen) cases.push(await runEvalCase(provider!, c, names));
+    // Free-tier runs can take more than one daily allowance, so every finished case is saved. A rerun with the same MODELCHECK_LABEL, set,
+    // dataset and code commit picks up where it stopped. A case interrupted by the provider's limit is dropped and redone whole.
+    mkdirSync(OUT, { recursive: true });
+    const checkpointFile = `${OUT}/checkpoint-${slug(provider!.model ?? "unknown")}-${slug(process.env.MODELCHECK_LABEL ?? "run")}-${process.env.MODELCHECK_CASES ? "custom" : set}.json`;
+    type Checkpoint = { model: string; datasetHash: string; gitCommit: string | null; cases: CaseRun[] };
+    let saved: Checkpoint | null = null;
+    if (existsSync(checkpointFile)) {
+      const cp = JSON.parse(readFileSync(checkpointFile, "utf8")) as Checkpoint;
+      if (cp.datasetHash === datasetHash() && (cp.gitCommit === gitCommit() || process.env.MODELCHECK_RESUME_ANY === "1")) saved = cp;
+      else console.log("Ignoring a checkpoint from a different dataset or code commit (set MODELCHECK_RESUME_ANY=1 to use it anyway).");
+    }
+    const done = new Map((saved?.cases ?? []).map((c) => [c.caseId, c]));
+    let pausedUntil: number | null = null;
+    for (const c of chosen) {
+      const kept = done.get(c.id);
+      if (kept) { cases.push(kept); console.log(`Case ${c.id}: reused from checkpoint.`); continue; }
+      try {
+        cases.push(await runEvalCase(provider!, c, names));
+        writeFileSync(checkpointFile, JSON.stringify({ model: provider!.model ?? "unknown", datasetHash: datasetHash(), gitCommit: gitCommit(), cases } satisfies Checkpoint));
+        console.log(`Case ${c.id}: done and saved (${cases.length}/${chosen.length}).`);
+      } catch (error) {
+        if (!(error instanceof ModelThrottled)) throw error;
+        pausedUntil = error.resumeAt;
+        console.log(`PAUSED on ${c.id}: the free allowance is used up (${error.kind}). Resume ${resumeSentence(error.resumeAt)} with the same command; ${cases.length}/${chosen.length} cases are saved in ${checkpointFile}.`);
+        break;
+      }
+    }
+    if (pausedUntil !== null) { expect(cases.length).toBeLessThan(chosen.length); return; }
     const freeze = JSON.parse(readFileSync(join(__dirname, "dataset", "FREEZE.json"), "utf8")) as FreezeRecord;
     const gpu = Number(process.env.MODELCHECK_GPU_USD_PER_HOUR);
     const run: ModelRun = {
@@ -54,7 +83,6 @@ describe.skipIf(!provider || (!fixtures && urls.length === 0 && !set))("model ch
       settings: { temperature: DECODING.temperature, topP: DECODING.topP, attemptTimeoutMs: provider!.attemptTimeoutMs ?? null, extraBody: process.env.SELF_HOSTED_EXTRA_BODY ?? null, gpuUsdPerHour: Number.isFinite(gpu) && gpu > 0 ? gpu : null, gpuClass: process.env.MODELCHECK_GPU_CLASS ?? null, node: process.version, gitCommit: gitCommit() },
       cases,
     };
-    mkdirSync(OUT, { recursive: true });
     const file = `${OUT}/modelrun-${slug(run.model)}-${slug(process.env.MODELCHECK_LABEL ?? "run")}-${stamp()}`;
     writeFileSync(`${file}.json`, JSON.stringify(run, null, 2));
     const tasks = cases.flatMap((c) => c.tasks);
