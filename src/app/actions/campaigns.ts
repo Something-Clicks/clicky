@@ -79,7 +79,7 @@ export async function findCompetitors(_prev: DiscoverState, _form: FormData): Pr
   if (services.length === 0) { const w = understanding.known.find((k) => k.field === "what_it_does" && !k.disputed); if (w) services.push(w.value); }
   const { data: scans } = await supabase.from("competitor_scans").select("host").eq("organization_id", orgId);
   try {
-    const found = await discoverCompetitors({ ownWebsite: b.website ?? "", serviceArea: b.serviceArea, services, alreadyComparing: (scans ?? []).map((s) => s.host) });
+    const found = await discoverCompetitors({ ownWebsite: b.website ?? "", serviceArea: b.serviceArea, services, alreadyComparing: (scans ?? []).map((s) => s.host), webSearch: process.env.DISCOVERY_WEB_SEARCH !== "0" });
     log.info("research.discovery", { orgId, candidates: found.candidates.length, sources: found.sourceStatus.map((s) => `${s.source}:${s.status}`) });
     return { result: { candidates: found.candidates.map(({ host, url, name, basis, sources }) => ({ host, url, name, basis, sources })), limits: found.limits, attribution: found.attribution, sourceStatus: found.sourceStatus } };
   } catch (error) {

@@ -1,6 +1,7 @@
 /**
- * Real-model walk-through: the whole loop on a REAL website with REAL inference from a self-hosted model server, through the
- * app. Run only with E2E_MODEL=1 against a server started with MARKETING_MODEL_PROVIDER=self-hosted and the FEATURE_* switches
+ * Real-model walk-through: the whole loop on a REAL website with REAL inference (a self-hosted model server, or Groq's free tier with
+ * MARKETING_MODEL_PROVIDER=groq and E2E_EXPECT_MODEL=<the model id>), through the app. Run only with E2E_MODEL=1 against a server started with
+ * the provider's variables and the FEATURE_* switches
  * (see docs/agents/END_TO_END_RUN.md). The first website check ran in e2e/setup against E2E_SITE.
  *
  * It asserts the rules (nothing unsupported is kept, nothing is sent or published, every step is recorded) and PRINTS what the
@@ -57,7 +58,7 @@ test.describe("real website, real model", () => {
     // Whatever the model did, the rules hold: the template is untouched, the model is named, nothing was executed.
     expect(sql(`select count(*) from public.campaign_tasks where campaign_id = '${id}' and deliverable_model is not null and deliverable is null`)).toBe("0");
     expect(sql(`select count(*) from public.execution_records where organization_id = '${owner.orgId}' and status in ('succeeded')`)).toBe(sql(`select count(*) from public.execution_records where organization_id = '${owner.orgId}' and action = 'record_completed' and status = 'succeeded'`));
-    if (Number(written) > 0) expect(sql(`select count(*) from public.campaign_tasks where campaign_id = '${id}' and deliverable_model is not null and deliverable_model_by ->> 'model' <> 'qwen2.5-1.5b-instruct-q4_k_m'`)).toBe("0");
+    if (Number(written) > 0) expect(sql(`select count(*) from public.campaign_tasks where campaign_id = '${id}' and deliverable_model is not null and deliverable_model_by ->> 'model' <> '${process.env.E2E_EXPECT_MODEL ?? "qwen2.5-1.5b-instruct-q4_k_m"}'`)).toBe("0");
     const spend = sql(`select count(*) || ' calls, ' || coalesce(sum(input_tokens),0) || ' in, ' || coalesce(sum(output_tokens),0) || ' out' from public.model_usage where organization_id = '${owner.orgId}'`);
     console.log(`USAGE RECORDED: ${spend}`);
   });

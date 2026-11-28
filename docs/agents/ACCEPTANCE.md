@@ -26,12 +26,15 @@ Every failure is labelled **provider** (Groq unavailable, rate-limited, refused,
 ## Whole-workflow acceptance (the headline test)
 On each of 3-5 real sites, one signed-in owner completes, on a phone-size screen without help: **website -> understanding -> research -> strategy -> plan -> drafts -> approve a draft -> authorize and record execution -> record a result -> see a changed recommendation.** The run is recorded in `marketing_workflows`, stays inside the cost and time lines of Quality standard v1 (<= $0.35 model spend and <= 100 s website check per business, or the documented background-job limits), and the frozen evaluation (`pnpm modelcheck` then `pnpm modelscore`, dev set then test set) is run and its real scores reported. The agent is **validated** only on two consecutive passing rounds, as in `EVALUATION.md`; a single pass is reported as "first round passed".
 
-## Known gaps against the specification (from the code, Nov 27 2026)
+## Status against the specification (Nov 28 2026)
 Implemented without a model and tested on fixtures: website intelligence, SEO checks, ranking, Action Cards, approvals, evidence classes, rules-based plan, campaign playbooks, execution records, performance comparison, request routing, metering, background jobs.
-Implemented but **never run on a real model**: business understanding, model findings, strategy wording, content drafts, campaign drafts (the 1.5B CPU run in `END_TO_END_RUN.md` is not evidence of Groq).
-Not built or partial, to be finished against the gates above:
-1. **Competitor discovery and keyword data.** `market-research.ts` reads only homepages the owner names; no search or keyword source is connected. Finish as in G3 (model summary of scanned and imported data, honest limits). Adding a search source is an owner decision.
-2. **Conflicting-fact detection** between sources (spec section 14) is not built; stale research is flagged.
-3. **Content breadth** of spec section 8 (articles, FAQs, lead magnets, sequences) beyond the types in G6 is not built unless found during the inventory.
-4. **Publishing and sending** are unsupported by design (spec section 10 allows this for the first release).
-5. **Real-site runs** have never been done; a model has never been run on the frozen dataset.
+
+**Run on a real model (Groq free tier, `openai/gpt-oss-120b`) on Nov 28 2026:** all ten real agent schemas (understanding, findings, strategy plan, meta and page copy, and the five campaign channels) were accepted by Groq's strict structured-output mode; the frozen **dev set** (4 fictional cases, 20 tasks) ran with 20/20 usable, 95% on the first attempt, 90.6% of proposed items surviving our grounding checks. See `docs/agents/GROQ_FREE_TIER.md` and the report for the numbers and what they do not show. **The official test-set round and every human-scored criterion are not done**: they need a person (blind sheet) and more than one free daily allowance.
+
+Built in this pass:
+1. **Competitor discovery** (G3): `modules/competitor-discovery.ts`. OpenStreetMap and web-search candidates, each with its sources, evidence class "inferred", attribution and honest limits; saves nothing until the owner picks which to compare. Verified live: web search works; Overpass is unreachable from the cloud sandbox (connection reset), so the map source is verified only against stand-ins there. Summary of what was read: `modules/research-summary.ts` (grounded, cited, fixed "not researched" text).
+2. **Conflicting-fact detection** (spec §14): `modules/fact-conflicts.ts`, panel on /app/business, disputed details flagged in prompts. Unit-tested on fixtures; no model involved.
+3. **Content breadth** (spec §8): FAQ, article and brief as campaign channels (migration 20261206, applied to clicky-dev), with the same content checks. Homepage copy, SEO title and description, service/landing page, email, social, Google post and text message already existed. Not built: email *sequences*, lead magnets, ad copy, press releases (list them as **not built**; none is claimed).
+4. **Publishing and sending** remain unsupported by design.
+
+Still open: the official test-set evaluation and human scoring (two consecutive passing rounds); permission for more real sites (only somethingclicks.com is documented as ours); Production decisions (G8).

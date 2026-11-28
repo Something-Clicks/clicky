@@ -110,6 +110,16 @@ describe("discoverCompetitors", () => {
   });
 });
 
+describe("web search can be switched off", () => {
+  it("uses map listings only and never contacts the search host", async () => {
+    const n = net([["nominatim", nominatim], ["interpreter", overpass]]);
+    const r = await discoverCompetitors({ ...input, webSearch: false }, n);
+    expect(n.asked.some((u) => u.includes("duckduckgo"))).toBe(false);
+    expect(r.candidates.map((c) => c.host)).toEqual(["lonestarplumbing.example", "capitalpipe.example"]);
+    expect(r.sourceStatus.find((s) => s.source === "web_search")).toMatchObject({ status: "skipped", note: expect.stringMatching(/switched off/) });
+  });
+});
+
 describe("a search service that pushes back", () => {
   const challenge = "<html><body><div class='anomaly-modal'>Unfortunately, bots use DuckDuckGo too.</div></body></html>";
   it("retries once after a pause when it gets the challenge page, then uses the real results", async () => {

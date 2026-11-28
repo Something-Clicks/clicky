@@ -40,6 +40,8 @@ export interface DiscoveryInput {
   services: string[];
   /** Hosts the owner already compares with (not suggested again). */
   alreadyComparing?: string[];
+  /** Web search is the more fragile and less clearly permitted source (automated use of a search page); false uses map listings only. Default true. */
+  webSearch?: boolean;
 }
 
 export interface DiscoverySource {
@@ -257,9 +259,11 @@ export async function discoverCompetitors(input: DiscoveryInput, deps: Discovery
   }
 
   // 2. Web search: one or two short queries.
-  const queries = searchQueries(input.services, place);
+  const queries = input.webSearch === false ? [] : searchQueries(input.services, place);
   result.queries.search = queries;
-  if (queries.length === 0) {
+  if (input.webSearch === false) {
+    result.sourceStatus.push({ source: "web_search", status: "skipped", found: 0, note: "Web search is switched off, so only map listings were used." });
+  } else if (queries.length === 0) {
     result.sourceStatus.push({ source: "web_search", status: "skipped", found: 0, note: "The services we know are too vague to search for." });
   } else {
     let n = 0;

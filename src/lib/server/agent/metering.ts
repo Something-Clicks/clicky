@@ -28,7 +28,8 @@ export class ModelBudgetExceeded extends Error {
 }
 
 export interface MeterContext {
-  db: Pick<Db, "rpc">;
+  /** `from` is used only for the free-tier token cap below; a context without it skips that check (tests of the dollar path). */
+  db: Pick<Db, "rpc"> & Partial<Pick<Db, "from">>;
   orgId: string;
   capability: string;
   workflowId?: string | null;
@@ -53,6 +54,18 @@ export function estimateInputTokens(text: string): number {
 }
 
 export const MAX_CALL_COST_MICRO = 5_000_000;
+
+/**
+ * Free usage costs $0, so the dollar caps cannot bind. The real limit of the free tier is TOKENS, shared by every business for the whole
+ * day, so each business gets its own daily token cap (MODEL_ORG_DAILY_TOKENS, default 60,000 = 30% of Groq's 200,000-token day). It is
+ * counted from the business's own model_usage rows of the last 24 hours (input plus output, reservations count as their settled
+ * tokens). A business at its cap is told the plain "usage limit" outcome; nothing is billed either way.
+ */
+export const DEFAULT_ORG_DAILY_TOKENS = 60_000;
+export const orgDailyTokenCap = (env: Record<string, string | undefined> = process.env) => {
+  const n = Number(env.MODEL_ORG_DAILY_TOKENS);
+  return Number.isFinite(n) && n >= 1_000 ? Math.round(n) : DEFAULT_ORG_DAILY_TOKENS;
+};
 const REASONS = new Set(["daily", "monthly", "global_daily", "user_daily", "hourly"]);
 
 export function meteredProvider(inner: ModelProvider, ctx: MeterContext): ModelProvider {
@@ -68,6 +81,15 @@ export function meteredProvider(inner: ModelProvider, ctx: MeterContext): ModelP
       }
       const maxCost = inner.model ? worstCaseCostMicro(inner.id, inner.model, req) : null;
       if (!inner.model || maxCost === null) throw new ModelBudgetExceeded("unpriced_model");
+
+      // Free tier ($0 per call): bound the business in tokens instead, since dollars cannot.
+      if (maxCost === 0 && ctx.db.from) {
+        const since = new Date(Date.now() - 86_400_000).toISOString();
+        const { data: used, error: usedError } = await ctx.db.from("model_usage").select("input_tokens, output_tokens").eq("organization_id", ctx.orgId).gt("created_at", since).limit(2000);
+        if (usedError || !used) throw new ModelBudgetExceeded("budget_unavailable");
+        const tokens = used.reduce((n, r) => n + Number(r.input_tokens ?? 0) + Number(r.output_tokens ?? 0), 0);
+        if (tokens >= orgDailyTokenCap()) throw new ModelBudgetExceeded("daily");
+      }
 
       const { data: reservation, error } = await ctx.db.rpc("reserve_model_call", {
         p_key: key, p_org: ctx.orgId, p_capability: ctx.capability, p_provider: inner.id, p_model: inner.model,
