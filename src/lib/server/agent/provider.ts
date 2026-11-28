@@ -58,7 +58,7 @@ export interface ModelProvider {
   readonly model?: string;
   /** Longest one attempt may run. Slower self-hosted models declare more than the default; the request deadline still wins. */
   readonly attemptTimeoutMs?: number;
-  generate(request: Omit<ModelRequest<unknown>, "schema" | "deadlineAt"> & { jsonSchema: unknown; timeoutMs?: number }): Promise<ModelRawResponse>;
+  generate(request: Omit<ModelRequest<unknown>, "schema" | "deadlineAt"> & { jsonSchema: unknown; timeoutMs?: number; deadlineAt?: number }): Promise<ModelRawResponse>;
 }
 
 export interface ModelResult<T> {
@@ -76,6 +76,19 @@ export class ModelProviderNotConfigured extends Error {
   constructor() {
     super("No language model is available yet. Something Clicks uses no external AI provider; its own model hosting is not built yet.");
     this.name = "ModelProviderNotConfigured";
+  }
+}
+
+/**
+ * The provider's allowance (free-tier rate or daily limit) is used up, or the request can never fit it. This is a PROVIDER outcome,
+ * never an agent defect, and never retried by paying for more: `resumeAt` (epoch ms) says when the work can continue, so a workflow
+ * can be queued or shown with that time. `status` 429 makes metering settle the call as "never ran".
+ */
+export class ModelThrottled extends Error {
+  readonly status = 429;
+  constructor(public readonly kind: "minute" | "day" | "too_large", public readonly retryAfterMs: number, public readonly resumeAt: number, message = "The model's free allowance is used up for now.") {
+    super(message);
+    this.name = "ModelThrottled";
   }
 }
 
@@ -139,7 +152,7 @@ export async function generateStructured<T>(request: ModelRequest<T>, provider: 
     const attemptCap = provider.attemptTimeoutMs ?? ATTEMPT_TIMEOUT_MS;
     const remaining = deadlineAt === undefined ? attemptCap : deadlineAt - Date.now();
     if (remaining < MIN_ATTEMPT_MS) throw new ModelOutputInvalid("out_of_time");
-    const raw = await provider.generate({ ...rest, jsonSchema, timeoutMs: Math.min(attemptCap, remaining) });
+    const raw = await provider.generate({ ...rest, jsonSchema, timeoutMs: Math.min(attemptCap, remaining), deadlineAt });
     usage.inputTokens += raw.usage.inputTokens;
     usage.outputTokens += raw.usage.outputTokens;
     if (raw.refused) throw new ModelOutputInvalid("refused");

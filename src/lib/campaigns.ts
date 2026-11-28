@@ -10,8 +10,8 @@ import { compareSignals, SIGNAL_LABEL, type SiteSignals } from "@/lib/research";
 export type EvidenceClass = "verified" | "inferred" | "estimated" | "unknown";
 export type TaskKind = "fix_action" | "message" | "checklist" | "research";
 
-export type Channel = "landing_page" | "email" | "social" | "gbp" | "sms";
-export const CHANNEL_LABEL: Record<Channel, string> = { landing_page: "Page on your website", email: "Email", social: "Social post", gbp: "Google Business Profile post", sms: "Text message" };
+export type Channel = "landing_page" | "email" | "social" | "gbp" | "sms" | "faq" | "blog_post" | "content_brief";
+export const CHANNEL_LABEL: Record<Channel, string> = { landing_page: "Page on your website", email: "Email", social: "Social post", gbp: "Google Business Profile post", sms: "Text message", faq: "Questions and answers for your page", blog_post: "Article for your website", content_brief: "Brief for a writer or designer" };
 
 export interface CampaignTask {
   kind: TaskKind;
@@ -214,14 +214,14 @@ export function promoteService(i: CampaignInput): Campaign | null {
     playbook: "promote_service",
     title: clip(`Promote ${service}`, 150),
     goal: `Get more enquiries for ${service}`,
-    summary: `A page for ${service}, then an email, a social post and a Google post that point to it, and a before-and-after measure. Nothing is sent or published for you.`,
+    summary: `A page for ${service}, then an email, a social post and a Google post that point to it, plus questions and answers, a brief for whoever builds your page, one helpful article and a before-and-after measure. Nothing is sent or published for you.`,
     basis: { service, confirmed: true, competitors: i.competitors.length },
     brief: {
       objective: `More enquiries for ${service}`,
       audience,
       offer: null,
       core_message: core,
-      channels: ["landing_page", "email", "social", "gbp"],
+      channels: ["landing_page", "email", "social", "gbp", "faq", "content_brief", "blog_post"],
       measurement: i.primaryGoal === "get_found" ? ["search_clicks", "website_visits", "form_leads"] : ["calls", "form_leads"],
     },
     tasks: [
@@ -258,6 +258,27 @@ export function promoteService(i: CampaignInput): Campaign | null {
         steps: ["Your profile isn't connected, so post it yourself.", "Use the “Learn more” button with the page link."],
         deliverable: `Now offering ${service} in ${area}. [what the customer gets]. Learn more: [link to the new page]`,
         evidence_class: "unknown", basis: "Google Business Profile isn't connected; we haven't seen yours.",
+      },
+      {
+        kind: "message", title: "Add questions and answers to the page", channel: "faq", due_in_days: 10, depends_on: [2],
+        why: "Answering the questions people ask before they call removes doubts and helps the page show up for those searches.",
+        steps: ["Replace each [blank] with your real answer.", "Add them to the page (we can't publish for you)."],
+        deliverable: `Questions about ${service}\n\nQ: How much does ${service} cost?\nA: [how you price it, or "Ask for a free quote"]\n\nQ: How soon can you start?\nA: [your usual lead time]\n\nQ: Do you serve ${area}?\nA: ${i.serviceArea ? `Yes, ${name} serves ${i.serviceArea}.` : "[the areas you serve]"}\n\nQ: How do I get started?\nA: Call [your phone number] or [your contact link].`,
+        evidence_class: "verified",
+      },
+      {
+        kind: "message", title: "Brief a writer or designer", channel: "content_brief", due_in_days: 3, depends_on: [2],
+        why: "If someone else will write or lay out the page, a clear brief saves rounds of back and forth.",
+        steps: ["Fill in the facts only you can supply.", "Send it to whoever builds your page."],
+        deliverable: `Brief: ${service} page for ${name}\n\nWhat it must do: get ${audience ?? "[who this is for]"} in ${area} to contact ${name} about ${service}.\nWho it's for: ${audience ?? "[who this is for]"}\nOutline: headline, what's included, how it works, questions and answers, call to action.\nFacts only you can supply: [prices], [photos of your work], [opening hours], [reviews you can quote].\nLeave out: claims you can't back up.`,
+        evidence_class: "verified",
+      },
+      {
+        kind: "message", title: "Write one helpful article", channel: "blog_post", due_in_days: 14, depends_on: [2],
+        why: "A useful article answers a real question and gives people a reason to trust you before they call.",
+        steps: ["Edit the draft so it sounds like you and add a real example.", "Publish it and link to the page (we can't publish for you)."],
+        deliverable: `[Title: a question your customers ask about ${service}]\n\n[Opening: why this matters to ${audience ?? "your customers"}]\n\n[3 short sections with practical advice, from your own experience]\n\nIf you'd like help with ${service}, call ${name} on [your phone number] or visit [link to the new page].`,
+        evidence_class: "verified",
       },
       {
         kind: "checklist", title: "Compare after a month", due_in_days: 37, depends_on: [1, 2],

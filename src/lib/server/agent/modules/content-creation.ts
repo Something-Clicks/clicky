@@ -39,6 +39,9 @@ const SPECS = {
   },
 } as const;
 
+/** The hard length of every field, stated in the prompt (a draft over its limit is refused, so the model must know it). */
+const limitsLine = (fields: readonly { key: string; max: number }[]) => `Hard limits in characters, never exceed them: ${fields.map((f) => `${f.key} ${f.max}`).join(", ")}.`;
+
 export const CONTENT_KINDS = Object.keys(SPECS) as DraftKind[];
 export const isDraftKind = (v: unknown): v is DraftKind => typeof v === "string" && Object.hasOwn(SPECS, v);
 
@@ -48,6 +51,7 @@ ${UNTRUSTED_CONTENT_RULE}
 
 Rules:
 - Use only facts in <business>, <action_card>, <evidence> and <owner_notes>. Prefer details the owner confirmed.
+- A detail marked disputed:true has sources that disagree and the owner has not decided: do not state it; use a bracketed placeholder instead.
 - If a fact you need is missing (a phone number, a price, a service, a place), write a bracketed placeholder such as [your phone number]. Never invent it.
 - Never promise rankings, traffic, calls, revenue or results. No invented statistics, awards, years in business, reviews, certifications or guarantees.
 - Write in the business's own voice and tone when <business> gives them; otherwise plain, warm and direct.
@@ -105,7 +109,7 @@ export async function createContent(provider: ModelProvider, input: ContentInput
       task: `content_creation.${input.kind}`,
       system: SYSTEM,
       input: [
-        `<brief>${spec.brief}</brief>`,
+        `<brief>${spec.brief} ${limitsLine(spec.fields)}</brief>`,
         `<business>${jsonForPrompt(business)}</business>`,
         `<action_card>${jsonForPrompt(input.card)}</action_card>`,
         `<evidence>${input.evidence.map((e) => `<website_content url="${plainForPrompt(e.url ?? "")}">${plainForPrompt(e.observation)}${e.excerpt ? `\n${plainForPrompt(e.excerpt)}` : ""}</website_content>`).join("\n")}</evidence>`,
@@ -123,9 +127,10 @@ export async function createContent(provider: ModelProvider, input: ContentInput
 
 // ── Campaign drafts (§8.4–8.6): landing page, email, social post, Google Business Profile post, text message ──────────
 
-export type ChannelKind = "landing_page" | "email" | "social" | "gbp" | "sms";
+export type ChannelKind = "landing_page" | "email" | "social" | "gbp" | "sms" | "faq" | "blog_post" | "content_brief";
 
-const CHANNEL_SPECS: Record<ChannelKind, { fields: { key: string; label: string; max: number }[]; brief: string }> = {
+/** `names_promises`: the field exists to say what NOT to promise ("Leave out: guarantees"), so the promise-word rule is not applied to it (leaked instructions and invented figures still are). */
+const CHANNEL_SPECS: Record<ChannelKind, { fields: { key: string; label: string; max: number; names_promises?: true }[]; brief: string }> = {
   landing_page: {
     fields: [
       { key: "headline", label: "Headline", max: 90 },
@@ -155,6 +160,29 @@ const CHANNEL_SPECS: Record<ChannelKind, { fields: { key: string; label: string;
     fields: [{ key: "message", label: "Text message", max: 300 }],
     brief: "One text message (under 300 characters) to a customer who agreed to receive texts, with [link to the new page].",
   },
+  faq: {
+    fields: [1, 2, 3, 4].flatMap((n) => [{ key: `q${n}`, label: `Question ${n}`, max: 140 }, { key: `a${n}`, label: `Answer ${n}`, max: 420 }]),
+    brief: "Four questions people really ask before choosing this service, each with a short, plain answer (1-3 sentences). Answer only from the material; where the answer is not there, say what to check and use a [placeholder] (price, hours, guarantee). Never invent policies or numbers.",
+  },
+  blog_post: {
+    fields: [
+      { key: "title", label: "Title", max: 90 },
+      { key: "intro", label: "Opening", max: 450 },
+      { key: "body", label: "Article", max: 1800 },
+      { key: "closing", label: "Closing and next step", max: 220 },
+    ],
+    brief: "One helpful article (about 350-450 words) for the audience that answers a real question about the service and shows how the business works, without claims it cannot back. Plain headings are welcome inside the article. End by pointing to [link to the new page]. Use [placeholders] where a fact is missing.",
+  },
+  content_brief: {
+    fields: [
+      { key: "purpose", label: "What this piece must do", max: 300 },
+      { key: "reader", label: "Who it is for", max: 300 },
+      { key: "outline", label: "Outline", max: 900 },
+      { key: "facts_to_supply", label: "Facts only you can supply", max: 500 },
+      { key: "avoid", label: "Leave out", max: 300, names_promises: true },
+    ],
+    brief: "A brief the owner can hand to a writer or designer for the page or article: what the piece must do, who it is for, a section-by-section outline, the facts only the owner can supply (prices, photos, hours, proof), and what to leave out. No invented facts.",
+  },
 };
 export const isChannelKind = (v: unknown): v is ChannelKind => typeof v === "string" && Object.hasOwn(CHANNEL_SPECS, v);
 
@@ -175,16 +203,19 @@ export interface TaskDraftInput {
 
 /** Checks a campaign draft the same way as website copy (§8.7), and joins it into the text the owner edits. */
 export function checkTaskDraft(kind: ChannelKind, out: Record<string, string>, source: string): string {
-  const parts = CHANNEL_SPECS[kind].fields.map(({ key, label, max }) => {
+  const parts = CHANNEL_SPECS[kind].fields.map(({ key, label, max, names_promises }) => {
     const text = String(out[key] ?? "").trim();
     if (!text) throw new ContentRejected("empty_field", "The draft came back incomplete, so we didn't keep it. Please try again.");
-    const problem = claimProblemIn(text);
+    const found = claimProblemIn(text);
+    const problem = names_promises && found === "promise" ? null : found;
     if (problem) throw new ContentRejected(problem, "The draft made a promise or claim we can't back up, so we didn't keep it. Please try again.");
     if (unsupportedNumbers(text, source).length) throw new ContentRejected("figure_not_in_source", "The draft used a number that isn't in your business details, so we didn't keep it. Please try again.");
     if (text.length > max * 1.25) throw new ContentRejected("too_long", "The draft came back too long, so we didn't keep it. Please try again.");
     return { key, label, text };
   });
   if (kind === "email") return `Subject: ${parts[0]!.text}\n\n${parts[1]!.text}`;
+  if (kind === "faq") return [1, 2, 3, 4].map((n) => `Q: ${parts.find((p) => p.key === `q${n}`)!.text}\nA: ${parts.find((p) => p.key === `a${n}`)!.text}`).join("\n\n");
+  if (kind === "blog_post") return `${parts[0]!.text}\n\n${parts[1]!.text}\n\n${parts[2]!.text}\n\n${parts[3]!.text}`;
   if (parts.length === 1) return parts[0]!.text;
   return parts.map((p, i) => (i === 0 ? p.text : `${p.label}\n${p.text}`)).join("\n\n");
 }
@@ -197,7 +228,7 @@ export async function createTaskDraft(provider: ModelProvider, input: TaskDraftI
       task: `content_creation.campaign_${input.channel}`,
       system: SYSTEM,
       input: [
-        `<brief>${spec.brief}</brief>`,
+        `<brief>${spec.brief} ${limitsLine(spec.fields)}</brief>`,
         `<business>${jsonForPrompt(business)}</business>`,
         `<campaign>${jsonForPrompt(input.brief)}</campaign>`,
         `<task>${jsonForPrompt(input.task)}</task>`,

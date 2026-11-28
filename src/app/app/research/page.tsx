@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { removeComparison } from "@/app/actions/campaigns";
-import { CompareForm } from "@/components/agent-forms";
+import { CompareForm, DiscoverForm } from "@/components/agent-forms";
 import { FEATURES } from "@/config/features";
 import { requireOrganization } from "@/lib/auth";
 import { compareSignals, readSignals, SIGNAL_LABEL, SIGNAL_KEYS, type SiteSignals } from "@/lib/research";
@@ -23,6 +23,9 @@ export default async function ResearchPage() {
     .eq("organization_id", ws.organization.id)
     .order("scanned_at", { ascending: false });
   const scans = rows ?? [];
+  // The latest written summary (only when a model was on for that comparison).
+  const { data: wf } = await supabase.from("marketing_workflows").select("result, started_at").eq("organization_id", ws.organization.id).eq("kind", "competitor_research").eq("status", "prepared").order("started_at", { ascending: false }).limit(1).maybeSingle();
+  const summary = (wf?.result as { summary?: { points: { statement: string; kind: string; sources: string[] }[]; limits: string[] } } | null)?.summary ?? null;
   const own = readSignals(scans.find((s) => s.is_self && s.status === "done")?.signals);
   const others = scans.filter((s) => !s.is_self);
   const read = others.filter((s) => s.status === "done").map((s) => ({ host: s.host, signals: readSignals(s.signals) })).filter((s): s is { host: string; signals: SiteSignals } => s.signals !== null);
@@ -36,7 +39,20 @@ export default async function ResearchPage() {
         <p className="sub">See what other websites show on their homepage that yours doesn&apos;t. We only read public pages.</p>
       </div>
       {!own && others.length === 0 && !ws.business?.website ? <p className="notice">Add your website first so we can compare it. <Link className="link" href="/app/onboarding">Add it</Link></p> : null}
-      <section className="card stack"><h2 style={{ marginTop: 0 }}>{others.length ? "Compare again" : "Pick websites to compare with"}</h2><CompareForm /></section>
+      <section className="card stack"><h2 style={{ marginTop: 0 }}>Find similar businesses</h2><DiscoverForm /></section>
+      <section className="card stack"><h2 style={{ marginTop: 0 }}>{others.length ? "Compare again" : "Or type the websites you know"}</h2><CompareForm /></section>
+
+      {summary?.points.length ? (
+        <section className="card stack" aria-labelledby="cmp-summary">
+          <h2 id="cmp-summary" style={{ margin: 0 }}>What this tells us</h2>
+          <ul className="stack">
+            {summary.points.map((p, i) => (
+              <li key={i}>{p.statement} <span className="small muted">({p.kind}; based on {p.sources.map((s) => (s === "own" ? "your homepage" : s)).join(", ")}; our reading, not a measurement)</span></li>
+            ))}
+          </ul>
+          <ul className="small muted" style={{ paddingLeft: 18 }}>{summary.limits.map((l) => <li key={l}>{l}</li>)}</ul>
+        </section>
+      ) : null}
 
       {table.length && read.length ? (
         <section className="card stack" aria-labelledby="cmp-table">

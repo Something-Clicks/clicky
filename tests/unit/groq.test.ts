@@ -8,8 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { meteredProvider, ModelBudgetExceeded } from "@/lib/server/agent/metering";
+import type { Clock } from "@/lib/server/agent/providers/groq-limits";
 import { costMicro } from "@/lib/server/agent/pricing";
-import { generateStructured, getModelProvider, registeredProviders } from "@/lib/server/agent/provider";
+import { generateStructured, getModelProvider, ModelThrottled, registeredProviders } from "@/lib/server/agent/provider";
 import { GROQ_ENDPOINT, groqProvider, readGroqConfig } from "@/lib/server/agent/providers/groq";
 import { groqStrictSchema } from "@/lib/server/agent/providers/groq-schema";
 
@@ -19,7 +20,10 @@ interface Node { type?: string; required?: string[]; additionalProperties?: unkn
 
 const KEY = "gsk_" + "a".repeat(40);
 const base = { GROQ_API_KEY: KEY, GROQ_MODEL: "openai/gpt-oss-120b" };
-const priced = { ...base, GROQ_PRICE_INPUT_PER_MTOK: "0.15", GROQ_PRICE_OUTPUT_PER_MTOK: "0.6" };
+/** Only a future explicit owner decision enables the paid tier; these tests prove it is fail-closed without published prices. */
+const priced = { ...base, GROQ_TIER: "paid", GROQ_PRICE_INPUT_PER_MTOK: "0.15", GROQ_PRICE_OUTPUT_PER_MTOK: "0.6" };
+/** A clock whose sleep does not wait: time just moves forward, so pacing can be proven without real minutes. */
+const fakeClock = (): Clock & { t: number; slept: number[] } => { const c = { t: 1_000_000, slept: [] as number[], now: () => c.t, sleep: async (ms: number) => { c.slept.push(ms); c.t += ms; } }; return c; };
 const req = { task: "business_intelligence.understand", system: "Be careful.", input: "<page>Hello</page>", jsonSchema: { type: "object", properties: { a: { type: "string", minLength: 1 } }, required: ["a"] }, maxOutputTokens: 500 };
 
 let stub: Stub | null = null;
@@ -34,15 +38,20 @@ describe("configuration fails closed", () => {
     }
   });
 
-  it("takes strict mode by default, a reasoning effort only when valid, and a price only when both halves are valid", () => {
-    expect(readGroqConfig(base)).toMatchObject({ strict: true, reasoningEffort: null, price: null, attemptTimeoutMs: 60_000 });
+  it("is FREE tier by default ($0, Free Plan limits), takes a reasoning effort only when valid, and a paid price only on the explicit paid tier with both halves", () => {
+    expect(readGroqConfig(base)).toMatchObject({ strict: true, reasoningEffort: null, tier: "free", price: { input: 0, output: 0 }, attemptTimeoutMs: 90_000, limits: { rpm: 30, tpm: 8_000, rpd: 1_000, tpd: 200_000 } });
+    // Published paid prices are ignored on the free tier: free usage is never presented as paid.
+    expect(readGroqConfig({ ...base, GROQ_PRICE_INPUT_PER_MTOK: "0.15", GROQ_PRICE_OUTPUT_PER_MTOK: "0.6" })!.price).toEqual({ input: 0, output: 0 });
     expect(readGroqConfig({ ...base, GROQ_STRICT: "0" })!.strict).toBe(false);
     expect(readGroqConfig({ ...base, GROQ_REASONING_EFFORT: "Low" })!.reasoningEffort).toBe("low");
     expect(readGroqConfig({ ...base, GROQ_REASONING_EFFORT: "extreme" })).toBeNull();
+    expect(readGroqConfig({ ...base, GROQ_TIER: "enterprise" })).toBeNull();
     expect(readGroqConfig({ ...base, GROQ_ATTEMPT_TIMEOUT_MS: "99999999" })!.attemptTimeoutMs).toBe(300_000);
-    expect(readGroqConfig({ ...base, GROQ_PRICE_INPUT_PER_MTOK: "0.1" })!.price).toBeNull();
-    expect(readGroqConfig({ ...base, GROQ_PRICE_INPUT_PER_MTOK: "-1", GROQ_PRICE_OUTPUT_PER_MTOK: "1" })!.price).toBeNull();
+    expect(readGroqConfig({ ...base, GROQ_TIER: "paid" })!.price).toBeNull();
+    expect(readGroqConfig({ ...base, GROQ_TIER: "paid", GROQ_PRICE_INPUT_PER_MTOK: "0.1" })!.price).toBeNull();
+    expect(readGroqConfig({ ...base, GROQ_TIER: "paid", GROQ_PRICE_INPUT_PER_MTOK: "-1", GROQ_PRICE_OUTPUT_PER_MTOK: "1" })!.price).toBeNull();
     expect(readGroqConfig(priced)!.price).toEqual({ input: 0.15, output: 0.6 });
+    expect(readGroqConfig({ ...base, GROQ_TPM: "6000", GROQ_TPD: "500000" })!.limits).toMatchObject({ tpm: 6_000, tpd: 500_000 });
   });
 
   it("the address is fixed: no environment variable can aim the key elsewhere", () => {
@@ -109,11 +118,32 @@ describe("the request it sends", () => {
     expect(out).toMatchObject({ output: { a: "ok" }, model: "stub-model-served", usage: { inputTokens: 120, outputTokens: 40 }, refused: false });
   });
 
-  it("sends best-effort mode when strict is switched off, and no reasoning field by default", async () => {
+  it("sends best-effort mode when strict is switched off; gpt-oss defaults to LOW reasoning (small free output allowance), other models send none", async () => {
     stub = await startStub((_s, res) => json(res, 200, completion('{"a":"ok"}')));
     await groqProvider({ ...base, GROQ_STRICT: "0" }, { baseUrl: stub.url })!.generate(req);
     expect((stub.seen[0]!.body.response_format as { json_schema: { strict: boolean } }).json_schema.strict).toBe(false);
-    expect(stub.seen[0]!.body).not.toHaveProperty("reasoning_effort");
+    expect(stub.seen[0]!.body).toMatchObject({ reasoning_effort: "low" });
+    await groqProvider({ ...base, GROQ_MODEL: "qwen/qwen3.8-27b" }, { baseUrl: stub.url })!.generate(req);
+    expect(stub.seen[1]!.body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("clamps the output allowance so input plus output fit the free minute, and refuses (as too large) when even a short answer would not", async () => {
+    stub = await startStub((_s, res) => json(res, 200, completion('{"a":"ok"}')));
+    const p = groqProvider(base, { baseUrl: stub.url })!;
+    await p.generate({ ...req, maxOutputTokens: 16_000 });
+    const sent = stub.seen[0]!.body.max_completion_tokens as number;
+    expect(sent).toBeLessThan(8_000);
+    expect(sent).toBeGreaterThan(5_000);
+    await expect(p.generate({ ...req, input: "x".repeat(30_000) })).rejects.toMatchObject({ name: "ModelThrottled", kind: "too_large" });
+    expect(stub.seen).toHaveLength(1);
+  });
+
+  it("fails closed if Groq's headers show limits above the free tier (the key's plan changed): nothing more is sent", async () => {
+    stub = await startStub((_s, res) => { res.writeHead(200, { "content-type": "application/json", "x-ratelimit-limit-tokens": "250000" }); res.end(JSON.stringify(completion('{"a":"ok"}'))); });
+    const p = groqProvider(base, { baseUrl: stub.url })!;
+    await expect(p.generate(req)).rejects.toThrow(/free tier/);
+    await expect(p.generate(req)).rejects.toThrow(/free tier/);
+    expect(stub.seen).toHaveLength(1);
   });
 });
 
@@ -150,22 +180,45 @@ describe("answers and errors", () => {
     expect(stub.seen).toHaveLength(1);
   });
 
-  it("waits out ONE short 429 (Retry-After) inside the deadline, then answers; a long wait is a plain 429 failure", async () => {
+  it("a MINUTE rate limit is waited out (the stated time) and retried; a long minute wait, or a DAY limit, ends as ModelThrottled with the resume time", async () => {
+    const minuteBody = JSON.stringify({ error: { message: "Rate limit reached on tokens per minute (TPM): Limit 8000, Used 7900, Requested 900. Please try again in 2.5s." } });
+    const dayBody = JSON.stringify({ error: { message: "Rate limit reached on tokens per day (TPD): Limit 200000, Used 199900, Requested 900. Please try again in 1h2m3s." } });
     let n = 0;
-    stub = await startStub((_s, res) => {
-      if (n++ === 0) { res.writeHead(429, { "retry-after": "0", "content-type": "application/json" }); res.end("{}"); } else json(res, 200, completion('{"a":"ok"}'));
-    });
-    const r = await groqProvider(base, { baseUrl: stub.url })!.generate(req);
+    stub = await startStub((_s, res) => { if (n++ === 0) { res.writeHead(429, { "content-type": "application/json" }); res.end(minuteBody); } else json(res, 200, completion('{"a":"ok"}')); });
+    const clock = fakeClock();
+    const r = await groqProvider(base, { baseUrl: stub.url, clock })!.generate(req);
     expect(r.output).toEqual({ a: "ok" });
     expect(stub.seen).toHaveLength(2);
+    expect(Math.max(...clock.slept)).toBeGreaterThanOrEqual(2_500);
     await stub.close();
-    stub = await startStub((_s, res) => { res.writeHead(429, { "retry-after": "3600" }); res.end("{}"); });
-    await expect(groqProvider(base, { baseUrl: stub.url })!.generate(req)).rejects.toMatchObject({ status: 429 });
+
+    stub = await startStub((_s, res) => { res.writeHead(429, { "content-type": "application/json" }); res.end(dayBody); });
+    const day = await groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req).catch((e) => e);
+    expect(day).toBeInstanceOf(ModelThrottled);
+    expect(day).toMatchObject({ kind: "day", status: 429 });
+    expect(day.retryAfterMs).toBe(3_723_000);
+    expect(day.message).not.toContain("TPD"); // Groq's wording is never kept
     expect(stub.seen).toHaveLength(1);
     await stub.close();
+
+    stub = await startStub((_s, res) => { res.writeHead(429, { "retry-after": "3600" }); res.end("{}"); });
+    await expect(groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req)).rejects.toMatchObject({ name: "ModelThrottled", status: 429 });
+    expect(stub.seen).toHaveLength(1);
+    await stub.close();
+
     stub = await startStub((_s, res) => { res.writeHead(429, { "retry-after": "0" }); res.end("{}"); });
-    await expect(groqProvider(base, { baseUrl: stub.url })!.generate(req)).rejects.toMatchObject({ status: 429 });
-    expect(stub.seen).toHaveLength(2); // exactly one wait, never a loop
+    await expect(groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req)).rejects.toMatchObject({ status: 429 });
+    expect(stub.seen).toHaveLength(3); // the first send and two waits, never a loop
+  });
+
+  it("retries one transient 5xx, then gives up with a plain error", async () => {
+    let n = 0;
+    stub = await startStub((_s, res) => { if (n++ === 0) { res.writeHead(503); res.end("{}"); } else json(res, 200, completion('{"a":"ok"}')); });
+    expect((await groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req)).output).toEqual({ a: "ok" });
+    await stub.close();
+    stub = await startStub((_s, res) => { res.writeHead(503); res.end("{}"); });
+    await expect(groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req)).rejects.toMatchObject({ status: 503 });
+    expect(stub.seen).toHaveLength(2);
   });
 });
 
@@ -184,16 +237,26 @@ describe("inside the agent's own controls", () => {
     expect(stub.seen).toHaveLength(2);
   });
 
-  it("an unpriced Groq model is never called (fail closed)", async () => {
+  it("on the paid tier an unpriced model is never called (fail closed); the free tier is priced at $0 and is called", async () => {
     stub = await startStub((_s, res) => json(res, 200, completion('{"a":"x"}')));
     const rpc = rpcStub();
-    const p = meteredProvider(groqProvider({ ...base, GROQ_MODEL: "unpriced/model" }, { baseUrl: stub.url })!, { db: { rpc } as never, orgId: "o", capability: "x.y.z" });
+    const p = meteredProvider(groqProvider({ ...base, GROQ_TIER: "paid", GROQ_MODEL: "unpriced/model" }, { baseUrl: stub.url })!, { db: { rpc } as never, orgId: "o", capability: "x.y.z" });
     await expect(p.generate(req)).rejects.toBeInstanceOf(ModelBudgetExceeded);
     expect(stub.seen).toHaveLength(0);
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("the shadow price makes every call reserve before and settle after, so the existing dollar caps bind on the free tier too", async () => {
+  it("free usage is recorded at $0 with its real tokens (never presented as paid), still reserved before and settled after every call", async () => {
+    stub = await startStub((_s, res) => json(res, 200, completion('{"a":"x"}')));
+    const rpc = rpcStub();
+    await meteredProvider(groqProvider({ ...base, GROQ_MODEL: "free/model" }, { baseUrl: stub.url })!, { db: { rpc } as never, orgId: "o", capability: "x.y.z" }).generate(req);
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(["reserve_model_call", "settle_model_call"]);
+    expect((rpc.mock.calls[0]![1] as { p_max_cost_micro: number }).p_max_cost_micro).toBe(0);
+    expect(rpc.mock.calls[1]![1]).toMatchObject({ p_input: 120, p_output: 40, p_outcome: "ok", p_cost_micro: 0 });
+    expect(costMicro("groq", "free/model", 120, 40)).toBe(0);
+  });
+
+  it("on the paid tier (a future owner decision only) the published price makes every call reserve before and settle after, so the dollar caps bind", async () => {
     stub = await startStub((_s, res) => json(res, 200, completion('{"a":"x"}')));
     const rpc = rpcStub();
     const raw = groqProvider({ ...priced, GROQ_MODEL: "priced/model" }, { baseUrl: stub.url })!;

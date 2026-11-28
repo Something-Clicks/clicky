@@ -5,11 +5,15 @@ import { revalidatePath } from "next/cache";
 import { FEATURES } from "@/config/features";
 import { getWorkspace } from "@/lib/auth";
 import { log } from "@/lib/log";
-import { parseSiteList, readSignals, type SiteSignals } from "@/lib/research";
+import { parseSiteList, readSignals, type DiscoverState, type SiteSignals } from "@/lib/research";
 import { loadUnderstanding } from "@/lib/server/agent/context";
 import { CAMPAIGN_DEADLINE_MS, deadlineMs } from "@/lib/server/agent/deadline";
 import { writeCampaignDraftsFor } from "@/lib/server/agent/drafts-run";
+import { meteredProvider } from "@/lib/server/agent/metering";
+import { discoverCompetitors } from "@/lib/server/agent/modules/competitor-discovery";
+import type { ResearchSource } from "@/lib/server/agent/modules/research-summary";
 import { runCampaignPlanning, runCompetitorResearch } from "@/lib/server/agent/orchestrator";
+import { getModelProvider } from "@/lib/server/agent/provider";
 import { cardStage } from "@/lib/stages";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/validation";
@@ -22,14 +26,66 @@ export async function compareWebsites(_prev: FormState, form: FormData): Promise
   const ws = await getWorkspace();
   if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };
   // One website per line (or separated by commas). A line with spaces in it is one bad entry, not several words.
-  const urls = parseSiteList(String(form.get("sites") ?? ""));
+  const urls = parseSiteList(form.getAll("sites").map((v) => String(v)).join("\n"));
   if (urls.length > 5) return { error: "That's more than 5. Pick the 5 that matter most." };
   const supabase = await createClient();
-  const out = await runCompetitorResearch(supabase, { orgId: ws.organization.id, ownWebsite: ws.business.website ?? "", urls });
+  // Why each site is on the list: "found in a web search", or "named by you". Short owner-visible text, never an instruction.
+  const origins: Record<string, string> = {};
+  for (const [k, v] of form.entries()) if (k.startsWith("origin:") && typeof v === "string") origins[k.slice(7).toLowerCase().replace(/^www\./, "").slice(0, 120)] = v.replace(/\s+/g, " ").trim().slice(0, 300);
+  // A model-written summary is added only when a model is switched on; the comparison itself never needs one.
+  const rawProvider = getModelProvider();
+  const orgId = ws.organization.id;
+  let keywords: ResearchSource | null = null;
+  if (rawProvider) {
+    const { data: items } = await supabase.from("research_items").select("term, metrics, source, measured_on").eq("organization_id", orgId).order("imported_at", { ascending: false }).limit(8);
+    if (items?.length) {
+      keywords = { id: "kw:1", label: "Keyword data you imported", kind: "keywords", facts: items.map((i) => {
+        const m = (i.metrics ?? {}) as Record<string, unknown>;
+        const bits = ["volume", "position", "clicks"].flatMap((f) => (typeof m[f] === "number" ? [`${f} ${m[f]}`] : []));
+        return `${i.term} (${i.source === "search_console_export" ? "Search Console" : i.source === "semrush_export" ? "Semrush export" : "your list"}, measured ${i.measured_on}${bits.length ? `: ${bits.join(", ")}` : ""})`;
+      }) };
+    }
+  }
+  const out = await runCompetitorResearch(supabase, { orgId, ownWebsite: ws.business.website ?? "", urls }, {
+    ...(rawProvider && process.env.MODEL_USAGE_KEY?.trim() ? {
+      summary: { businessName: ws.business.businessName, origins, keywords, deadlineAt: Date.now() + deadlineMs(100_000), provider: (workflowId: string | null) => meteredProvider(rawProvider, { db: supabase, orgId, capability: "market_research.summary", workflowId }) },
+    } : {}),
+  });
   revalidatePath("/app/research");
   if (out.status === "failed") return { error: out.reason ?? "We couldn't compare those sites." };
   const skipped = out.failed.length ? ` We couldn't read ${out.failed.map((f) => f.host).join(", ")}.` : "";
   return { ok: true, message: `Compared ${out.read} website${out.read === 1 ? "" : "s"}.${skipped}` };
+}
+
+/** Last time each business asked to find similar businesses: the public sources are used politely (best effort, per server instance). */
+const lastDiscovery = new Map<string, number>();
+
+/**
+ * Finds websites of similar local businesses from open sources (map listings, web search), each with where it came from.
+ * Saves nothing and reads none of their pages: the owner picks which to compare, and only then are their homepages read.
+ */
+export async function findCompetitors(_prev: DiscoverState, _form: FormData): Promise<DiscoverState> {
+  if (!FEATURES.campaigns) return { error: "Finding similar businesses isn't available yet." };
+  const ws = await getWorkspace();
+  if (!ws.organization || !ws.business) return { error: "Please finish setting up your business first." };
+  const orgId = ws.organization.id;
+  if (Date.now() - (lastDiscovery.get(orgId) ?? 0) < 60_000) return { error: "That search just ran. Give it a minute, then try again." };
+  lastDiscovery.set(orgId, Date.now());
+  const supabase = await createClient();
+  const b = ws.business;
+  const { understanding } = await loadUnderstanding(supabase, orgId, { businessName: b.businessName, website: b.website ?? "", serviceArea: b.serviceArea, primaryGoal: b.primaryGoal });
+  // Only what the owner confirmed or the agent proposed, and never a detail the sources disagree about.
+  const services = understanding.known.filter((k) => (k.field === "service" || k.field === "product") && !k.disputed).map((k) => k.value).slice(0, 3);
+  if (services.length === 0) { const w = understanding.known.find((k) => k.field === "what_it_does" && !k.disputed); if (w) services.push(w.value); }
+  const { data: scans } = await supabase.from("competitor_scans").select("host").eq("organization_id", orgId);
+  try {
+    const found = await discoverCompetitors({ ownWebsite: b.website ?? "", serviceArea: b.serviceArea, services, alreadyComparing: (scans ?? []).map((s) => s.host) });
+    log.info("research.discovery", { orgId, candidates: found.candidates.length, sources: found.sourceStatus.map((s) => `${s.source}:${s.status}`) });
+    return { result: { candidates: found.candidates.map(({ host, url, name, basis, sources }) => ({ host, url, name, basis, sources })), limits: found.limits, attribution: found.attribution, sourceStatus: found.sourceStatus } };
+  } catch (error) {
+    log.error("research.discovery_failed", { orgId, error });
+    return { error: "We couldn't look just now. Please try again later." };
+  }
 }
 
 export async function removeComparison(form: FormData): Promise<void> {

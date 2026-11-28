@@ -1,3 +1,4 @@
+import { detectConflicts, disputedFields, type ConflictInput, type FactConflict } from "./fact-conflicts";
 import { FACT_FIELDS, FACT_LABEL, STALE_AFTER_DAYS, type FactField, type FactSource, type ProposedFact, type StoredFact } from "@/lib/business-profile";
 import type { EvidenceClass } from "@/lib/evidence";
 
@@ -36,12 +37,16 @@ export interface KnownFact {
   source: FactSource;
   evidence_class: EvidenceClass;
   confirmed: boolean;
+  /** Present (true) only when sources disagree about this detail and the owner has not decided: never state it as fact. */
+  disputed?: true;
 }
 
 export interface BusinessUnderstanding {
   known: KnownFact[];
   missing: FactField[];
   stale: { field: FactField; value: string | null; observed_at: string }[];
+  /** Details where sources disagree (spec §14). The agent asks the owner; it never picks a winner. */
+  conflicts: FactConflict[];
 }
 
 /** The details every marketing workflow needs; listed as missing until known. */
@@ -181,7 +186,7 @@ export function trustStatements(pages: PageFacts[]): ProposedFact[] {
 
 const ageDays = (iso: string, now: Date) => (now.getTime() - new Date(iso).getTime()) / 86_400_000;
 
-export function understand(profile: OwnerProfile, facts: StoredFact[], now = new Date()): BusinessUnderstanding {
+export function understand(profile: OwnerProfile, facts: StoredFact[], now = new Date(), selfSignals: ConflictInput["selfSignals"] = null): BusinessUnderstanding {
   const known: KnownFact[] = [];
   if (profile.serviceArea) known.push({ field: "service_area", label: FACT_LABEL.service_area, value: profile.serviceArea, source: "owner", evidence_class: "verified", confirmed: true });
   if (profile.primaryGoal) known.push({ field: "goal", label: FACT_LABEL.goal, value: GOAL_LABEL[profile.primaryGoal] ?? profile.primaryGoal, source: "owner", evidence_class: "verified", confirmed: true });
@@ -200,7 +205,10 @@ export function understand(profile: OwnerProfile, facts: StoredFact[], now = new
   // Confirmed facts first, then proposals; owner facts lead within each.
   known.sort((a, b) => Number(b.confirmed) - Number(a.confirmed) || Number(b.source === "owner") - Number(a.source === "owner"));
   const missing = CORE_FIELDS.filter((field) => !known.some((k) => k.field === field));
-  return { known, missing, stale };
+  const conflicts = detectConflicts({ facts, profile, selfSignals });
+  const disputed = disputedFields(conflicts);
+  for (const k of known) if (disputed.has(k.field)) k.disputed = true;
+  return { known, missing, stale, conflicts };
 }
 
 export interface BusinessIntelligenceInput {

@@ -26,7 +26,14 @@ import { ContentRejected, createTaskDraft, isChannelKind, type ChannelKind } fro
 import { createPlan, PlanRejected } from "./modules/marketing-strategy";
 import { followUps, type FollowUp, type PerformanceSummary } from "./modules/performance-intelligence";
 import { buildRulesPlan, RULES_MODEL, RULES_PROVIDER } from "./modules/rules-strategy";
-import { getModelProvider, ModelOutputInvalid, type ModelProvider } from "./provider";
+import { getModelProvider, ModelOutputInvalid, ModelThrottled, type ModelProvider } from "./provider";
+import { resumeSentence } from "./providers/groq-limits";
+import { summarizeResearch, type ResearchSource, type ResearchSummary } from "./modules/research-summary";
+import { SIGNAL_KEYS, SIGNAL_LABEL } from "@/lib/research";
+
+/** Plain words for a provider allowance that is used up: says when the work can continue (never "failed", never a payment prompt). */
+export const throttleMessage = (e: ModelThrottled, now = Date.now()) =>
+  e.kind === "too_large" ? "This was more than our free AI allowance can take in one go. We kept the fixed results." : `Our free AI allowance is used up for now. This can continue ${resumeSentence(e.resumeAt, now)}.`;
 import type { RankedNeed } from "./rank";
 import { planWorkflow, type WorkflowKind } from "./workflows";
 
@@ -236,7 +243,7 @@ export async function runWebsiteReview(
       // Plain words only in the record: raw provider or database messages stay in the server log.
       step({
         step: "analyze_marketing_model", capability: "marketing_analysis", status: "failed",
-        detail: error instanceof ModelBudgetExceeded ? "Skipped: the model usage limit for this business was reached." : "The model step did not complete; the other results are unaffected.",
+        detail: error instanceof ModelBudgetExceeded ? "Skipped: the model usage limit for this business was reached." : error instanceof ModelThrottled ? `Skipped: ${throttleMessage(error)}` : "The model step did not complete; the other results are unaffected.",
       });
     }
   }
@@ -356,7 +363,11 @@ export interface ResearchOutcome {
 export async function runCompetitorResearch(
   db: WorkflowDb,
   input: { orgId: string; ownWebsite: string; urls: string[] },
-  deps: { fetchPage?: (url: string) => Promise<FetchedPage> } = {},
+  deps: {
+    fetchPage?: (url: string) => Promise<FetchedPage>;
+    /** A model-written summary of what was read (gate G3). Optional: without it, the fixed comparison is all there is. */
+    summary?: { provider: (workflowId: string | null) => ModelProvider; businessName: string; origins?: Record<string, string>; keywords?: ResearchSource | null; deadlineAt?: number };
+  } = {},
 ): Promise<ResearchOutcome> {
   const plan = planWorkflow("competitor_research", { modelProvider: getModelProvider() !== null });
   const steps: StepRecord[] = [];
@@ -414,8 +425,26 @@ export async function runCompetitorResearch(
     if (r.status === "done") { if (!r.own) read += 1; } else failed.push({ host: r.host, failure: r.failure ?? "We couldn't read it." });
   }
   step({ step: "read_sites", capability: "market_research", status: read ? "done" : "failed", detail: `${run.detail} Observed on the public homepages only.` });
+
+  // A written summary of the competitive picture, only from what was just read (and any keyword data), each point citing its source.
+  let summary: ResearchSummary | null = null;
+  if (deps.summary && read > 0) {
+    const sources: ResearchSource[] = run.output.filter((r) => r.status === "done" && r.signals).map((r) => ({
+      id: r.own ? "own" : r.host, label: r.own ? "Your homepage" : r.host, kind: r.own ? "own_homepage" as const : "competitor_homepage" as const,
+      facts: SIGNAL_KEYS.map((k) => `${SIGNAL_LABEL[k].shows[0]!.toUpperCase()}${SIGNAL_LABEL[k].shows.slice(1)}: ${r.signals![k] ? "yes" : "no"}`),
+      ...(r.own ? {} : deps.summary!.origins?.[r.host] ? { origin: deps.summary!.origins[r.host] } : { origin: "named by the owner" }),
+    }));
+    if (deps.summary.keywords) sources.push(deps.summary.keywords);
+    try {
+      summary = await summarizeResearch(deps.summary.provider(workflowId), { businessName: deps.summary.businessName, sources, deadlineAt: deps.summary.deadlineAt });
+      step({ step: "summarize_research", capability: "market_research", status: "done", detail: `${summary.points.length} point${summary.points.length === 1 ? "" : "s"} written from what was read (${Object.values(summary.dropped).reduce((a, b) => a + b, 0)} dropped for failing source checks).` });
+    } catch (error) {
+      log.warn("research.summary_failed", { workflowId, error });
+      step({ step: "summarize_research", capability: "market_research", status: "failed", detail: error instanceof ModelThrottled ? `Skipped: ${throttleMessage(error)}` : error instanceof ModelBudgetExceeded ? "Skipped: the model usage limit for this business was reached." : "The written summary didn't finish; the comparison above is unaffected." });
+    }
+  }
   step({ step: "owner_review", capability: null, status: "waiting", detail: "Waiting for the owner to look at the comparison." });
-  await closeRecord(db, workflowId, read ? "prepared" : "failed", steps, { read, failed: failed.length }, read ? null : "None of the sites could be read.");
+  await closeRecord(db, workflowId, read ? "prepared" : "failed", steps, { read, failed: failed.length, ...(summary ? { summary: { points: summary.points, limits: summary.limits, model: summary.model, provider: summary.provider } } : {}) } as unknown as Json, read ? null : "None of the sites could be read.", summary ? { provider: summary.provider, model: summary.model, usage: summary.usage } : null);
   log.info("research.prepared", { workflowId, read, failed: failed.length });
   return { status: read ? "prepared" : "failed", workflowId, reason: read ? undefined : "We couldn't read any of those sites.", steps, read, failed };
 }
@@ -575,6 +604,7 @@ export async function runMarketingPlan(
   } catch (e) {
     log.error("plan.failed", { orgId: input.orgId, workflowId, error: e });
     if (e instanceof ModelBudgetExceeded) return fail("budget", "Planning has reached its usage limit for now. Please try again later.", "marketing_strategy", "plan_strategy");
+    if (e instanceof ModelThrottled) return fail("budget", `Planning paused. ${throttleMessage(e)}`, "marketing_strategy", "plan_strategy");
     if (e instanceof PlanRejected || e instanceof ModelOutputInvalid) return fail("invalid", "We couldn't prepare a usable plan this time. Please try again.", "marketing_strategy", "plan_strategy");
     return fail("error", "We couldn't prepare the plan. Please try again.", "marketing_strategy", "plan_strategy");
   }
@@ -781,9 +811,9 @@ export async function runCampaignDrafts(
     } catch (error) {
       rejected += 1;
       log.warn("campaign.draft_failed", { workflowId, task: t.id, error });
-      const plain = error instanceof ContentRejected ? error.message : error instanceof ModelBudgetExceeded ? "The usage limit for this business was reached." : "This draft didn't finish; the template is still there.";
+      const plain = error instanceof ContentRejected ? error.message : error instanceof ModelBudgetExceeded ? "The usage limit for this business was reached." : error instanceof ModelThrottled ? throttleMessage(error) : "This draft didn't finish; the template is still there.";
       step({ step: `draft_${t.position}`, capability: "content_creation", status: "failed", detail: `“${t.title.slice(0, 80)}”: ${plain}` });
-      if (error instanceof ModelBudgetExceeded) break;
+      if (error instanceof ModelBudgetExceeded || (error instanceof ModelThrottled && error.kind !== "too_large")) break;
     }
   }
   step({ step: "owner_review", capability: null, status: "waiting", detail: "Waiting for the owner to edit and use the drafts. Nothing is sent or published." });

@@ -80,3 +80,14 @@ export function compareSignals(own: SiteSignals | null, competitors: { host: str
 export function parseSiteList(raw: string): string[] {
   return raw.split(/[\n\r,;]+/).map((s) => s.trim()).filter(Boolean);
 }
+
+/** What the "find similar businesses" action hands back to the page (plain data only). */
+export interface DiscoverState {
+  error?: string;
+  result?: {
+    candidates: { host: string; url: string; name: string | null; basis: string; sources: { kind: "openstreetmap" | "web_search"; url: string; title: string; snippet: string | null; detail: string }[] }[];
+    limits: string[];
+    attribution: string[];
+    sourceStatus: { source: "openstreetmap" | "web_search"; status: "ok" | "none" | "failed" | "skipped"; found: number; note: string | null }[];
+  };
+}

@@ -26,6 +26,11 @@ function safeLink(url: string | null): { href: string; path: string } | null {
 /** Details where the website is describing itself: we can show that it says so, never that it is true. */
 const SELF_DESCRIBED: readonly string[] = ["trust_signal", "competitive_advantage", "pricing", "value_proposition", "key_message"];
 
+function claimSource(c: { source: string; status: string; observed_at: string | null }): string {
+  const who = c.source === "profile" ? "from your business profile" : c.source === "homepage_scan" ? "shown on your homepage when we last read it" : c.source === "owner" ? "you told us" : c.source === "website" ? "found on your website" : c.source === "model" ? "our reading of your website" : "from research";
+  return `${who}${c.status === "confirmed" ? ", confirmed" : ""}${c.observed_at ? ` (${new Date(c.observed_at).toISOString().slice(0, 10)})` : ""}`;
+}
+
 function sourceLine(f: StoredFact): string {
   if (f.source === "owner") return "You added this";
   if (f.status === "confirmed") return "You confirmed this";
@@ -55,7 +60,10 @@ export default async function BusinessPage() {
     serviceArea: ws.business?.serviceArea ?? null,
     primaryGoal: ws.business?.primaryGoal ?? null,
   };
-  const u = understand(profile, facts);
+  // What the business's own homepage showed on its latest read, so a phone number that changed on the site shows up as a disagreement.
+  const { data: selfScan } = await supabase.from("competitor_scans").select("signals, scanned_at").eq("organization_id", ws.organization.id).eq("is_self", true).eq("status", "done").maybeSingle();
+  const selfPhone = (selfScan?.signals as { phone?: unknown } | null)?.phone;
+  const u = understand(profile, facts, new Date(), typeof selfPhone === "string" && selfPhone ? { phone: selfPhone, observed_at: (selfScan?.scanned_at as string | undefined) ?? null } : null);
   const staleIds = new Set(u.stale.map((s) => `${s.field}|${s.value}`));
   const current = facts.filter((f) => f.value !== null && !staleIds.has(`${f.field}|${f.value}`));
   const toCheck = current.filter((f) => f.status === "proposed");
@@ -70,6 +78,31 @@ export default async function BusinessPage() {
           {toCheck.length ? ` ${toCheck.length} to check.` : ""}
         </p>
       </div>
+
+      {u.conflicts.length ? (
+        <section className="card" aria-labelledby="conflicts" style={{ borderColor: "var(--warn, #b7791f)" }}>
+          <h2 id="conflicts" style={{ marginTop: 0 }}>These details disagree</h2>
+          <p className="small muted">We won&apos;t use them in any suggestion or draft until you tell us which is right.</p>
+          <div className="stack">
+            {u.conflicts.map((c) => (
+              <div key={c.field} style={{ borderTop: "1px solid var(--line, #e6e1d6)", paddingTop: 12 }}>
+                <b>{c.question}</b>
+                {c.claims.map((cl, i) => (
+                  <div key={`${cl.value}-${i}`} style={{ marginTop: 8 }}>
+                    <div><b>{cl.value}</b> <span className="small muted">{claimSource(cl)}</span></div>
+                    {isOwner && cl.factId ? (
+                      <div className="row" style={{ marginTop: 4 }}>
+                        <form action={reviewFact}><input type="hidden" name="id" value={cl.factId} /><input type="hidden" name="decision" value="confirm" /><button className="btn" type="submit">That&apos;s right</button></form>
+                        <form action={reviewFact}><input type="hidden" name="id" value={cl.factId} /><input type="hidden" name="decision" value="reject" /><button className="btn outline" type="submit">Not right</button></form>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {(Object.keys(FACT_FIELDS) as FactCategory[]).map((cat) => {
         const items = current.filter((f) => f.category === cat);

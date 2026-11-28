@@ -89,6 +89,16 @@ describe("model-written task drafts", () => {
   });
 });
 
+describe("content channels (spec §8 breadth)", () => {
+  it("accepts an FAQ, an article and a brief as task channels, and still refuses an unknown one", async () => {
+    const extra = ["faq", "blog_post", "content_brief"].map((channel, i) => ({ kind: "message", title: channel, why: "w", steps: ["s"], evidence_class: "verified", channel, due_in_days: 10 + i, depends_on: [1], deliverable: "Template [blank]" }));
+    const [{ id }] = await q<{ id: string }>(member, "select public.save_campaign($1,$2) id", [org, JSON.stringify(promo(extra))]);
+    const rows = await q<{ channel: string | null }>(owner, "select channel from public.campaign_tasks where campaign_id = $1 order by position", [id]);
+    expect(rows.map((r) => r.channel)).toEqual(["landing_page", "email", null, "faq", "blog_post", "content_brief"]);
+    await expect(q(member, "select public.save_campaign($1,$2)", [org, JSON.stringify(promo([{ kind: "message", title: "x", why: "w", steps: ["s"], evidence_class: "verified", channel: "podcast", deliverable: "x" }]))])).rejects.toThrow(/channel/);
+  });
+});
+
 describe("rollback", () => {
   it("restores the earlier functions and removes the columns", async () => {
     await rollbackFrom(db.admin, "20261205120000");
