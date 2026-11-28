@@ -42,8 +42,12 @@ test.describe("Ask, research, execute and measure", () => {
     await page.goto("/app/ask");
     await page.getByLabel("What would you like help with?").fill("Can you improve my homepage headline?");
     await page.getByRole("button", { name: "Ask" }).click();
-    // Either the check found a headline problem (we land on it, and no draft is written) or it found none.
-    await expect(page.getByText(/We can't write new headlines yet, so nothing was written|didn't find a problem with your homepage headline/)).toBeVisible({ timeout: 30_000 });
+    // Either the check found a headline problem (we land on it, and no draft is written) or it found none. The notice is shown for an
+    // instant before the app navigates to the action, so landing on the action counts as seeing the outcome (this was a timing race).
+    const notice = page.getByText(/We can't write new headlines yet, so nothing was written|didn't find a problem with your homepage headline/);
+    await Promise.race([notice.waitFor({ state: "visible", timeout: 30_000 }), page.waitForURL(/\/app\/actions\/[0-9a-f-]{36}/, { timeout: 30_000 })]);
+    // Nothing was written: no draft is waiting for approval on the page we ended up on.
+    await expect(page.getByText(/Draft (is )?ready|Approve this draft/i)).toHaveCount(0);
     await expect(page.locator("main")).not.toContainText(INTERNALS);
     await expect(page.locator("main")).not.toContainText(/\bAI\b|language model|\bagents?\b/i);
   });
