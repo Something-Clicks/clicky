@@ -46,6 +46,17 @@ Variables: `MARKETING_MODEL_PROVIDER=groq`, `GROQ_API_KEY`, `GROQ_MODEL`; option
 `GROQ_ATTEMPT_TIMEOUT_MS`, `GROQ_RPM|TPM|RPD|TPD` (override the table), `GROQ_LIMITER_STATE_FILE` (share the rolling usage between
 separate runs). In the cloud sandbox the key is injected by the network proxy and Node needs `NODE_USE_ENV_PROXY=1`.
 
+## Which model (measured Nov 28 2026)
+`openai/gpt-oss-120b` is the choice: all ten real schemas accepted in strict mode, 20 of 20 dev tasks usable, findings and plans produced.
+`gpt-oss-20b` spends its output allowance on reasoning and was refused once by Groq on the plan schema; `qwen3.8-27b` returned no findings
+at all and two plans our grounding rejected. Table and caveats: `EVALUATION_LOG.md`. Quality still needs a person with the blind sheet.
+
+## What the app run showed (somethingclicks.com, local stack, free tier)
+Ten model calls through the metered path, all recorded at $0 with real tokens: understanding, findings, six campaign drafts and the research
+summary. One minute limit was waited out in under two seconds. When the day's allowance ran out the research summary was skipped with "can
+continue around HH:MM UTC" and the comparison itself was unaffected. A pace of about two calls a minute means model steps belong in
+background jobs (540 s), not in the 105 s request path.
+
 ## Running the checks
 ```bash
 # strict structured-output acceptance on every real agent schema (about 6 minutes, ~45K tokens)
