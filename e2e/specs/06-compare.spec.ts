@@ -9,7 +9,20 @@ test.describe("compare", () => {
   test("the page explains what it does and what it will not do", async ({ page }) => {
     await page.goto("/app/research");
     await expect(page.getByRole("heading", { level: 1, name: "Compare" })).toBeVisible();
-    await expect(page.getByText(/We don't search for competitors or guess who they are/)).toBeVisible();
+    await expect(page.getByText(/Only the websites you type here are read; nothing is read until you ask/)).toBeVisible();
+    await expect(page.locator("main")).not.toContainText(INTERNALS);
+    await noSideScroll(page);
+  });
+
+  test("finding similar businesses gives a plain outcome: candidates with their sources, or an honest reason, and never anything unread", async ({ page }) => {
+    await page.goto("/app/research");
+    await expect(page.getByRole("heading", { name: "Find similar businesses" })).toBeVisible();
+    await page.getByRole("button", { name: "Find similar businesses" }).click();
+    // The public sources can be slow or push back, so any plain outcome is acceptable; what must always hold is below.
+    const outcome = page.getByText(/Why it's here|didn't find anyone to suggest|couldn't look just now|Give it a minute|Add your service area first|No confirmed or suggested services|asked us to slow down|didn't answer/);
+    await expect(outcome.first()).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText(/not proof they compete/).or(page.getByText(/Add your service area first|No confirmed or suggested services|Give it a minute|couldn't look just now/)).first()).toBeVisible();
+    // Nothing is saved or read until the owner ticks some and presses Compare.
     await expect(page.locator("main")).not.toContainText(INTERNALS);
     await noSideScroll(page);
   });

@@ -17,7 +17,7 @@ export function CompareForm() {
         <span>Websites to compare with (up to 5, one per line)</span>
         <textarea id="compare-sites" name="sites" className="input" rows={4} maxLength={800} placeholder={"example-plumbing.com\nanother-business.com"} required />
       </label>
-      <p className="small muted">We read each site&apos;s public homepage, the same way we read yours. We don&apos;t search for competitors or guess who they are.</p>
+      <p className="small muted">We read each site&apos;s public homepage, the same way we read yours. Only the websites you type here are read; nothing is read until you ask.</p>
       <div><SubmitButton pending="Reading the websites… this can take a minute">Compare</SubmitButton></div>
     </form>
   );
