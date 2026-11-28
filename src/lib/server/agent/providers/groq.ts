@@ -209,6 +209,7 @@ export function groqProvider(env: Record<string, string | undefined> = process.e
         response_format: { type: "json_schema", json_schema: { name: schemaName(req.task), schema, strict: cfg.strict } },
       });
 
+      let queuedMs = clock.now() - startedAt;
       let settled = false;
       const settle = (actual: number | null) => { if (!settled) { settled = true; governor.settle(lease, actual); } };
       try {
@@ -222,7 +223,7 @@ export function groqProvider(env: Record<string, string | undefined> = process.e
           } catch (error) {
             if (error instanceof GroqError) throw error;
             // A dropped connection or timeout: the request may or may not have run. Retry once if the deadline allows, else fail.
-            if (!transientRetried && deadline - clock.now() > 25_000) { transientRetried = true; await clock.sleep(1_500); continue; }
+            if (!transientRetried && deadline - clock.now() > 25_000) { transientRetried = true; queuedMs += 1_500; await clock.sleep(1_500); continue; }
             throw new GroqError("Groq could not be reached.", undefined, true);
           }
           if (notFree) { await res.body?.cancel(); throw new GroqError("Groq reports higher limits than the free tier, so the key may be on a paid plan. Nothing is sent until the owner confirms."); }
@@ -243,15 +244,19 @@ export function groqProvider(env: Record<string, string | undefined> = process.e
             if (rateRetries >= MAX_429_RETRIES || deadline - clock.now() - waitMs - 12_000 < 0) throw new ModelThrottled("minute", waitMs, Date.now() + waitMs, "The free per-minute allowance is busy.");
             rateRetries += 1;
             log.warn("model.groq_rate_limited_waiting", { task: req.task, waitMs, unit: hit.unit });
+            queuedMs += waitMs + 250;
             await clock.sleep(waitMs + 250);
             // The retry needs its own room in the window.
+            const waitedFrom = clock.now();
             const again = await governor.acquire(estIn + reserveOut, Math.min(MAX_PACE_WAIT_MS, Math.max(0, deadline - clock.now() - 12_000)));
+            queuedMs += clock.now() - waitedFrom;
             lease.id = again.id; lease.tokens = again.tokens; settled = false;
             continue;
           }
           if (res.status >= 500 && !transientRetried && deadline - clock.now() > 25_000) {
             await res.body?.cancel();
             transientRetried = true;
+            queuedMs += 1_500;
             await clock.sleep(1_500);
             continue;
           }
@@ -309,6 +314,7 @@ export function groqProvider(env: Record<string, string | undefined> = process.e
           model: typeof json.model === "string" && json.model ? json.model.slice(0, 100) : cfg!.model,
           usage: { inputTokens: Math.round(inputTokens), outputTokens: Math.round(outputTokens) },
           refused,
+          queuedMs,
         };
       }
     },

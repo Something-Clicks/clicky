@@ -50,6 +50,8 @@ export interface ModelRawResponse {
   usage: ModelUsage;
   /** True when the provider declined to answer. */
   refused?: boolean;
+  /** Milliseconds this call spent WAITING (our own pacing for a rate limit), not working: excluded from the retry rule and from latency. */
+  queuedMs?: number;
 }
 
 export interface ModelProvider {
@@ -146,15 +148,18 @@ export async function generateStructured<T>(request: ModelRequest<T>, provider: 
   let lastReason = "unknown";
   const usage: ModelUsage = { inputTokens: 0, outputTokens: 0 };
   const started = Date.now();
+  let queued = 0;
   for (let attempt = 1; attempt <= 2; attempt++) {
-    // A retry only fits if the first answer came back quickly, and no attempt may run past the request's deadline.
-    if (attempt === 2 && Date.now() - started > (provider.attemptTimeoutMs ? provider.attemptTimeoutMs / 2 : 40_000)) throw new ModelOutputInvalid("too_slow_to_retry");
+    // A retry only fits if the first answer came back quickly (time spent waiting for a rate limit is not the model being slow), and no
+    // attempt may run past the request's deadline.
+    if (attempt === 2 && Date.now() - started - queued > (provider.attemptTimeoutMs ? provider.attemptTimeoutMs / 2 : 40_000)) throw new ModelOutputInvalid("too_slow_to_retry");
     const attemptCap = provider.attemptTimeoutMs ?? ATTEMPT_TIMEOUT_MS;
     const remaining = deadlineAt === undefined ? attemptCap : deadlineAt - Date.now();
     if (remaining < MIN_ATTEMPT_MS) throw new ModelOutputInvalid("out_of_time");
     const raw = await provider.generate({ ...rest, jsonSchema, timeoutMs: Math.min(attemptCap, remaining), deadlineAt });
     usage.inputTokens += raw.usage.inputTokens;
     usage.outputTokens += raw.usage.outputTokens;
+    queued += raw.queuedMs ?? 0;
     if (raw.refused) throw new ModelOutputInvalid("refused");
     const parsed = schema.safeParse(raw.output);
     if (parsed.success) {

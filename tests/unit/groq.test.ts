@@ -211,6 +211,17 @@ describe("answers and errors", () => {
     expect(stub.seen).toHaveLength(3); // the first send and two waits, never a loop
   });
 
+  it("reports how long a call spent WAITING for the rate limit (queuedMs), so waiting is never mistaken for a slow model", async () => {
+    const minuteBody = JSON.stringify({ error: { message: "Rate limit reached on tokens per minute (TPM): Limit 8000, Used 7900, Requested 900. Please try again in 4s." } });
+    let n = 0;
+    stub = await startStub((_s, res) => { if (n++ === 0) { res.writeHead(429, { "content-type": "application/json" }); res.end(minuteBody); } else json(res, 200, completion('{"a":"ok"}')); });
+    const r = await groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req);
+    expect(r.queuedMs).toBeGreaterThanOrEqual(4_250);
+    await stub.close();
+    stub = await startStub((_s, res) => json(res, 200, completion('{"a":"ok"}')));
+    expect((await groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req)).queuedMs).toBe(0);
+  });
+
   it("retries one transient 5xx, then gives up with a plain error", async () => {
     let n = 0;
     stub = await startStub((_s, res) => { if (n++ === 0) { res.writeHead(503); res.end("{}"); } else json(res, 200, completion('{"a":"ok"}')); });
@@ -219,6 +230,21 @@ describe("answers and errors", () => {
     stub = await startStub((_s, res) => { res.writeHead(503); res.end("{}"); });
     await expect(groqProvider(base, { baseUrl: stub.url, clock: fakeClock() })!.generate(req)).rejects.toMatchObject({ status: 503 });
     expect(stub.seen).toHaveLength(2);
+  });
+});
+
+describe("the one validated retry and the free-tier wait", () => {
+  const Schema = z.object({ a: z.string().min(1) }).strict();
+  /** A provider whose first answer is invalid and 50 s late (attempt timeout 60 s, so the retry rule's limit is 30 s), then a good one. */
+  const slowFirst = (queuedMs: number): Parameters<typeof generateStructured>[1] => { let n = 0; return { id: "t", model: "m", attemptTimeoutMs: 60_000, async generate() { n += 1; if (n === 1) { vi.setSystemTime(Date.now() + 50_000); return { output: { a: "" }, model: "m", usage: { inputTokens: 1, outputTokens: 1 }, queuedMs }; } return { output: { a: "fine" }, model: "m", usage: { inputTokens: 1, outputTokens: 1 } }; } }; };
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); });
+  afterEach(() => { vi.useRealTimers(); });
+  it("a first answer that was slow only because it WAITED for the free minute still gets its retry", async () => {
+    const r = await generateStructured({ task: "t.x", system: "s", input: "i", schema: Schema }, slowFirst(50_000));
+    expect(r.output).toEqual({ a: "fine" });
+  });
+  it("a first answer that was genuinely slow does not (unchanged rule)", async () => {
+    await expect(generateStructured({ task: "t.x", system: "s", input: "i", schema: Schema }, slowFirst(0))).rejects.toMatchObject({ reason: "too_slow_to_retry" });
   });
 });
 

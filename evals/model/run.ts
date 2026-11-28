@@ -46,7 +46,7 @@ export function instrument(inner: ModelProvider): { provider: ModelProvider; cal
         const t0 = Date.now();
         try {
           const r = await inner.generate(req);
-          calls.push({ task: req.task, ms: Date.now() - t0, inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens, refused: Boolean(r.refused), error: null });
+          calls.push({ task: req.task, ms: Math.max(0, Date.now() - t0 - (r.queuedMs ?? 0)), inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens, refused: Boolean(r.refused), error: null });
           return r;
         } catch (error) {
           calls.push({ task: req.task, ms: Date.now() - t0, inputTokens: 0, outputTokens: 0, refused: false, error: error instanceof Error ? error.name : "error" });
